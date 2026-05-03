@@ -761,20 +761,31 @@ def render_aba_perfil(aluno):
         t_ed_salvar = mapa_turmas[t_ed_display]
 
         data_bd = aluno.get("data_nascimento")
+        hoje = datetime.date.today()
+        limite_min = datetime.date(1920, 1, 1)
         data_padrao = datetime.date(2000, 1, 1)
         try:
             if pd.notna(data_bd) and str(data_bd).strip().lower() not in [
                 "nan",
                 "none",
+                "nat",
                 "",
             ]:
                 dt_parsed = pd.to_datetime(data_bd).date()
-                if dt_parsed > datetime.date.today():
-                    dt_parsed = dt_parsed.replace(year=dt_parsed.year - 100)
-                data_padrao = dt_parsed
-        except:
+                if dt_parsed > hoje:
+                    try:
+                        dt_parsed = dt_parsed.replace(year=dt_parsed.year - 100)
+                    except ValueError:
+                        dt_parsed = hoje
+                if limite_min <= dt_parsed <= hoje:
+                    data_padrao = dt_parsed
+                elif dt_parsed < limite_min:
+                    data_padrao = limite_min
+                else:
+                    data_padrao = hoje
+        except Exception:
             pass
-        d_ed = col_d.date_input("Nascimento:", value=data_padrao, format="DD/MM/YYYY")
+        d_ed = col_d.date_input("Nascimento:", value=data_padrao, min_value=limite_min, max_value=hoje, format="DD/MM/YYYY")
 
         st.markdown("#### 📸 Foto de Perfil")
         foto_nova = st.file_uploader(
