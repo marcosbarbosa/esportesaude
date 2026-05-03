@@ -615,6 +615,7 @@ def renderizar_dashboard():
             """
         <div class='grid-header'>
             <div style='flex: 3.5;'>Aluno / Turma</div>
+            <div style='flex: 0.9; text-align:center;'>Nascimento</div>
             <div style='flex: 1; text-align:center;'>Aulas</div>
             <div style='flex: 1; text-align:center;'>Presenças</div>
             <div style='flex: 1.5; text-align:center;'>Taxa Global</div>
@@ -662,8 +663,8 @@ def renderizar_dashboard():
         else:
             # Renderização das Linhas do Grid
             for _, a in df_page.iterrows():
-                c1, c2, c3, c4, c5 = st.columns(
-                    [3.5, 1, 1, 1.5, 2], vertical_alignment="center"
+                c1, c2, c3, c4, c5, c6 = st.columns(
+                    [3.5, 0.9, 1, 1, 1.5, 2], vertical_alignment="center"
                 )
 
                 # Col 1: Foto + Nome e Turma (MÁGICA DO FLEXBOX)
@@ -686,24 +687,35 @@ def renderizar_dashboard():
                     unsafe_allow_html=True,
                 )
 
-                # Col 2 e 3: Métricas
+                # Col 2: Nascimento
+                _dn = a.get("data_nascimento")
+                try:
+                    _dn_fmt = pd.to_datetime(_dn).strftime("%d/%m/%Y") if pd.notna(_dn) and _dn else "—"
+                except Exception:
+                    _dn_fmt = "—"
                 c2.markdown(
+                    f"<div style='text-align:center; font-size:12px; color:#64748B;'>{_dn_fmt}</div>",
+                    unsafe_allow_html=True,
+                )
+
+                # Col 3 e 4: Métricas
+                c3.markdown(
                     f"<div style='text-align:center; font-size:14px; font-weight:600; color:#475569;'>{int(a['total_aulas'])}</div>",
                     unsafe_allow_html=True,
                 )
-                c3.markdown(
+                c4.markdown(
                     f"<div style='text-align:center; font-size:15px; font-weight:900; color:#10B981;'>{int(a['total_presencas'])}</div>",
                     unsafe_allow_html=True,
                 )
 
-                # Col 4: Barra de Progresso Customizada
+                # Col 5: Barra de Progresso Customizada
                 taxa = a["taxa_presenca"]
                 cor_barra = (
                     "#10B981"
                     if taxa >= 65
                     else ("#F59E0B" if taxa >= 40 else "#EF4444")
                 )
-                c4.markdown(
+                c5.markdown(
                     f"""
                 <div style='text-align:center; font-size:13px; font-weight:800; color:{cor_barra}; margin-bottom:2px;'>{taxa:.1f}%</div>
                 <div style='width:90%; margin:0 auto; background-color:#E2E8F0; border-radius:4px; height:6px;'>
@@ -713,8 +725,8 @@ def renderizar_dashboard():
                     unsafe_allow_html=True,
                 )
 
-                # Col 5: Botões de Ação Direta
-                with c5:
+                # Col 6: Botões de Ação Direta
+                with c6:
                     st.markdown('<div class="btn-compact">', unsafe_allow_html=True)
                     cb1, cb2, cb3 = st.columns(3, gap="small")
 
