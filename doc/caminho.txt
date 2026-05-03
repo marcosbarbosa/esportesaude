@@ -1,0 +1,625 @@
+================================================================================
+  IMBRA SYSTEM — MAPA COMPLETO DE ARQUIVOS, FUNÇÕES E ARQUITETURA
+  Data: 03/05/2026
+  Autor: Marcos Barbosa — MoveRight / Instituto Muda Brasil
+  © Todos os direitos reservados. Uso exclusivo do Instituto Muda Brasil.
+================================================================================
+
+  O IMBRA System (Instituto Muda Brasil — Registro Ativo) é a plataforma
+  de gestão operacional do projeto Esporte e Saúde na Comunidade, desenvolvido
+  pelo Instituto Muda Brasil (MudaBrasil / MoveRight) em São Paulo - SP.
+  Construído em Python + Streamlit com banco de dados PostgreSQL via Supabase.
+
+================================================================================
+  1. ARQUIVOS RAIZ — MOTOR CENTRAL DO SISTEMA
+================================================================================
+
+  Nº  | ARQUIVO                   | VERSÃO | FUNÇÃO E RELACIONAMENTOS
+------+---------------------------+--------+------------------------------------
+  01  | main.py                   | 14.2   | Ponto de entrada único do sistema.
+      |                           |        | Responsável por: roteamento de menus,
+      |                           |        | autenticação (login/cadastro/recuperação
+      |                           |        | de senha), sessão com expiração (8h),
+      |                           |        | CAPTCHA anti-bot, CSS global Prime,
+      |                           |        | barra de navegação, dashboard inicial
+      |                           |        | com KPIs, radar de acolhimento e
+      |                           |        | agendamentos pendentes.
+      |                           |        | Relacionado com: database.py (auth),
+      |                           |        | todas as views/ (importação dinâmica),
+      |                           |        | utils/identidade.py (logo/rodapé).
+------+---------------------------+--------+------------------------------------
+  02  | database.py               |  —     | Motor central de dados. O arquivo mais
+      |                           |        | crítico do projeto. Contém todas as
+      |                           |        | funções de leitura e escrita no Supabase,
+      |                           |        | inicialização do cliente Supabase,
+      |                           |        | integração com Google Gemini (IA),
+      |                           |        | SMTP (e-mail), constante ADMIN_MASTER
+      |                           |        | e o helper _resolver_turma_id() para
+      |                           |        | normalização de turmas (turma_id UUID).
+      |                           |        | Funções principais:
+      |                           |        |   _resolver_turma_id()       — resolve nome→UUID
+      |                           |        |   get_todas_turmas()          — lista turmas ativas
+      |                           |        |   get_ocupacao_turmas()       — termômetro de vagas
+      |                           |        |   adicionar/atualizar/excluir_turma()
+      |                           |        |   aprovar_inscricao_aluno()   — aprovação com turma_id
+      |                           |        |   get_alunos_por_turma()      — filtra por turma_id
+      |                           |        |   cadastrar_novo_aluno()      — grava turma + turma_id
+      |                           |        |   atualizar_turma_aluno()     — atualiza ambos campos
+      |                           |        |   atualizar_aluno_completo()  — perfil completo
+      |                           |        |   get_diario_dia/periodo()    — filtra por turma_id
+      |                           |        |   salvar_diario()             — grava turma_id
+      |                           |        |   get_relatorio_periodo()     — filtra por turma_id
+      |                           |        |   get_historico_aulas_aluno() — sem ilike hack
+      |                           |        |   bi_frequencia_turmas()      — join via turma_id
+      |                           |        |   bi_alunos_risco_abandono()  — radar de evasão
+      |                           |        |   get_alunos_atrasados()      — avaliações em atraso
+      |                           |        |   autenticar_usuario()        — login seguro
+      |                           |        |   revisar_texto_ia()          — correção via Gemini
+      |                           |        | Relacionado com: todas as views/ e módulos.
+------+---------------------------+--------+------------------------------------
+  03  | db_core.py                |  —     | Módulo 1 — Infraestrutura:
+      |                           |        | conexão Supabase, autenticação de
+      |                           |        | usuários do sistema, integração Gemini
+      |                           |        | IA e configuração SMTP.
+      |                           |        | Relacionado com: database.py (base).
+------+---------------------------+--------+------------------------------------
+  04  | db_academico.py           |  —     | Módulo 2 — Secretaria:
+      |                           |        | gestão de turmas, alunos, frequência,
+      |                           |        | inscrições públicas e reparação de dados.
+      |                           |        | Relacionado com: database.py, views/triagem,
+      |                           |        | views/turmas, modulos_frequencia/.
+------+---------------------------+--------+------------------------------------
+  05  | db_clinico.py             |  —     | Módulo 3 — Operação Clínica:
+      |                           |        | upload e gestão de mídias, diários de
+      |                           |        | aula, prontuários médicos, agendamentos
+      |                           |        | e CRM. Relacionado com: views/prontuario_*,
+      |                           |        | modulos_frequencia/tab_diario.
+------+---------------------------+--------+------------------------------------
+  06  | gerador_pdf.py            |  —     | Gerador de documentos PDF.
+      |                           |        | Produz: fichas de matrícula, cartazes de
+      |                           |        | aniversário, relatórios de frequência e
+      |                           |        | presença. Usa fpdf2 e xhtml2pdf.
+      |                           |        | Relacionado com: views/ficha_aluno_view,
+      |                           |        | modulos_frequencia/tab_niver, relatorio_view.
+------+---------------------------+--------+------------------------------------
+  07  | gerador_word.py           |  —     | Gerador de documentos Word (.docx).
+      |                           |        | Produz: cartazes de aniversário com logo,
+      |                           |        | fichas e relatórios formatados.
+      |                           |        | Usa python-docx e utils/identidade.py.
+      |                           |        | Relacionado com: modulos_frequencia/tab_niver,
+      |                           |        | views/relatorio_view.
+------+---------------------------+--------+------------------------------------
+  08  | portal_telas.py           |  —     | Tela legada de chamada ágil por turma.
+      |                           |        | Toggle de presença rápido. Mantida para
+      |                           |        | retrocompatibilidade. Substituída
+      |                           |        | funcionalmente por tab_tablet.py.
+------+---------------------------+--------+------------------------------------
+  09  | sync_dados.py             |  7.0   | Sincronização e migração de dados entre
+      |                           |        | tabelas Supabase. Contém utilitários de
+      |                           |        | reparo de inconsistências históricas.
+      |                           |        | Relacionado com: database.py, Supabase.
+------+---------------------------+--------+------------------------------------
+  10  | ficha_aluno_view.py       | 11.9   | Ficha do aluno na raiz (legado).
+      |                           |        | Substituída por views/ficha_aluno_view.py.
+      |                           |        | Mantida como referência histórica.
+------+---------------------------+--------+------------------------------------
+  11  | templates_view.py         |  1.0   | Gestão de templates de copywriting (raiz,
+      |                           |        | legado). Substituída por views/templates_view.py.
+------+---------------------------+--------+------------------------------------
+  12  | script_migracao.py        |  4.0   | Backup Supabase + migração completa do CSV
+      |                           |        | migraimbra2_2.csv (218 alunos, 23 colunas).
+      |                           |        | Incluiu normalização de turma_id nos registos
+      |                           |        | importados. Execução concluída em 02/05/2026.
+------+---------------------------+--------+------------------------------------
+  13  | auditoria.py              |  —     | Script avulso. Gera planilha Excel de
+      |                           |        | auditoria com todos os alunos cadastrados
+      |                           |        | e seus dados principais.
+------+---------------------------+--------+------------------------------------
+  14  | importar_niver.py         |  —     | Script avulso. Importa datas de nascimento
+      |                           |        | de um CSV/Excel para o Supabase.
+------+---------------------------+--------+------------------------------------
+  15  | super_trator.py           |  —     | Script avulso. Limpeza e normalização de
+      |                           |        | datas de nascimento no Supabase (formato
+      |                           |        | inconsistente → ISO 8601).
+------+---------------------------+--------+------------------------------------
+  16  | fix_turmas.py             |  —     | Script avulso. Diagnóstico e reparo de
+      |                           |        | alunos com nomes de turma obsoletos ou
+      |                           |        | sem turma_id vinculado.
+------+---------------------------+--------+------------------------------------
+  17  | relatorio_diarios.py      |  —     | Script avulso. Extrai relatório de todas
+      |                           |        | as turmas e dias de diário registados.
+------+---------------------------+--------+------------------------------------
+  18  | poc_biometria.py          |  —     | Prova de conceito: reconhecimento facial
+      |                           |        | para lançamento automático de presença.
+      |                           |        | Base do módulo conferencia_facial_view.py.
+
+
+================================================================================
+  2. VIEWS — TELAS CARREGADAS DINAMICAMENTE PELO main.py
+================================================================================
+
+  Nº  | ARQUIVO                         | VERSÃO | FUNÇÃO E RELACIONAMENTOS
+------+---------------------------------+--------+--------------------------------
+  19  | views/__init__.py               |   —    | Marcador de pacote Python (vazio).
+------+---------------------------------+--------+--------------------------------
+  20  | views/frequencia_view.py        | 13.1   | Roteador mestre da tela de
+      |                                 |        | Frequência. Monta o seletor de
+      |                                 |        | turma a partir do banco (não mais
+      |                                 |        | hardcoded), carrega dinamicamente
+      |                                 |        | todas as 7 abas do módulo.
+      |                                 |        | Relacionado com: todos os tab_*.py.
+------+---------------------------------+--------+--------------------------------
+  21  | views/prontuario_view.py        |  4.9   | Prontuário do aluno: busca, seleção,
+      |                                 |        | histórico de avaliações, upload de
+      |                                 |        | documentos clínicos e edição de dados.
+      |                                 |        | Relacionado com: prontuario_ficha,
+      |                                 |        | prontuario_dashboard, database.py,
+      |                                 |        | views/utils_docs.py.
+------+---------------------------------+--------+--------------------------------
+  22  | views/prontuario_dashboard.py   |  4.4   | Portal do Aluno: painel de gestão
+      |                                 |        | no topo, cadastro rápido inline,
+      |                                 |        | atalhos de ação por perfil.
+      |                                 |        | Relacionado com: prontuario_view,
+      |                                 |        | prontuario_ficha, database.py.
+------+---------------------------------+--------+--------------------------------
+  23  | views/prontuario_ficha.py       |  5.1   | Ficha detalhada do prontuário.
+      |                                 |        | Dados clínicos, mapa de dores,
+      |                                 |        | avaliações periódicas, documentos
+      |                                 |        | com rotação e blindagem anti-NaN.
+      |                                 |        | Relacionado com: prontuario_view,
+      |                                 |        | anamnese_dores_view, utils_docs.py.
+------+---------------------------------+--------+--------------------------------
+  24  | views/ficha_aluno_view.py       | 14.0   | Busca e filtros em lote de alunos.
+      |                                 |        | Geração de fichas de matrícula em
+      |                                 |        | PDF nativo (sem HTML externo).
+      |                                 |        | Cessão de imagem e termos LGPD.
+      |                                 |        | Relacionado com: database.py,
+      |                                 |        | gerador_pdf.py, utils/imagem.py.
+------+---------------------------------+--------+--------------------------------
+  25  | views/inscricao_view.py         |   —    | Formulário de inscrição interno
+      |                                 |        | (uso exclusivo do administrador).
+      |                                 |        | Relacionado com: database.py,
+      |                                 |        | views/triagem_view.py.
+------+---------------------------------+--------+--------------------------------
+  26  | views/inscricao_publica_view.py |  2.0   | Formulário público de captação e
+      |                                 |        | triagem (acessível via QR Code /
+      |                                 |        | link sem login). Coleta dados do
+      |                                 |        | candidato com conformidade LGPD.
+      |                                 |        | Relacionado com: database.py,
+      |                                 |        | views/triagem_view.py, main.py (rota).
+------+---------------------------------+--------+--------------------------------
+  27  | views/triagem_view.py           |  2.4   | Triagem de novos alunos. Exibe
+      |                                 |        | inscrições pendentes, permite
+      |                                 |        | aprovação/rejeição, seleciona turma
+      |                                 |        | (com resolução automática de turma_id)
+      |                                 |        | e controla vagas em tempo real.
+      |                                 |        | Relacionado com: database.py,
+      |                                 |        | inscricao_publica_view, turmas_view.
+------+---------------------------------+--------+--------------------------------
+  28  | views/turmas_view.py            |  1.0   | CRUD completo de turmas. Criação,
+      |                                 |        | edição (com sync do campo legado) e
+      |                                 |        | exclusão com bloqueio por vínculo de
+      |                                 |        | alunos (verificação via turma_id).
+      |                                 |        | Relacionado com: database.py.
+------+---------------------------------+--------+--------------------------------
+  29  | views/radar_acolhimento_view.py |  8.0   | Radar de Evasão proativo. Detecta
+      |                                 |        | alunos com risco de abandono por
+      |                                 |        | ausência prolongada. Filtros avançados,
+      |                                 |        | ordenação dinâmica, alertas por cor
+      |                                 |        | e integração com WhatsApp.
+      |                                 |        | Relacionado com: database.py,
+      |                                 |        | utils/texto.py.
+------+---------------------------------+--------+--------------------------------
+  30  | views/relatorio_view.py         |  7.4   | Relatórios gerais: frequência por
+      |                                 |        | período, presença por aluno, auditoria
+      |                                 |        | de anexos e documentos faltantes.
+      |                                 |        | Exporta Excel e PDF.
+      |                                 |        | Relacionado com: database.py,
+      |                                 |        | gerador_pdf.py, utils/imagem.py.
+------+---------------------------------+--------+--------------------------------
+  31  | views/backup_view.py            |   —    | Cofre de Segurança: exporta backup
+      |                                 |        | de 14 tabelas do Supabase para Excel
+      |                                 |        | (incluindo diario_midias). Permite
+      |                                 |        | restauro de dados críticos.
+      |                                 |        | Relacionado com: database.py, Supabase.
+------+---------------------------------+--------+--------------------------------
+  32  | views/templates_view.py         |  1.0   | Gestão de templates de copywriting
+      |                                 |        | e CRM: mensagens padrão de WhatsApp,
+      |                                 |        | e-mail e comunicados institucionais.
+      |                                 |        | Relacionado com: database.py.
+------+---------------------------------+--------+--------------------------------
+  33  | views/validador_view.py         |  1.0   | Validador público de matrícula.
+      |                                 |        | Confirma o cadastro via QR Code sem
+      |                                 |        | necessidade de login. Conformidade LGPD.
+      |                                 |        | Relacionado com: database.py, main.py (rota).
+------+---------------------------------+--------+--------------------------------
+  34  | views/pesquisa_satisfacao_view.py|  —    | Formulário público de pesquisa de
+      |                                 |        | satisfação. Coleta NPS, nota geral,
+      |                                 |        | categorias e sugestões dos alunos.
+      |                                 |        | Acessível via QR Code / link.
+      |                                 |        | Relacionado com: database.py,
+      |                                 |        | relatorio_satisfacao_view.py.
+------+---------------------------------+--------+--------------------------------
+  35  | views/relatorio_satisfacao_view.py|  —   | Relatório consolidado das pesquisas
+      |                                 |        | de satisfação. Gráficos NPS, evolução
+      |                                 |        | temporal, categorias e comentários.
+      |                                 |        | Exporta PDF e Excel.
+      |                                 |        | Relacionado com: pesquisa_satisfacao_view,
+      |                                 |        | database.py.
+------+---------------------------------+--------+--------------------------------
+  36  | views/anamnese_dores_view.py    |   —    | Mapa Corporal de Dores — Anamnese
+      |                                 |        | Visual. Permite ao professor registar
+      |                                 |        | e acompanhar queixas físicas do aluno
+      |                                 |        | em formato de mapa corporal interativo
+      |                                 |        | (JSON), com histórico por data.
+      |                                 |        | Tabela própria: anamnese_dores.
+      |                                 |        | Relacionado com: prontuario_ficha,
+      |                                 |        | database.py.
+------+---------------------------------+--------+--------------------------------
+  37  | views/bi_dashboard_view.py      |   —    | BI Prime — Dashboard Geral do Estúdio.
+      |                                 |        | KPIs em tempo real: total de alunos,
+      |                                 |        | taxa de presença, risco de evasão.
+      |                                 |        | Gráficos Plotly: evolução de matrículas,
+      |                                 |        | frequência por turma, distribuição de
+      |                                 |        | risco, crescimento mensal.
+      |                                 |        | Relacionado com: database.py (bi_*),
+      |                                 |        | main.py (menu).
+------+---------------------------------+--------+--------------------------------
+  38  | views/bi_individual_view.py     |   —    | BI Prime — Relatório Individual do
+      |                                 |        | Aluno. Histórico de presença, gráfico
+      |                                 |        | de evolução, comparativo com a turma,
+      |                                 |        | alerta de risco e linha do tempo.
+      |                                 |        | Relacionado com: database.py,
+      |                                 |        | bi_dashboard_view.
+------+---------------------------------+--------+--------------------------------
+  39  | views/conferencia_facial_view.py|   —    | Conferência de Presença por
+      |                                 |        | Reconhecimento Facial. Identifica alunos
+      |                                 |        | em foto da turma via DeepFace (TensorFlow)
+      |                                 |        | e lança presenças automaticamente.
+      |                                 |        | Usa turma_id para filtragem de alunos.
+      |                                 |        | Relacionado com: database.py, DeepFace,
+      |                                 |        | frequencia_view.
+------+---------------------------------+--------+--------------------------------
+  40  | views/merge_alunos_view.py      |   —    | Ferramenta de Fusão de Alunos
+      |                                 |        | Duplicados. Localiza registos duplicados
+      |                                 |        | (mesmo nome), exibe comparativo e
+      |                                 |        | mescla os dados preservando histórico
+      |                                 |        | de frequência, prontuário e documentos.
+      |                                 |        | Relacionado com: database.py.
+------+---------------------------------+--------+--------------------------------
+  41  | views/identidade_view.py        |   —    | Ecrã de edição da Identidade Visual
+      |                                 |        | do sistema. Permite alterar nome da
+      |                                 |        | organização, título do projeto, logos,
+      |                                 |        | CNPJ, site e Instagram sem código.
+      |                                 |        | Relacionado com: utils/identidade.py,
+      |                                 |        | identidade.json.
+------+---------------------------------+--------+--------------------------------
+  42  | views/utils_docs.py             |   —    | Utilitários partilhados para exibição
+      |                                 |        | de documentos com rotação de imagem.
+      |                                 |        | Elimina duplicidade entre prontuario_ficha,
+      |                                 |        | prontuario_view e triagem_view.
+      |                                 |        | Relacionado com: prontuario_*, triagem_view.
+
+
+================================================================================
+  3. MODULOS_FREQUENCIA — ABAS DA TELA DE CHAMADA
+================================================================================
+
+  Nº  | ARQUIVO                              | VERSÃO | FUNÇÃO E RELACIONAMENTOS
+------+--------------------------------------+--------+------------------------------
+  43  | modulos_frequencia/tab_tablet.py     | 32.1   | Aba principal da chamada.
+      |                                      |        | Grid visual de fotos dos alunos.
+      |                                      |        | Toggle de 3 estados: Presente /
+      |                                      |        | Falta / Atestado. Trava de edição
+      |                                      |        | retroativa de 10 dias (governança).
+      |                                      |        | Relacionado com: database.py,
+      |                                      |        | frequencia_view.
+------+--------------------------------------+--------+------------------------------
+  44  | modulos_frequencia/tab_lista.py      |  2.0   | Aba de lista de presença.
+      |                                      |        | Visão em tabela para admin.
+      |                                      |        | Exporta lista em PDF.
+      |                                      |        | Relacionado com: database.py,
+      |                                      |        | gerador_pdf.py.
+------+--------------------------------------+--------+------------------------------
+  45  | modulos_frequencia/tab_diario.py     |  3.1   | Aba do Diário de Aula.
+      |                                      |        | Registo de objetivo, exercícios,
+      |                                      |        | foco clínico-social, relatos de
+      |                                      |        | melhora e upload de fotos/vídeos.
+      |                                      |        | Salva com turma_id normalizado.
+      |                                      |        | Relacionado com: database.py
+      |                                      |        | (salvar_diario), frequencia_view.
+------+--------------------------------------+--------+------------------------------
+  46  | modulos_frequencia/tab_dossie.py     |  2.2   | Aba do Dossiê do Aluno.
+      |                                      |        | Histórico consolidado de presenças,
+      |                                      |        | diários de aulas frequentadas e
+      |                                      |        | indicadores de engajamento.
+      |                                      |        | Relacionado com: database.py
+      |                                      |        | (get_historico_aulas_aluno).
+------+--------------------------------------+--------+------------------------------
+  47  | modulos_frequencia/tab_emergencia.py |  2.5   | Aba de Emergência Clínica.
+      |                                      |        | Exibe contatos de emergência,
+      |                                      |        | restrições físicas, medicamentos
+      |                                      |        | e dados clínicos críticos do aluno.
+      |                                      |        | Relacionado com: database.py,
+      |                                      |        | utils/texto.py.
+------+--------------------------------------+--------+------------------------------
+  48  | modulos_frequencia/tab_niver.py      | 12.0   | Aba do Portal de Aniversários.
+      |                                      |        | Lista aniversariantes do mês/semana.
+      |                                      |        | Gera cartazes personalizados (PDF e
+      |                                      |        | Word) com logo institucional.
+      |                                      |        | Atalho de WhatsApp para parabéns.
+      |                                      |        | Relacionado com: database.py,
+      |                                      |        | gerador_pdf.py, gerador_word.py,
+      |                                      |        | utils/texto.py.
+------+--------------------------------------+--------+------------------------------
+  49  | modulos_frequencia/tab_inscricao.py  |  1.0   | Aba de Onboarding Legal.
+      |                                      |        | Formalização da matrícula: exibição
+      |                                      |        | e assinatura digital dos termos LGPD
+      |                                      |        | e cessão de direito de imagem.
+      |                                      |        | Relacionado com: database.py,
+      |                                      |        | views/ficha_aluno_view.py.
+
+
+================================================================================
+  4. UTILS — UTILITÁRIOS PARTILHADOS
+================================================================================
+
+  Nº  | ARQUIVO               | FUNÇÃO E RELACIONAMENTOS
+------+-----------------------+-------------------------------------------------
+  50  | utils/__init__.py     | Marcador de pacote Python (vazio).
+------+-----------------------+-------------------------------------------------
+  51  | utils/identidade.py   | Motor de Identidade Visual do sistema.
+      |                       | Funções: get_config(), salvar_config(),
+      |                       | get_logo_b64(), get_logo_data_url(),
+      |                       | render_cabecalho_html/docx/excel(),
+      |                       | render_rodape_html/docx/excel().
+      |                       | Lê identidade.json e injeta logo + cabeçalho
+      |                       | em todos os documentos gerados pelo sistema.
+      |                       | Relacionado com: gerador_pdf, gerador_word,
+      |                       | relatorio_view, tab_niver, main.py (login).
+------+-----------------------+-------------------------------------------------
+  52  | utils/imagem.py       | Utilitários de imagem partilhados.
+      |                       | Elimina duplicidade de get_base64_image().
+      |                       | Usado por: relatorio_view, relatorio_satisfacao,
+      |                       | validador_view, ficha_aluno_view.
+------+-----------------------+-------------------------------------------------
+  53  | utils/texto.py        | Utilitários de texto partilhados.
+      |                       | Funções: remover_acentos(), normalizar_fonetica(),
+      |                       | formatar_whatsapp().
+      |                       | Elimina duplicidade entre múltiplos módulos.
+      |                       | Usado por: frequencia_view, prontuario_dashboard,
+      |                       | ficha_aluno_view, tab_niver, tab_emergencia,
+      |                       | radar_acolhimento_view.
+
+
+================================================================================
+  5. CONFIGURAÇÃO, INFRAESTRUTURA E BANCO DE DADOS
+================================================================================
+
+  Nº  | ARQUIVO                      | FUNÇÃO
+------+------------------------------+------------------------------------------
+  54  | .streamlit/secrets.toml      | Credenciais Supabase (URL + KEY) e chaves
+      |                              | de API: Gemini e SMTP. NUNCA versionar.
+------+------------------------------+------------------------------------------
+  55  | .streamlit/config.toml       | Config do servidor Streamlit:
+      |                              | porta 8000, host 0.0.0.0, sem CORS.
+------+------------------------------+------------------------------------------
+  56  | requirements.txt             | Dependências Python do projeto (veja §6).
+------+------------------------------+------------------------------------------
+  57  | pyproject.toml               | Metadados do projeto Python (uv/pip).
+------+------------------------------+------------------------------------------
+  58  | identidade.json              | Configurações visuais editáveis sem código:
+      |                              | nome da organização, título, subtítulo,
+      |                              | logos, CNPJ, endereço, site, Instagram.
+      |                              | Editado pela tela identidade_view.py.
+------+------------------------------+------------------------------------------
+  59  | scripts/post-merge.sh        | Script pós-merge automático:
+      |                              | reinstala requirements.txt após merges.
+------+------------------------------+------------------------------------------
+  60  | normalizacao_bd.sql          | Scripts SQL de normalização do banco:
+      |                              | adição de turma_id UUID FK em alunos,
+      |                              | diario_aulas, pesquisas_satisfacao e
+      |                              | frequencia; índices de performance;
+      |                              | backfill dos 216 alunos com turma_id.
+------+------------------------------+------------------------------------------
+  61  | sql_anamnese_dores.sql       | SQL de criação da tabela anamnese_dores:
+      |                              | estrutura JSON para mapa corporal de dores,
+      |                              | FK para alunos (cascade delete), índices.
+------+------------------------------+------------------------------------------
+  62  | doc/caminho.txt              | Este arquivo. Mapa completo do projeto.
+------+------------------------------+------------------------------------------
+  63  | resultado_migracao_          | Logs de execução da migração de 218 alunos
+      |    20260502_*.txt (x3)       | do CSV para o Supabase (02/05/2026).
+
+
+================================================================================
+  6. DEPENDÊNCIAS PYTHON (requirements.txt)
+================================================================================
+
+  INTERFACE E DADOS
+  ─────────────────
+  streamlit              — Framework web interativo (UI e servidor)
+  pandas                 — Manipulação e análise de dados tabulares
+  plotly                 — Gráficos interativos para BI
+  streamlit-keyup        — Detecção de teclas em tempo real (busca live)
+
+  BANCO DE DADOS
+  ──────────────
+  supabase               — Cliente Python para PostgreSQL via Supabase
+  psycopg2-binary        — Driver direto PostgreSQL (operações avançadas)
+
+  GERAÇÃO DE DOCUMENTOS
+  ─────────────────────
+  fpdf2                  — Geração de PDF nativo em Python
+  xhtml2pdf              — Conversão HTML → PDF
+  python-docx            — Geração de documentos Word (.docx)
+  openpyxl               — Leitura e escrita de planilhas Excel (.xlsx)
+  xlsxwriter             — Escrita avançada de Excel com formatação
+
+  INTELIGÊNCIA ARTIFICIAL E VISÃO
+  ────────────────────────────────
+  google-generativeai    — Google Gemini IA (revisão de texto, sugestões)
+  deepface               — Reconhecimento facial (conferencia_facial_view)
+  opencv-python          — Processamento de imagem (DeepFace / POC)
+  tensorflow             — Engine de IA para DeepFace
+
+  COMUNICAÇÃO
+  ───────────
+  requests               — Requisições HTTP externas
+  qrcode                 — Geração de QR Codes para links públicos
+
+
+================================================================================
+  7. BANCO DE DADOS SUPABASE — TABELAS PRINCIPAIS
+================================================================================
+
+  TABELA                   | DESCRIÇÃO
+  ─────────────────────────+──────────────────────────────────────────────────
+  alunos                   | Cadastro completo dos alunos (turma + turma_id FK)
+  turmas                   | Tabela normalizada de turmas (UUID PK)
+  frequencia               | Registro de presenças por aluno e data
+  diario_aulas             | Diário do professor por turma e data (turma_id FK)
+  diario_midias            | Fotos e vídeos vinculados a cada diário
+  prontuario_avaliacoes    | Avaliações físicas periódicas do aluno
+  prontuarios_imbra        | Prontuários clínicos completos (aluno_id FK)
+  anamnese_dores           | Mapa corporal de dores por aluno (JSON, cascade)
+  agendamentos             | Agendamentos de consultas e avaliações
+  pesquisas_satisfacao     | Respostas do formulário de satisfação (turma_id FK)
+  pre_cadastros            | Inscrições públicas aguardando triagem
+  atestados_temporarios    | Atestados médicos vinculados a faltas
+  usuarios_sistema         | Usuários com acesso ao painel (login)
+  templates_crm            | Templates de comunicação institucional
+
+
+================================================================================
+  8. CAPACIDADES DO SISTEMA E VISÃO ESTRATÉGICA
+================================================================================
+
+  O IMBRA System é hoje uma plataforma de gestão de saúde comunitária
+  de nível profissional. O que o sistema é capaz de fazer:
+
+  GESTÃO OPERACIONAL COMPLETA
+  ───────────────────────────
+  · Controle de presença em tempo real com grid visual e 3 estados
+    (Presente / Falta / Atestado Médico) com trava de governança de 10 dias
+  · Reconhecimento facial automático de alunos em fotos de turma
+  · Diário de aula com foco clínico-social, exercícios e relatos de melhora
+  · Gestão de turmas normalizada com UUID — escalável para centenas de turmas
+  · Triagem inteligente de novas inscrições com controle de vagas em tempo real
+  · Termômetro de ocupação por turma (🟢 Livre / 🟡 Alerta / 🔴 Lotada)
+
+  PRONTUÁRIO E SAÚDE
+  ──────────────────
+  · Prontuário clínico completo por aluno com avaliações periódicas
+  · Mapa Corporal de Dores interativo (anamnese visual em JSON)
+  · Histórico de presença cruzado com diário do professor
+  · Ficha de Emergência com contatos e restrições físicas críticas
+  · Upload seguro de atestados médicos, receituários e documentos pessoais
+
+  INTELIGÊNCIA E BI
+  ─────────────────
+  · Dashboard BI geral: KPIs, evolução de matrículas, frequência por turma
+  · Relatório BI individual: linha do tempo, gráfico de presença, comparativo
+  · Radar de Evasão proativo: detecta alunos em risco antes do abandono
+  · Pesquisa de satisfação com NPS, gráficos de evolução e exportação
+  · Revisão de texto por IA (Google Gemini) nos registos do professor
+
+  CAPTAÇÃO E CONFORMIDADE
+  ───────────────────────
+  · Formulário público de inscrição via QR Code (sem login) — ideal para
+    captação em eventos, postos de saúde e redes sociais
+  · Validador público de matrícula com QR Code — comprova elegibilidade
+  · Conformidade LGPD: coleta de consentimento, cessão de imagem
+  · Cartazes de aniversário personalizados com logo para fidelização
+
+  DOCUMENTAÇÃO E COMUNICAÇÃO
+  ──────────────────────────
+  · Geração de fichas de matrícula em PDF com logo e dados completos
+  · Relatórios de frequência exportáveis em Excel e PDF
+  · Portal de aniversários com cartazes Word/PDF e atalho de WhatsApp
+  · Templates de CRM: mensagens padronizadas para WhatsApp e e-mail
+  · Backup completo de 14 tabelas em Excel (cofre de segurança)
+
+  ADMINISTRAÇÃO
+  ─────────────
+  · Múltiplos perfis de acesso (Visitante, Admin, SuperAdmin)
+  · Sessão segura com expiração automática em 8 horas
+  · CAPTCHA anti-bot na tela de login
+  · Fusão de alunos duplicados com preservação de histórico
+  · Gestão de identidade visual sem código (logo, título, CNPJ)
+
+
+================================================================================
+  9. SUGESTÕES DE EVOLUÇÃO — MUDA BRASIL / CAPTAÇÃO E INVESTIDORES
+================================================================================
+
+  O sistema já é um diferencial competitivo claro frente a ONGs similares.
+  As sugestões abaixo visam ampliar a captação de alunos, fortalecer o
+  impacto social mensurável e tornar o projeto mais atrativo a investidores,
+  órgãos públicos e editais de fomento:
+
+  A) APP MOBILE PARA ALUNOS (React Native / Expo)
+     · Portal do aluno no celular: ver presenças, próximas aulas, comunicados
+     · Notificação de aniversário e recados do professor
+     · Impacto: reduz evasão, aumenta engajamento, facilita captação viral
+
+  B) RELATÓRIO DE IMPACTO SOCIAL AUTOMATIZADO
+     · Geração automática de relatório de impacto (PDF/PPT) com:
+       número de atendimentos, frequência média, evolução de saúde,
+       depoimentos de alunos, NPS, fotos das turmas
+     · Pronto para submissão em editais, prestação de contas e
+       reuniões com patrocinadores e secretarias municipais
+     · Impacto: valoriza o projeto perante investidores e poder público
+
+  C) INTEGRAÇÃO COM WHATSAPP BUSINESS API
+     · Envio automático de lembrete de aula, aviso de falta e mensagem
+       de parabéns (via Twilio ou Z-API)
+     · Impacto: reduz faltas, aumenta sentimento de pertença e fidelização
+
+  D) MÓDULO DE CAPTAÇÃO DIGITAL COM FUNIL
+     · Landing page pública vinculada ao sistema com:
+       formulário de interesse, lista de espera por turma, depoimentos,
+       contador de vagas em tempo real e botão de WhatsApp
+     · Impacto: transforma o sistema num canal ativo de captação
+
+  E) PAINEL PÚBLICO DE TRANSPARÊNCIA
+     · Página pública (sem login) com dados agregados do projeto:
+       total de alunos atendidos, aulas realizadas, média de satisfação (NPS),
+       fotos de turmas, mapa de bairros atendidos
+     · Impacto: demonstra accountability e atrai novos parceiros e doadores
+
+  F) INTEGRAÇÃO COM GOOGLE FORMS / TYPEFORM PARA AVALIAÇÃO EXTERNA
+     · Conectar o sistema com formulários externos para avaliação de saúde
+       antes/depois (PAR-Q ampliado, IPAQ, SF-36)
+     · Impacto: produz dados científicos para publicações e relatórios de saúde
+
+  G) MÓDULO FINANCEIRO BÁSICO
+     · Registro de contribuições voluntárias, bolsas, isenções e
+       prestação de contas simplificada por turma
+     · Impacto: facilita auditoria, prestação de contas a editais e
+       monitoramento de sustentabilidade financeira do projeto
+
+  H) INTEGRAÇÃO COM SISTEMAS MUNICIPAIS / SUS
+     · Exportação de dados agregados no formato aceito por secretarias
+       municipais de saúde e esporte
+     · Impacto: abre caminho para convênios públicos e financiamento via
+       fundo municipal de saúde preventiva
+
+  I) DASHBOARD EXTERNO PARA PATROCINADORES
+     · Tela pública ou com acesso exclusivo (leitura) para patrocinadores
+       acompanharem o impacto do projeto em tempo real
+     · Impacto: aumenta a confiança e a probabilidade de renovação de apoio
+
+  J) CERTIFICADOS DIGITAIS DE PARTICIPAÇÃO
+     · Geração automática de certificados anuais de participação (PDF com QR)
+     · Impacto: gera valor concreto para o aluno, aumenta retenção e
+       pode ser exigido para benefícios sociais (bolsas, programas municipais)
+
+
+================================================================================
+  Autor: Marcos Barbosa — MoveRight / Instituto Muda Brasil
+  Data de geração: 03 de maio de 2026
+  © Todos os direitos reservados — Instituto Muda Brasil
+  CNPJ 08.817.519/0001-79 — São Paulo - SP
+  Uso exclusivo interno. Proibida reprodução sem autorização.
+================================================================================

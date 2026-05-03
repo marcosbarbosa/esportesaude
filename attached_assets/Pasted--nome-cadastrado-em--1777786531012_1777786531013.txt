@@ -1,0 +1,102 @@
+| nome                                    | cadastrado_em |
+| --------------------------------------- | ------------- |
+| ISSAO MINAMI                            | 2026-05-02    |
+| RENATA SONCINI FACCI                    | 2026-05-02    |
+| VSRA .REGINA ABONDANZA                  | 2026-05-02    |
+| JOSÉ MARCOS FERNANDES                   | 2026-05-02    |
+| ADRIANA  LOPEZ                          | 2026-05-02    |
+| DAVID RAVENE DA SILVA NOBRE SANTOS      | 2026-05-02    |
+| JOÃO GUILHERME  DAMASCENO MACHADO       | 2026-05-02    |
+| HEITOR ROCHA SILVA                      | 2026-05-02    |
+| LAVINIA MARIA M BENTO                   | 2026-05-02    |
+| MARIA CLARA M BENTO                     | 2026-05-02    |
+| THIERRY MOISÉS RODRIGUES DE OLIVEIRA    | 2026-05-02    |
+| JOÃO PEDRO SANTOS DA SILVA              | 2026-05-02    |
+| ARTHUR DE LIMA E SILVA                  | 2026-05-02    |
+| NICOLAS PAGANELLI CORRÊA                | 2026-05-02    |
+| PEDRO HENRIQUE DA SILVA OLIVEIRA        | 2026-05-02    |
+| BRENNO SAMUEL LUCIN                     | 2026-05-02    |
+| JOÃO VICTOR VITAL GIL                   | 2026-05-02    |
+| JOÃO HENRIQUE OLIVEIRA DA SILVA         | 2026-05-02    |
+| GABRIEL SOARES CHAVES                   | 2026-05-02    |
+| NATHAN KARYL ONDON OBAMI                | 2026-05-02    |
+| YASMIM DE OLIVEIRA GOMES                | 2026-05-02    |
+| MIGUEL ALBUQUERQUE DOS SANTOS           | 2026-05-02    |
+| PIETRO MARQUES ANDRADE                  | 2026-05-02    |
+| STEVIE RODRIGUES DE ABREU               | 2026-05-02    |
+| GUSTAVO PERRUCHO ALVES                  | 2026-05-02    |
+| FELIPE MATA DOS SANTOS BARBOSA          | 2026-05-02    |
+| GABRIEL SOUZA DA SILVA                  | 2026-05-02    |
+| DAVI ALMEIDA GONÇALVES                  | 2026-05-02    |
+| ARTHUR SOUSA DE CASTRO                  | 2026-05-02    |
+| THIERRY SOUZA DE MACEDO                 | 2026-05-02    |
+| SAMIR FONTENELLE LIMA                   | 2026-05-02    |
+| AMR FONTENELLE LIMA                     | 2026-05-02    |
+| ZAHRA FONTENELLE LIMA                   | 2026-05-02    |
+| GUILHERME SANCHEZ FELIX                 | 2026-05-02    |
+| ADRIANO CERQUEIRA QUEIROZ               | 2026-05-02    |
+| SAMUEL ANDREWS CUNHA SCHAFACHEKI        | 2026-05-02    |
+| RENAN SILVA GONÇALVES DE JESUS          | 2026-05-02    |
+| JOAQUIM CARDADEIRO DOS REIS             | 2026-05-02    |
+| FRANCISCO CARDADEIRO DOS REIS           | 2026-05-02    |
+| BRUNO MARTINS DA SILVA                  | 2026-05-02    |
+| JOAO VICTOR GALDINO ALVES               | 2026-05-02    |
+| DAVI MORAIS CASTRO DA SILVA             | 2026-05-02    |
+| RYAN FERREIRA DE MOURA DA CUNHA         | 2026-05-02    |
+| GABRIEL GONÇALVES LOPES                 | 2026-05-02    |
+| MATHEUS OLIVEIRA GOMES                  | 2026-05-02    |
+| RENAN AVELINO GOMES                     | 2026-05-02    |
+| CAUÃ SANTOS GALDINO                     | 2026-05-02    |
+| EDDIE DE OLIVEIRA                       | 2026-05-02    |
+| GABRIEL DUARTE MUNHOZ                   | 2026-05-02    |
+| GABRIEL DUARTE MUNHO,                   | 2026-05-02    |
+| SAMUEL JOSÉ DOS SANTOS PEREZ            | 2026-05-02    |
+| ANTONIO JOSÉ DOS SANTOS PEREZ FILHO     | 2026-05-02    |
+| RYAN OLIVEIRA CARVALHO                  | 2026-05-02    |
+| RYAN SILVA RIBEIRO                      | 2026-05-02    |
+| ENZO KATSUMOTO ISSII DO NASCIMENTO      | 2026-05-02    |
+| OLIVIA SOARES BUENO                     | 2026-05-02    |
+| MIGUEL KEITAROU GONÇALVES ISSII         | 2026-05-02    |
+| KAYQUE GIMENEZ DOS SANTOS               | 2026-05-02    |
+| ALISSON IGOR SILVA VIDAL                | 2026-05-02    |
+| JOÃO PEDRO DA GRAÇA BORGES              | 2026-05-02    |
+| VINÍCIUS DA SILVA REICHERT              | 2026-05-02    |
+| JOAQUIM SENA LIBUNE                     | 2026-05-02    |
+| MATHEUS EDUARDO CIRERA REQUENA          | 2026-05-02    |
+| SAMUEL ANDRÉ RODRIGUES                  | 2026-05-02    |
+| MUHAMED YOUSUF ALKAYAL                  | 2026-05-02    |
+| THOMAS ALTOMARE HORACEK                 | 2026-05-02    |
+| AMIR TAHKAKHA ALKARI                    | 2026-05-02    |
+| PYETRO OLIVEIRA RODRIGUES               | 2026-05-02    |
+| HENRICK DE AGUILAR PEREIRA              | 2026-05-02    |
+| VICTOR ISRAEL PAIXÃO DE ALENCAR         | 2026-05-02    |
+| CAROLINA MELO VIEIRA                    | 2026-05-02    |
+| GABRIEL SIMPLICIO                       | 2026-05-02    |
+| LUCAS AQUINO CINTRA                     | 2026-05-02    |
+| MIGUEL MAMEDIO DE CARVALHO RIBEIRO      | 2026-05-02    |
+| KASSIANO KISSANE QUEIROZ BARBOSA        | 2026-05-02    |
+| VICTOR ALVES                            | 2026-05-02    |
+| THYAGO FEITOZA SOARES                   | 2026-05-02    |
+| JULIO CÉSAR GOMES DOS SANTOS            | 2026-05-02    |
+| MURILO LEITE DA SILVA                   | 2026-05-02    |
+| FÁBIO JÚNIOR QUEIROZ BARBOSA            | 2026-05-02    |
+| ÉRIKA VIEIRA PINTO                      | 2026-05-02    |
+| HELOÍSA VITORINO  DE MORAIS SILVA       | 2026-05-02    |
+| MANUELLA VITORINO DE MORAIS SILVA       | 2026-05-02    |
+| FABRÍCIO QUEIROZ BARBOSA                | 2026-05-02    |
+| PEDRO MIGUEL DE OLIVEIRA                | 2026-05-02    |
+| PIETRA BATISTA DOS SANTOS               | 2026-05-02    |
+| DAVI LUIZ DE AZEVEDO SIQUEIRA           | 2026-05-02    |
+| GUSTAVO ROCHA TELES DA SILVA            | 2026-05-02    |
+| LUIZ ANDRÉ MACHADO GONÇALVES            | 2026-05-02    |
+| BRYAN SOUZA DA CRUZ                     | 2026-05-02    |
+| SOPHIA ALVES REUTER PERINE              | 2026-05-02    |
+| MIGUEL OLIVEIRA COSTA                   | 2026-05-02    |
+| VICTOR HUGO ALVES FERREIRA              | 2026-05-02    |
+| GUILHERME HENRIQUE DE OLIVEIRA FERREIRA | 2026-05-02    |
+| EDUARDO SOUSA BRAGA                     | 2026-05-02    |
+| DAVI OLIVEIRA DA SILVA TEIXEIRA         | 2026-05-02    |
+| YURI MANOEL BENTO DE SOUSA              | 2026-05-02    |
+| ARTHUR RODRIGUES ALVES                  | 2026-05-02    |
+| ANDRÉ LUIS SOQUETE ANDRADE              | 2026-05-02    |
+| PIETRO SANTIAGO FERREIRA                | 2026-05-02    |

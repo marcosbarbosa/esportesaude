@@ -1,0 +1,74 @@
+Olá! Parece que o seu Replit encontrou um problema ao instalar a biblioteca fpdf2, mas ainda tentou puxar as ferramentas do fpdf antigo (e o seu código original ainda o usava numa função específica de geração de PDF). Para evitarmos conflitos e dependências perdidas, irei sugerir a mesma tática segura que utilizámos para resolver as páginas HTML.
+
+Compreensão do Objetivo
+Ao aceder ao módulo de Dashboard do Prontuário, o sistema está a quebrar (crashing) porque falta a dependência do pyarrow e o fpdf (utilizado para gerar relatórios de evasão) pode estar a causar instabilidade. O teu pedido foca-se em reestruturar as ferramentas base para corrigir estas instalações e assegurar que tudo funciona lindamente.  
+
+Panorama Geral da Solução
+Vamos corrigir a infraestrutura em três passos:
+
+Remover a biblioteca antiga fpdf e qualquer dependência do relatório de evasão. Em vez disso, vamos reescrever essa função na tua interface para usar o gerador nativo do Streamlit (st.dataframe ou a exportação nativa de Excel) ou o xhtml2pdf que já está instalado e a funcionar perfeitamente para as auditorias.
+
+Atualizar o ambiente Nix: Adicionar explicitamente as bibliotecas necessárias de base de dados para garantir que a renderização do Streamlit via pyarrow não tem atritos.
+
+Limpar a cache: Efetuar um "reset" completo do sistema no Replit para que ele esqueça os ficheiros corrompidos e instale as versões mais limpas e otimizadas das tuas dependências.
+
+Instruções de Implementação
+Neste momento, teremos que fazer uma operação de limpeza diretamente no seu servidor do Replit.
+
+Passo 1: Corrigir o Motor Central do Replit (replit.nix)
+Tal como fizemos anteriormente, precisamos de garantir que o ambiente Linux do Replit consegue compilar os módulos do Streamlit (como o pyarrow e o pandas).
+
+Encontre e abra o ficheiro oculto replit.nix.
+
+Apague o conteúdo antigo e cole este código melhorado:
+
+Nix
+{pkgs}: {
+  deps = [
+    pkgs.python312Full
+    pkgs.stdenv.cc.cc.lib
+    pkgs.zlib
+    pkgs.glibc
+    pkgs.gcc
+  ];
+  env = {
+    PYTHONBIN = "${pkgs.python312Full}/bin/python3.12";
+    LANG = "en_US.UTF-8";
+    STDERROUT = "1";
+    LD_LIBRARY_PATH = pkgs.lib.makeLibraryPath [
+      pkgs.stdenv.cc.cc.lib
+      pkgs.zlib
+      pkgs.glibc
+    ];
+  };
+}
+Passo 2: Definir as Ferramentas Corretas (requirements.txt)
+Vamos remover totalmente o fpdf e o fpdf2 do teu projeto. O xhtml2pdf (que já usas) fará todo o trabalho pesado.
+
+Abra o ficheiro requirements.txt.
+
+Cole exatamente a lista abaixo (sem versões restritas):
+
+Plaintext
+streamlit
+pandas
+supabase
+requests
+httpx
+google-generativeai
+plotly
+streamlit-keyup
+xlsxwriter
+python-docx
+xhtml2pdf
+Pillow
+Passo 3: A Operação de Limpeza Extrema (Shell)
+Agora vamos forçar o Replit a apagar todos os ficheiros de sistema corrompidos e instalar tudo de novo a partir das tuas instruções limpas.
+
+Abra a aba Shell no Replit.
+
+Cole este comando (ele apaga as bibliotecas e instala as novas) e prima Enter:
+
+Bash
+pip cache purge && pip uninstall -y pyarrow fpdf fpdf2 streamlit pandas && pip install -r requirements.txt
+Aguarde até o processo indicar Successfully installed.... Assim que terminar, carregue no botão Stop e depois em Run. A interface do "Portal do Aluno" deverá abrir agora de forma suave, e a tabela de dados funcionará sem nenhum erro de pyarrow!

@@ -1,0 +1,8 @@
+uploads = []
+generated = []
+
+[[outputs]]
+id = "wVZEQ1I_NKdOf24FKwxJn"
+uri = "file://doc/caminho.txt"
+type = "text"
+title = "IMBRA System — Mapa Completo de Arquivos e Visão Estratégica"

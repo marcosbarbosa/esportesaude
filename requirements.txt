@@ -1,0 +1,25 @@
+# --- Interface e Dados ---
+streamlit==1.57.0
+pandas
+plotly
+streamlit-keyup
+
+# --- Integração e Nuvem ---
+supabase
+requests
+httpx
+
+# --- Inteligência Artificial ---
+google-generativeai
+
+# --- Geração de Documentos (Excel, Word, PDF) ---
+xlsxwriter
+python-docx==0.8.11
+lxml==4.9.4
+xhtml2pdf
+reportlab
+fpdf2
+
+# --- Manipulação de Imagens e Suporte ---
+Pillow
+python-bidi

@@ -1,0 +1,247 @@
+-- WARNING: This schema is for context only and is not meant to be run.
+-- Table order and constraints may not be valid for execution.
+
+CREATE TABLE public.agendamentos (
+  id bigint GENERATED ALWAYS AS IDENTITY NOT NULL,
+  aluno_id uuid,
+  data_agendamento date NOT NULL,
+  horario text NOT NULL,
+  motivo text,
+  status text DEFAULT 'Pendente'::text,
+  created_at timestamp with time zone DEFAULT timezone('utc'::text, now()),
+  CONSTRAINT agendamentos_pkey PRIMARY KEY (id),
+  CONSTRAINT agendamentos_aluno_id_fkey FOREIGN KEY (aluno_id) REFERENCES public.alunos(id)
+);
+CREATE TABLE public.alunos (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  nome text NOT NULL,
+  telefone text,
+  contato_emergencia text,
+  turma text,
+  foto_url text,
+  nota_risco_atual integer DEFAULT 0,
+  cor_alerta_atual text DEFAULT '🟢'::text,
+  created_at timestamp with time zone DEFAULT timezone('utc'::text, now()),
+  data_nascimento date,
+  peso numeric,
+  altura numeric,
+  whatsapp character varying,
+  email character varying,
+  url_foto text,
+  turma_id uuid,
+  cpf character varying,
+  rg character varying,
+  endereco character varying,
+  bairro character varying,
+  cep character varying,
+  problemas_saude text,
+  medicamentos text,
+  restricoes_fisicas text,
+  status text DEFAULT 'Ativo'::text,
+  url_rg text,
+  url_receituario text,
+  url_atestado_medico text,
+  grau_instrucao character varying,
+  principal_fonte_renda character varying,
+  faixa_renda character varying,
+  naturalidade character varying,
+  sexo character varying,
+  estado_civil character varying,
+  aposentado character varying,
+  nome_conjuge character varying,
+  qtd_moradores character varying,
+  trabalho_voluntario_interesse character varying,
+  trabalho_voluntario_areas text,
+  anamnese_incomodo_atividade text,
+  CONSTRAINT alunos_pkey PRIMARY KEY (id),
+  CONSTRAINT alunos_turma_id_fkey FOREIGN KEY (turma_id) REFERENCES public.turmas(id)
+);
+CREATE TABLE public.anamnese_saude (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  aluno_id uuid,
+  patologias text,
+  medicamentos_continuos text,
+  alergias text,
+  restricoes_medicas text,
+  updated_at timestamp with time zone DEFAULT timezone('utc'::text, now()),
+  CONSTRAINT anamnese_saude_pkey PRIMARY KEY (id),
+  CONSTRAINT anamnese_saude_aluno_id_fkey FOREIGN KEY (aluno_id) REFERENCES public.alunos(id)
+);
+CREATE TABLE public.atendimentos (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  aluno_id uuid,
+  data_aula date DEFAULT CURRENT_DATE,
+  status text NOT NULL,
+  created_at timestamp with time zone DEFAULT timezone('utc'::text, now()),
+  CONSTRAINT atendimentos_pkey PRIMARY KEY (id),
+  CONSTRAINT atendimentos_aluno_id_fkey FOREIGN KEY (aluno_id) REFERENCES public.alunos(id)
+);
+CREATE TABLE public.atestados_temporarios (
+  id bigint GENERATED ALWAYS AS IDENTITY NOT NULL,
+  aluno_id uuid,
+  data_registro date NOT NULL,
+  motivo text,
+  url_documento text NOT NULL,
+  criado_em timestamp with time zone DEFAULT now(),
+  CONSTRAINT atestados_temporarios_pkey PRIMARY KEY (id),
+  CONSTRAINT atestados_temporarios_aluno_id_fkey FOREIGN KEY (aluno_id) REFERENCES public.alunos(id)
+);
+CREATE TABLE public.avaliacoes_fisicas (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  aluno_id uuid,
+  data_avaliacao date DEFAULT CURRENT_DATE,
+  peso numeric,
+  imc numeric,
+  resultado_tug numeric,
+  teste_forca text,
+  nota_risco integer NOT NULL,
+  created_at timestamp with time zone DEFAULT timezone('utc'::text, now()),
+  CONSTRAINT avaliacoes_fisicas_pkey PRIMARY KEY (id),
+  CONSTRAINT avaliacoes_fisicas_aluno_id_fkey FOREIGN KEY (aluno_id) REFERENCES public.alunos(id)
+);
+CREATE TABLE public.crm_templates (
+  id integer NOT NULL DEFAULT nextval('crm_templates_id_seq'::regclass),
+  gatilho character varying UNIQUE,
+  mensagem text,
+  atualizado_em timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
+  titulo character varying,
+  CONSTRAINT crm_templates_pkey PRIMARY KEY (id)
+);
+CREATE TABLE public.diario_aulas (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  data_aula date NOT NULL,
+  turma text NOT NULL,
+  objetivo_geral text,
+  url_foto_grupo text,
+  exercicios_executados text,
+  turma_id uuid,
+  foco_clinico_social text,
+  relatos_melhora text,
+  CONSTRAINT diario_aulas_pkey PRIMARY KEY (id),
+  CONSTRAINT diario_aulas_turma_id_fkey FOREIGN KEY (turma_id) REFERENCES public.turmas(id)
+);
+CREATE TABLE public.diario_midias (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  diario_aula_id uuid,
+  tipo text NOT NULL,
+  url_midia text NOT NULL,
+  descricao_objetivo text,
+  CONSTRAINT diario_midias_pkey PRIMARY KEY (id),
+  CONSTRAINT diario_midias_diario_aula_id_fkey FOREIGN KEY (diario_aula_id) REFERENCES public.diario_aulas(id)
+);
+CREATE TABLE public.frequencia (
+  id bigint GENERATED ALWAYS AS IDENTITY NOT NULL,
+  aluno_id uuid NOT NULL,
+  data_aula date NOT NULL,
+  status text NOT NULL,
+  CONSTRAINT frequencia_pkey PRIMARY KEY (id)
+);
+CREATE TABLE public.pesquisas_satisfacao (
+  id uuid NOT NULL DEFAULT uuid_generate_v4(),
+  turma text NOT NULL,
+  q1_disposicao text NOT NULL,
+  q2_dores text NOT NULL,
+  q3_efeito_vida text NOT NULL,
+  q4_avaliacao_geral text NOT NULL,
+  comentario text,
+  data_resposta timestamp with time zone DEFAULT timezone('utc'::text, now()),
+  trimestre_referencia text,
+  ip_registro text,
+  localizacao_registro text,
+  CONSTRAINT pesquisas_satisfacao_pkey PRIMARY KEY (id)
+);
+CREATE TABLE public.pre_cadastros (
+  id uuid NOT NULL DEFAULT uuid_generate_v4(),
+  data_inscricao timestamp with time zone DEFAULT now(),
+  nome text NOT NULL,
+  email text,
+  celular text,
+  cpf text,
+  rg text,
+  data_nascimento date,
+  endereco text,
+  bairro text,
+  cep text,
+  grau_instrucao text,
+  estado_civil text,
+  problemas_saude text,
+  medicamentos text,
+  alergias text,
+  restricoes_fisicas text,
+  contato_emergencia text,
+  residentes_moradia text,
+  fonte_renda text,
+  termo_imagem boolean DEFAULT false,
+  url_atestado_medico text,
+  status text DEFAULT 'Pendente'::text,
+  peso numeric DEFAULT 0,
+  altura numeric DEFAULT 0,
+  horario_preferencial text,
+  dias_preferenciais text,
+  criado_em text,
+  CONSTRAINT pre_cadastros_pkey PRIMARY KEY (id)
+);
+CREATE TABLE public.prescricoes_profissionais (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  aluno_id uuid,
+  data_prescricao date DEFAULT CURRENT_DATE,
+  foco_treino text,
+  observacoes text,
+  created_at timestamp with time zone DEFAULT timezone('utc'::text, now()),
+  CONSTRAINT prescricoes_profissionais_pkey PRIMARY KEY (id),
+  CONSTRAINT prescricoes_profissionais_aluno_id_fkey FOREIGN KEY (aluno_id) REFERENCES public.alunos(id)
+);
+CREATE TABLE public.prontuario_avaliacoes (
+  id bigint GENERATED ALWAYS AS IDENTITY NOT NULL,
+  aluno_id uuid,
+  data_avaliacao date,
+  peso numeric,
+  altura numeric,
+  nivel_dor integer,
+  tug_segundos numeric,
+  simetria_dir numeric,
+  simetria_esq numeric,
+  observacoes text,
+  bristol text,
+  urina text,
+  borg text,
+  criado_em timestamp with time zone DEFAULT now(),
+  CONSTRAINT prontuario_avaliacoes_pkey PRIMARY KEY (id),
+  CONSTRAINT prontuario_avaliacoes_aluno_id_fkey FOREIGN KEY (aluno_id) REFERENCES public.alunos(id)
+);
+CREATE TABLE public.prontuarios_imbra (
+  id bigint GENERATED ALWAYS AS IDENTITY NOT NULL,
+  created_at timestamp with time zone DEFAULT now(),
+  data_avaliacao date,
+  dor_nivel integer,
+  quedas_6m integer,
+  cirurgias text,
+  medicamentos text,
+  mobilidade_pes text,
+  forca_dir integer,
+  forca_esq integer,
+  tug_simples numeric,
+  tug_cog_animais numeric,
+  tug_cog_perguntas numeric,
+  mobilidade_pes_dir character varying,
+  mobilidade_pes_esq character varying,
+  aluno_id uuid,
+  CONSTRAINT prontuarios_imbra_pkey PRIMARY KEY (id)
+);
+CREATE TABLE public.turmas (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  nome character varying NOT NULL UNIQUE,
+  horario character varying,
+  dias_semana character varying,
+  status character varying DEFAULT 'Ativa'::character varying,
+  criado_em timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT turmas_pkey PRIMARY KEY (id)
+);
+CREATE TABLE public.usuarios (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  nome text NOT NULL,
+  email text NOT NULL UNIQUE,
+  senha text NOT NULL,
+  criado_em timestamp with time zone NOT NULL DEFAULT timezone('utc'::text, now()),
+  CONSTRAINT usuarios_pkey PRIMARY KEY (id)
+);
