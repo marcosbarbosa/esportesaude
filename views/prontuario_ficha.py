@@ -1,7 +1,7 @@
 # ==============================================================================
 # 📄 Arquivo: views/prontuario_ficha.py
-# 📅 Versão: 5.1 (PRO Elite - Modular + Blindagem Anti-NaN SQL/JSON)
-# ⚙️ Função: Gestão individual cirúrgica. Código limpo, modular e escalável.
+# 📅 Versão: 5.2 (PRO Elite - Centenary Update & JSON Shield)
+# ⚙️ Função: Gestão individual cirúrgica. Suporte a 1900+ e blindagem de floats.
 # ==============================================================================
 import streamlit as st
 import pandas as pd
@@ -45,7 +45,7 @@ except ImportError:
 def blindar_float(valor):
     """Garante que nenhum valor NaN ou Infinity quebre o JSON do Supabase."""
     try:
-        if pd.isna(valor):
+        if pd.isna(valor) or valor is None:
             return 0.0
         val = float(valor)
         if math.isnan(val) or math.isinf(val):
@@ -481,7 +481,11 @@ def _render_painel_exclusao(aluno):
         st.markdown("##### 📋 Dados do aluno que será excluído")
 
         def campo(label, valor):
-            v = str(valor).strip() if valor and str(valor).strip().lower() not in ("nan","none","") else "—"
+            v = (
+                str(valor).strip()
+                if valor and str(valor).strip().lower() not in ("nan", "none", "")
+                else "—"
+            )
             return f"<b>{label}:</b> {v}"
 
         col_a, col_b, col_c = st.columns(3)
@@ -493,7 +497,8 @@ def _render_painel_exclusao(aluno):
                 f"{campo('Turma', aluno.get('turma'))}<br>"
                 f"{campo('Status', aluno.get('status'))}<br>"
                 f"{campo('Nascimento', aluno.get('data_nascimento'))}"
-                f"</div>", unsafe_allow_html=True
+                f"</div>",
+                unsafe_allow_html=True,
             )
         with col_b:
             st.markdown(
@@ -503,7 +508,8 @@ def _render_painel_exclusao(aluno):
                 f"{campo('RG', aluno.get('rg'))}<br>"
                 f"{campo('WhatsApp', aluno.get('whatsapp'))}<br>"
                 f"{campo('E-mail', aluno.get('email'))}"
-                f"</div>", unsafe_allow_html=True
+                f"</div>",
+                unsafe_allow_html=True,
             )
         with col_c:
             st.markdown(
@@ -513,7 +519,8 @@ def _render_painel_exclusao(aluno):
                 f"{campo('Bairro', aluno.get('bairro'))}<br>"
                 f"{campo('Contato Emerg.', aluno.get('contato_emergencia'))}<br>"
                 f"{campo('Restrições', aluno.get('restricoes_fisicas'))}"
-                f"</div>", unsafe_allow_html=True
+                f"</div>",
+                unsafe_allow_html=True,
             )
 
         if aluno.get("problemas_saude") or aluno.get("medicamentos"):
@@ -522,7 +529,8 @@ def _render_painel_exclusao(aluno):
                 f"border:1px solid #FECACA;font-size:13px;margin-top:8px'>"
                 f"{campo('Problemas de Saúde', aluno.get('problemas_saude'))} &nbsp;|&nbsp; "
                 f"{campo('Medicamentos', aluno.get('medicamentos'))}"
-                f"</div>", unsafe_allow_html=True
+                f"</div>",
+                unsafe_allow_html=True,
             )
 
         st.markdown("<br>", unsafe_allow_html=True)
@@ -535,12 +543,14 @@ def _render_painel_exclusao(aluno):
         )
         c_inp, c_btn, c_cancel = st.columns([3, 1.5, 1.5])
         confirmacao = c_inp.text_input(
-            "Confirmação:", key="exclusao_nome_confirmacao",
-            placeholder=nome_aluno, label_visibility="collapsed"
+            "Confirmação:",
+            key="exclusao_nome_confirmacao",
+            placeholder=nome_aluno,
+            label_visibility="collapsed",
         )
         nome_digitado = confirmacao.strip().upper()
         nome_esperado = nome_aluno.strip().upper()
-        habilitado    = nome_digitado == nome_esperado
+        habilitado = nome_digitado == nome_esperado
 
         with c_btn:
             if st.button(
@@ -563,7 +573,9 @@ def _render_painel_exclusao(aluno):
                     st.error(msg)
 
         with c_cancel:
-            if st.button("✖ Cancelar", use_container_width=True, key="btn_cancelar_exclusao"):
+            if st.button(
+                "✖ Cancelar", use_container_width=True, key="btn_cancelar_exclusao"
+            ):
                 st.session_state.painel_exclusao_aberto = False
                 st.rerun()
 
@@ -590,7 +602,9 @@ def render_cabecalho_aluno(aluno):
     st.divider()
 
     u_v = aluno.get("url_foto")
-    cp_f, cp_i, cp_pdf, cp_word = st.columns([1.2, 4.3, 0.9, 0.9], vertical_alignment="center")
+    cp_f, cp_i, cp_pdf, cp_word = st.columns(
+        [1.2, 4.3, 0.9, 0.9], vertical_alignment="center"
+    )
     with cp_f:
         if pd.notna(u_v) and str(u_v).strip().lower() not in [
             "none",
@@ -667,6 +681,7 @@ def render_cabecalho_aluno(aluno):
             with st.spinner("A gerar Word..."):
                 try:
                     from gerador_word import criar_documento_aluno_word
+
                     _wb = criar_documento_aluno_word(
                         aluno,
                         get_avaliacoes_aluno(aluno.get("id")),
@@ -762,7 +777,8 @@ def render_aba_perfil(aluno):
 
         data_bd = aluno.get("data_nascimento")
         hoje = datetime.date.today()
-        limite_min = datetime.date(1920, 1, 1)
+        # 🚀 AJUSTE: Limite expandido para 1900 para suportar alunos centenários
+        limite_min = datetime.date(1900, 1, 1)
         data_padrao = datetime.date(2000, 1, 1)
         try:
             if pd.notna(data_bd) and str(data_bd).strip().lower() not in [
@@ -785,7 +801,15 @@ def render_aba_perfil(aluno):
                     data_padrao = hoje
         except Exception:
             pass
-        d_ed = col_d.date_input("Nascimento:", value=data_padrao, min_value=limite_min, max_value=hoje, format="DD/MM/YYYY")
+
+        # 🛡️ FIX: min_value definido explicitamente para remover o erro de range do Streamlit
+        d_ed = col_d.date_input(
+            "Nascimento:",
+            value=data_padrao,
+            min_value=limite_min,
+            max_value=hoje,
+            format="DD/MM/YYYY",
+        )
 
         st.markdown("#### 📸 Foto de Perfil")
         foto_nova = st.file_uploader(
@@ -817,7 +841,7 @@ def render_aba_perfil(aluno):
         st.markdown("#### 📱 Biometria e Contactos")
         c_p, c_a, c_w, c_e = st.columns([1, 1, 2, 2])
 
-        # 🚀 AQUI A BLINDAGEM ENTRA EM AÇÃO PARA PESO E ALTURA
+        # 🛡️ FIX: Blindagem aplicada no input e no salvamento contra NaN SQL
         p_ed = c_p.number_input(
             "Peso (kg):", value=blindar_float(aluno.get("peso")), step=0.1
         )
@@ -883,6 +907,7 @@ def render_aba_perfil(aluno):
                             st.error(f"❌ Falha Storage: {erro}")
 
                 if upload_ok:
+                    # 🛡️ BLINDAGEM ADICIONAL no dicionário de salvamento
                     dados_salvar = {
                         "nome": n_ed.upper().strip(),
                         "turma": t_ed_salvar,
@@ -919,7 +944,11 @@ def render_aba_perfil(aluno):
 def _val(aluno, campo):
     """Retorna string limpa ou vazia, nunca 'nan'/'None'."""
     v = aluno.get(campo, "")
-    return "" if pd.isna(v) or str(v).strip().lower() in ("nan", "none") else str(v).strip()
+    return (
+        ""
+        if pd.isna(v) or str(v).strip().lower() in ("nan", "none")
+        else str(v).strip()
+    )
 
 
 def _idx_select(opcoes: list, valor_atual: str) -> int:
@@ -937,7 +966,10 @@ def render_aba_social(aluno):
         c_head, c_btn = st.columns([4, 1], vertical_alignment="center")
         c_head.markdown("#### 🏘️ Perfil Socioeconômico e Anamnese")
         btn_top = c_btn.button(
-            "💾 Guardar", key="save_social_top", type="primary", use_container_width=True
+            "💾 Guardar",
+            key="save_social_top",
+            type="primary",
+            use_container_width=True,
         )
         st.info(
             "Dados de mapeamento demográfico e social para relatórios institucionais. "
@@ -954,19 +986,30 @@ def render_aba_social(aluno):
         )
         natural_ed = c2.text_input("Naturalidade:", value=_val(aluno, "naturalidade"))
 
-        OPCOES_CIVIL = ["Solteiro(a)", "Casado(a)", "Divorciado(a)", "Viúvo(a)", "União Estável", "Outro"]
+        OPCOES_CIVIL = [
+            "Solteiro(a)",
+            "Casado(a)",
+            "Divorciado(a)",
+            "Viúvo(a)",
+            "União Estável",
+            "Outro",
+        ]
         estado_civil_ed = c3.selectbox(
-            "Estado Civil:", OPCOES_CIVIL,
-            index=_idx_select(OPCOES_CIVIL, _val(aluno, "estado_civil"))
+            "Estado Civil:",
+            OPCOES_CIVIL,
+            index=_idx_select(OPCOES_CIVIL, _val(aluno, "estado_civil")),
         )
 
         c4, c5, c6 = st.columns(3)
         OPCOES_APOS = ["Não", "Sim"]
         aposentado_ed = c4.selectbox(
-            "Aposentado(a)?", OPCOES_APOS,
-            index=_idx_select(OPCOES_APOS, _val(aluno, "aposentado"))
+            "Aposentado(a)?",
+            OPCOES_APOS,
+            index=_idx_select(OPCOES_APOS, _val(aluno, "aposentado")),
         )
-        conjuge_ed = c5.text_input("Nome do Cônjuge:", value=_val(aluno, "nome_conjuge"))
+        conjuge_ed = c5.text_input(
+            "Nome do Cônjuge:", value=_val(aluno, "nome_conjuge")
+        )
         moradores_ed = c6.text_input(
             "Qtd. de Moradores na Residência:", value=_val(aluno, "qtd_moradores")
         )
@@ -976,14 +1019,20 @@ def render_aba_social(aluno):
         c7, c8, c9 = st.columns(3)
 
         OPCOES_INSTRUCAO = [
-            "Sem instrução", "Ensino fundamental incompleto", "Ensino fundamental completo",
-            "Ensino médio incompleto", "Ensino médio completo",
-            "Ensino superior incompleto", "Ensino superior completo",
-            "Pós-graduação", "Outro",
+            "Sem instrução",
+            "Ensino fundamental incompleto",
+            "Ensino fundamental completo",
+            "Ensino médio incompleto",
+            "Ensino médio completo",
+            "Ensino superior incompleto",
+            "Ensino superior completo",
+            "Pós-graduação",
+            "Outro",
         ]
         instrucao_ed = c7.selectbox(
-            "Grau de Instrução:", OPCOES_INSTRUCAO,
-            index=_idx_select(OPCOES_INSTRUCAO, _val(aluno, "grau_instrucao"))
+            "Grau de Instrução:",
+            OPCOES_INSTRUCAO,
+            index=_idx_select(OPCOES_INSTRUCAO, _val(aluno, "grau_instrucao")),
         )
         fonte_ed = c8.text_input(
             "Principal Fonte de Renda:", value=_val(aluno, "principal_fonte_renda")
@@ -997,8 +1046,9 @@ def render_aba_social(aluno):
         c10, c11 = st.columns([1, 2])
         OPCOES_VOL = ["Não", "Sim"]
         vol_int_ed = c10.selectbox(
-            "Tem interesse?", OPCOES_VOL,
-            index=_idx_select(OPCOES_VOL, _val(aluno, "trabalho_voluntario_interesse"))
+            "Tem interesse?",
+            OPCOES_VOL,
+            index=_idx_select(OPCOES_VOL, _val(aluno, "trabalho_voluntario_interesse")),
         )
         vol_areas_ed = c11.text_input(
             "Áreas de interesse:", value=_val(aluno, "trabalho_voluntario_areas")
@@ -1024,18 +1074,18 @@ def render_aba_social(aluno):
         if btn_top or btn_bot:
             with st.spinner("A guardar perfil social..."):
                 payload = {
-                    "sexo":                         sexo_ed,
-                    "naturalidade":                 natural_ed,
-                    "estado_civil":                 estado_civil_ed,
-                    "aposentado":                   aposentado_ed,
-                    "nome_conjuge":                 conjuge_ed,
-                    "qtd_moradores":                moradores_ed,
-                    "grau_instrucao":               instrucao_ed,
-                    "principal_fonte_renda":        fonte_ed,
-                    "faixa_renda":                  renda_ed,
+                    "sexo": sexo_ed,
+                    "naturalidade": natural_ed,
+                    "estado_civil": estado_civil_ed,
+                    "aposentado": aposentado_ed,
+                    "nome_conjuge": conjuge_ed,
+                    "qtd_moradores": moradores_ed,
+                    "grau_instrucao": instrucao_ed,
+                    "principal_fonte_renda": fonte_ed,
+                    "faixa_renda": renda_ed,
                     "trabalho_voluntario_interesse": vol_int_ed,
-                    "trabalho_voluntario_areas":    vol_areas_ed,
-                    "anamnese_incomodo_atividade":  anamnese_ed,
+                    "trabalho_voluntario_areas": vol_areas_ed,
+                    "anamnese_incomodo_atividade": anamnese_ed,
                 }
                 sucesso, msg = atualizar_dados_sociais_aluno(aluno["id"], payload)
                 if sucesso:
@@ -1376,4 +1426,6 @@ def renderizar_ficha():
         with t5:
             render_aba_social(aluno)
         with t6:
-            render_aba_mapa_dores(aluno, email_usuario=st.session_state.get("email", ""))
+            render_aba_mapa_dores(
+                aluno, email_usuario=st.session_state.get("email", "")
+            )
