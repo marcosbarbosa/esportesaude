@@ -1,5 +1,5 @@
 # ==============================================================================
-# 📄 Arquivo: main.py
+# 📄 Arquivo: main.py novo modulo
 # 🏷️ VERSÃO: 14.2 (PRO Elite - Dashboard Integrado + Radar de Acolhimento)
 # 👤 AUTOR: Marcos Barbosa - MoveRight (c)
 # ⚙️ FUNÇÃO: Roteador Central, Segurança e Dashboard Principal.
