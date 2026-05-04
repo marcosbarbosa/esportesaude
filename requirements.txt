@@ -23,3 +23,9 @@ fpdf2
 # --- Manipulação de Imagens e Suporte ---
 Pillow
 python-bidi
+
+# Dependências adicionadas para Reconhecimento Facial (DeepFace)
+deepface==0.0.92
+tf-keras==2.16.0
+tensorflow-cpu==2.16.1
+opencv-python-headless==4.9.0.80
