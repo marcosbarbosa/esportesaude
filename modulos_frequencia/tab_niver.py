@@ -360,10 +360,8 @@ def renderizar_aba_niver():
                     st.markdown("👤", unsafe_allow_html=True)
             with c_info:
                 st.markdown(f"**{r['nome'].upper()}**")
-                _turma = str(r.get("turma") or "").strip()[:10]
                 st.markdown(
-                    f"<span style='font-size:12px; color:#64748B;'>🎂 {r['dia']:02d}/{r['mes']:02d}</span>"
-                    f"<span style='font-size:12px; color:#000000; margin-left:10px; font-weight:600;'>{_turma}</span>",
+                    f"<span style='font-size:12px; color:#64748B;'>🎂 {r['dia']:02d}/{r['mes']:02d}</span>",
                     unsafe_allow_html=True,
                 )
             with c_status:
@@ -380,6 +378,12 @@ def renderizar_aba_niver():
                 else:
                     st.markdown(
                         '<span class="badge-passou">✔️ Já completou</span>',
+                        unsafe_allow_html=True,
+                    )
+                _turma = str(r.get("turma") or "").strip()[:10]
+                if _turma:
+                    st.markdown(
+                        f"<span style='font-size:12px; color:#000000; font-weight:600;'>📍 {_turma}</span>",
                         unsafe_allow_html=True,
                     )
             with c_whats:
