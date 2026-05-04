@@ -1,14 +1,14 @@
 # ==============================================================================
 # 📄 Arquivo: views/radar_acolhimento_view.py
-# 🏷️ VERSÃO: 8.0 (PRO Elite - Ordenação Dinâmica Crescente/Decrescente)
-# ⚙️ FUNÇÃO: Radar de Evasão proativo com filtros avançados e UI Premium.
+# 🏷️ VERSÃO: 8.1 (PRO Elite - Integração Direta com Prontuário)
+# ⚙️ FUNÇÃO: Radar de Evasão proativo com filtros avançados, UI Premium e Acesso à Ficha.
 # ==============================================================================
 
 import streamlit as st
 import pandas as pd
 import urllib.parse
 import datetime
-from database import supabase
+from database import supabase, buscar_aluno_por_id
 from fpdf import FPDF
 from utils.texto import formatar_whatsapp_numero as limpar_whatsapp_link
 
@@ -282,8 +282,9 @@ def tela_radar_acolhimento():
                 )
 
                 with st.container(border=True):
-                    col_foto, col_texto, col_botao = st.columns(
-                        [1, 4, 1.5], vertical_alignment="center"
+                    # 🚀 AQUI: Ajuste do grid de colunas para caberem os dois botões
+                    col_foto, col_texto, col_acoes = st.columns(
+                        [1, 3.5, 2.5], vertical_alignment="center"
                     )
 
                     with col_foto:
@@ -305,21 +306,38 @@ def tela_radar_acolhimento():
                             unsafe_allow_html=True,
                         )
 
-                    with col_botao:
-                        if link_wa:
-                            st.link_button(
-                                "💬 ACOLHER",
-                                link_wa,
-                                type="primary",
+                    with col_acoes:
+                        # 🚀 AQUI: Subdivisão para os botões "Abrir" e "Acolher" lado a lado
+                        cb_abrir, cb_wa = st.columns(2, gap="small")
+
+                        with cb_abrir:
+                            if st.button(
+                                "🩺 Abrir",
+                                key=f"abr_rad_{item['id']}",
                                 use_container_width=True,
-                            )
-                        else:
-                            st.button(
-                                "Sem WhatsApp",
-                                disabled=True,
-                                use_container_width=True,
-                                key=f"btn_off_{item['id']}",
-                            )
+                            ):
+                                # Busca os dados integrais do aluno no banco de dados
+                                aluno_completo = buscar_aluno_por_id(item["id"])
+                                if aluno_completo:
+                                    st.session_state.aluno_prontuario = aluno_completo
+                                    st.session_state.origem_prontuario = "Radar de Evasão"  # Permite que o botão Voltar saiba para onde regressar
+                                    st.rerun()
+
+                        with cb_wa:
+                            if link_wa:
+                                st.link_button(
+                                    "💬 Acolher",
+                                    link_wa,
+                                    type="primary",
+                                    use_container_width=True,
+                                )
+                            else:
+                                st.button(
+                                    "Sem WA",
+                                    disabled=True,
+                                    use_container_width=True,
+                                    key=f"btn_off_{item['id']}",
+                                )
 
     except Exception as e:
         st.error(f"Erro ao processar radar: {e}")

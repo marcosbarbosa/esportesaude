@@ -360,7 +360,12 @@ def renderizar_aba_niver():
                     st.markdown("👤", unsafe_allow_html=True)
             with c_info:
                 st.markdown(f"**{r['nome'].upper()}**")
-                st.caption(f"🎂 {r['dia']:02d}/{r['mes']:02d}")
+                _turma = str(r.get("turma") or "").strip()[:10]
+                st.markdown(
+                    f"<span style='font-size:12px; color:#64748B;'>🎂 {r['dia']:02d}/{r['mes']:02d}</span>"
+                    f"<span style='font-size:12px; color:#000000; margin-left:10px; font-weight:600;'>{_turma}</span>",
+                    unsafe_allow_html=True,
+                )
             with c_status:
                 if delta == 0:
                     st.markdown(
