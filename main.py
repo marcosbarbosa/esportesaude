@@ -1,6 +1,6 @@
 # ==============================================================================
 # 📄 Arquivo: main.py novo modulo
-# 🏷️ VERSÃO: 14.4 (PRO Elite - Seletor de Tema na Tela Principal)
+# 🏷️ VERSÃO: 14.5 (PRO Elite - Fix CSS Dark Mode e Integração Google Drive)
 # 👤 AUTOR: Marcos Barbosa - MoveRight (c)
 # ⚙️ FUNÇÃO: Roteador Central, Segurança, Dashboard Principal e Temas.
 # ==============================================================================
@@ -33,11 +33,11 @@ from database import (
 
 
 # ==============================================================================
-# 🎨 SELETOR DINÂMICO DE TEMA (DARK/LIGHT MODE) - AGORA NA TELA PRINCIPAL
+# 🎨 SELETOR DINÂMICO DE TEMA E FERRAMENTAS GLOBAIS
 # ==============================================================================
 def renderizar_seletor_tema():
     """
-    Gera um seletor na tela principal (alinhado à direita) para alternar o tema.
+    Gera as ferramentas de topo (Acesso ao Drive e Seletor de Tema).
     Utiliza a memória (session_state) para lembrar a escolha e injeta CSS.
     """
     if "tema_operador" not in st.session_state:
@@ -49,11 +49,17 @@ def renderizar_seletor_tema():
         <style>
             .stApp { background: #0E1117 !important; }
             .stSidebar { background-color: #1E293B !important; }
+
+            /* Fundo dos painéis e bordas dos containers */
             div[data-testid="stVerticalBlockBorderWrapper"] { 
                 background-color: #1E293B !important; 
                 border-color: #334155 !important; 
             }
+
+            /* Cor do texto global */
             p, span, h1, h2, h3, h4, h5, h6, label, .stMarkdown { color: #F8FAFC !important; }
+
+            /* Menu Radiogroup Superior */
             div[role="radiogroup"] { 
                 background: #1E293B !important; 
                 border-color: #334155 !important; 
@@ -63,27 +69,54 @@ def renderizar_seletor_tema():
             div[role="radiogroup"] label:hover { background: #334155 !important; }
             div[role="radiogroup"] label[data-checked="true"] { background: #3B82F6 !important; }
             div[role="radiogroup"] label[data-checked="true"] p { color: #FFFFFF !important; }
+
+            /* Inputs e Selects */
             div[data-baseweb="input"] > div {
                 background: #0E1117 !important;
                 border-color: #334155 !important;
                 color: #F8FAFC !important;
             }
+
+            /* 🚀 FIX: Correção de visibilidade dos Botões Secundários no Modo Escuro */
+            button[kind="secondary"] {
+                background: #1E293B !important; 
+                border-color: #334155 !important; 
+                color: #F8FAFC !important;
+            }
+            button[kind="secondary"]:hover {
+                background: #334155 !important;
+                border-color: #475569 !important;
+                color: #60A5FA !important;
+            }
+            button[kind="secondary"] p { color: #F8FAFC !important; }
+
         </style>
         """
         st.markdown(css_tema, unsafe_allow_html=True)
 
-    # Criamos colunas invisíveis para empurrar o botão de tema para a direita
-    col_vazia, col_tema = st.columns([6, 2], vertical_alignment="center")
+    # Criamos colunas para posicionar o Botão do Drive e o Tema à direita
+    col_vazia, col_drive, col_tema = st.columns(
+        [5.5, 2.5, 2], vertical_alignment="center"
+    )
+
+    with col_drive:
+        # 🚀 NOVO: Link Direto para o Google Drive
+        st.link_button(
+            "📂 Abrir Google Drive",
+            "https://drive.google.com/drive/u/7/my-drive",
+            use_container_width=True,
+            help="Acesse a pasta da nuvem para gerir as fotografias.",
+        )
 
     with col_tema:
         tema_escolhido = st.selectbox(
             "🌗 Preferência Visual:",
             ["Claro", "Escuro"],
             index=0 if st.session_state.tema_operador == "Claro" else 1,
-            label_visibility="collapsed",  # Esconde o texto da etiqueta para ficar mais limpo
+            label_visibility="collapsed",
         )
 
-    # Se o operador mudar, atualiza a memória e recarrega a página
+    # Se o operador mudar o tema, recarrega a página
     if tema_escolhido != st.session_state.tema_operador:
         st.session_state.tema_operador = tema_escolhido
         st.rerun()
@@ -278,7 +311,7 @@ div[role="radiogroup"] {
     background: #FFFFFF !important; padding: 7px 16px !important;
     border-radius: 14px !important; gap: 3px !important; align-items: center !important;
     box-shadow: 0 2px 8px rgba(0,0,0,.05) !important; border: 1px solid #E2E8F0 !important;
-    margin-bottom: 16px !important; margin-top: 0 !important; /* Ajuste para caber o seletor em cima */
+    margin-bottom: 16px !important; margin-top: 0 !important;
     justify-content: flex-end !important;
 }
 div[role="radiogroup"]::before {
@@ -304,7 +337,7 @@ div[role="radiogroup"] label[data-checked="true"] p {
 }
 
 /* ── ATALHOS DO DASHBOARD ───────────────────────────────────────────────────── */
-.stButton button {
+.stButton button, .stLinkButton a {
     border-radius: 12px !important; font-weight: 700 !important;
     font-size: 13px !important; letter-spacing: .2px;
 }
@@ -533,7 +566,7 @@ if not st.session_state.usuario_logado:
 # 🧭 NAVEGAÇÃO INTERNA E DASHBOARD
 # ==============================================================================
 
-# Executa o nosso seletor de tema no topo, acima do menu principal
+# Executa as ferramentas de topo (Seletor de Tema e Botão do Drive) acima do menu principal
 renderizar_seletor_tema()
 
 menu = [
@@ -545,7 +578,7 @@ menu = [
     "BI Prime",
     "Relatórios",
     "Satisfação",
-    "Ficha de Matrs�cula",
+    "Ficha de Matrícula",
     "Conferência Facial",
 ]
 if st.session_state.perfil == "SuperAdmin":
