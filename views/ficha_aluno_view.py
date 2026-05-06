@@ -1,6 +1,6 @@
 # ==============================================================================
 # 📄 Arquivo: views/ficha_aluno_view.py
-# 🏷️ VERSÃO: 14.0 (PDF Nativo — sem HTML externo)
+# 🏷️ VERSÃO: 14.1 (Atualização UI - Documento Único Dinâmico RG/CPF)
 # 👤 AUTOR: Marcos Barbosa - MoveRight (c)
 # ⚙️ FUNÇÃO: Busca, Filtros em Lote e Geração de Fichas de Matrícula (PDF).
 # ==============================================================================
@@ -40,8 +40,6 @@ except Exception:
     DOCX_FICHA_OK = False
 
 
-
-
 def gerar_qr_code_b64(texto_auditoria):
     if not HAS_QRCODE:
         return None
@@ -58,7 +56,9 @@ def gerar_qr_code_b64(texto_auditoria):
         return None
 
 
-# 🚀 MOTOR UNIFICADO MULTI-PAGE (Lote ou Individual)
+# ==============================================================================
+# 🚀 MOTOR UNIFICADO MULTI-PAGE (HTML PREVIEW)
+# ==============================================================================
 def gerar_html_fichas(lista_alunos, host_url):
     from utils.identidade import get_config as _get_cfg_ficha, get_logo_data_url as _gld
     _cfg = _get_cfg_ficha()
@@ -95,7 +95,6 @@ def gerar_html_fichas(lista_alunos, host_url):
             .logo-placeholder {{ width: 130px; height: 80px; background: transparent; display: flex; align-items: center; justify-content: center; font-size: 8pt; text-align: center; color: #64748b; }}
             .header-title {{ text-align: center; flex-grow: 1; padding: 0 5px; }}
 
-            /* 🚀 FIX: FONTE AJUSTADA PARA NUNCA QUEBRAR A LINHA */
             .header-title h1 {{ margin: 0; font-size: 12.5pt; color: #0a2540; text-transform: uppercase; font-weight: 900; white-space: nowrap; letter-spacing: -0.5px; }}
             .header-title h2 {{ margin: 5px 0 0 0; font-size: 10.5pt; font-weight: bold; color: #475569; }}
 
@@ -134,8 +133,6 @@ def gerar_html_fichas(lista_alunos, host_url):
 
     for index, aluno in enumerate(lista_alunos):
         nome = aluno.get("nome", "NÃO INFORMADO")
-        cpf = aluno.get("cpf", "NÃO INFORMADO")
-        rg = aluno.get("rg", "NÃO INFORMADO")
         nascimento = aluno.get("data_nascimento", "NÃO INFORMADO")
         telefone = aluno.get("whatsapp", "NÃO INFORMADO")
 
@@ -147,10 +144,23 @@ def gerar_html_fichas(lista_alunos, host_url):
             and email_raw != "NÃO INFORMADO"
             else "NÃO INFORMADO"
         )
-
         endereco = aluno.get("endereco", "NÃO INFORMADO")
         turma = aluno.get("turma", "Turma Padrão")
         id_aluno = aluno.get("id", "0000")
+
+        # 🚀 LÓGICA DE PRIORIDADE RG -> CPF
+        rg_raw = str(aluno.get("rg", ""))
+        cpf_raw = str(aluno.get("cpf", ""))
+
+        def is_clean(v):
+            return v.strip() and v.strip().upper() not in ["NÃO INFORMADO", "NAN", "NONE"]
+
+        if is_clean(rg_raw):
+            doc_label, doc_val = "RG", rg_raw.strip()
+        elif is_clean(cpf_raw):
+            doc_label, doc_val = "CPF", cpf_raw.strip()
+        else:
+            doc_label, doc_val = "Documento Oficial", "NÃO INFORMADO"
 
         url_validacao = f"https://{host_url}/?rota=validar&id={id_aluno}"
         qr_b64 = gerar_qr_code_b64(url_validacao)
@@ -183,12 +193,8 @@ def gerar_html_fichas(lista_alunos, host_url):
                         <span class="value">{nome}</span>
                     </div>
                     <div class="data-item">
-                        <span class="label">CPF</span>
-                        <span class="value">{cpf}</span>
-                    </div>
-                    <div class="data-item">
-                        <span class="label">RG</span>
-                        <span class="value">{rg}</span>
+                        <span class="label">{doc_label}</span>
+                        <span class="value">{doc_val}</span>
                     </div>
                     <div class="data-item">
                         <span class="label">Data de Nascimento</span>
@@ -198,15 +204,15 @@ def gerar_html_fichas(lista_alunos, host_url):
                         <span class="label">Turma / Modalidade de Inscrição</span>
                         <span class="value">{turma}</span>
                     </div>
-                    <div class="data-item" style="grid-column: span 2;">
-                        <span class="label">Endereço Residencial</span>
-                        <span class="value">{endereco}</span>
-                    </div>
                     <div class="data-item">
                         <span class="label">Telefone / WhatsApp</span>
                         <span class="value">{telefone}</span>
                     </div>
-                    <div class="data-item">
+                    <div class="data-item" style="grid-column: span 2;">
+                        <span class="label">Endereço Residencial</span>
+                        <span class="value">{endereco}</span>
+                    </div>
+                    <div class="data-item" style="grid-column: span 2;">
                         <span class="label">E-mail de Contato</span>
                         <span class="value-lower">{email}</span>
                     </div>
@@ -272,12 +278,10 @@ def gerar_html_fichas(lista_alunos, host_url):
 
 
 # ==============================================================================
-# 🖨️ GERADOR PDF NATIVO (xhtml2pdf) — sem HTML externo
+# 🖨️ GERADOR PDF NATIVO (xhtml2pdf)
 # ==============================================================================
 def _html_pagina_ficha_pdf(aluno, cfg, host_url, data_hoje, logo_p_url, logo_s_url):
     nome = aluno.get("nome", "NÃO INFORMADO")
-    cpf = aluno.get("cpf", "NÃO INFORMADO")
-    rg = aluno.get("rg", "NÃO INFORMADO")
     nascimento = aluno.get("data_nascimento", "NÃO INFORMADO")
     telefone = aluno.get("whatsapp", "NÃO INFORMADO")
     email_raw = aluno.get("email", "NÃO INFORMADO")
@@ -289,6 +293,20 @@ def _html_pagina_ficha_pdf(aluno, cfg, host_url, data_hoje, logo_p_url, logo_s_u
     endereco = aluno.get("endereco", "NÃO INFORMADO")
     turma = aluno.get("turma", "Turma Padrão")
     id_aluno = aluno.get("id", "0000")
+
+    # 🚀 LÓGICA DE PRIORIDADE RG -> CPF APLICADA AQUI TAMBÉM
+    rg_raw = str(aluno.get("rg", ""))
+    cpf_raw = str(aluno.get("cpf", ""))
+
+    def is_clean(v):
+        return v.strip() and v.strip().upper() not in ["NÃO INFORMADO", "NAN", "NONE"]
+
+    if is_clean(rg_raw):
+        doc_label, doc_val = "RG", rg_raw.strip()
+    elif is_clean(cpf_raw):
+        doc_label, doc_val = "CPF", cpf_raw.strip()
+    else:
+        doc_label, doc_val = "Documento Oficial", "NÃO INFORMADO"
 
     titulo_proj = cfg.get("titulo_projeto", "ESPORTE E SAÚDE NA COMUNIDADE - FASE 2")
     nome_org = cfg.get("nome_organizacao", "Instituto Muda Brasil")
@@ -314,6 +332,8 @@ def _html_pagina_ficha_pdf(aluno, cfg, host_url, data_hoje, logo_p_url, logo_s_u
         else ""
     )
 
+    # Note que a estrutura em tabelas (<tr>) foi ajustada para o reequilíbrio:
+    # Row 1: Nome. Row 2: Documento | Nascimento. Row 3: Turma | Telefone. Row 4: Endereço. Row 5: E-mail.
     return f"""
 <table width="100%" border="0" cellspacing="0" cellpadding="4"
        style="border-bottom:2px solid #ff6b35;margin-bottom:10px;">
@@ -341,22 +361,22 @@ def _html_pagina_ficha_pdf(aluno, cfg, host_url, data_hoje, logo_p_url, logo_s_u
   </tr>
   <tr>
     <td width="50%" style="border-bottom:1px solid #f1f5f9;padding:3px 2px;">
-      <span style="font-size:8pt;font-weight:bold;color:#64748b;text-transform:uppercase;">CPF</span><br/>
-      <span style="font-size:10pt;color:#0f172a;font-weight:bold;">{cpf}</span>
+      <span style="font-size:8pt;font-weight:bold;color:#64748b;text-transform:uppercase;">{doc_label}</span><br/>
+      <span style="font-size:10pt;color:#0f172a;font-weight:bold;">{doc_val}</span>
     </td>
-    <td width="50%" style="border-bottom:1px solid #f1f5f9;padding:3px 2px;">
-      <span style="font-size:8pt;font-weight:bold;color:#64748b;text-transform:uppercase;">RG</span><br/>
-      <span style="font-size:10pt;color:#0f172a;font-weight:bold;">{rg}</span>
-    </td>
-  </tr>
-  <tr>
     <td width="50%" style="border-bottom:1px solid #f1f5f9;padding:3px 2px;">
       <span style="font-size:8pt;font-weight:bold;color:#64748b;text-transform:uppercase;">Data de Nascimento</span><br/>
       <span style="font-size:10pt;color:#0f172a;font-weight:bold;">{nascimento}</span>
     </td>
+  </tr>
+  <tr>
     <td width="50%" style="border-bottom:1px solid #f1f5f9;padding:3px 2px;">
       <span style="font-size:8pt;font-weight:bold;color:#64748b;text-transform:uppercase;">Turma / Modalidade</span><br/>
       <span style="font-size:10pt;color:#0f172a;font-weight:bold;">{turma}</span>
+    </td>
+    <td width="50%" style="border-bottom:1px solid #f1f5f9;padding:3px 2px;">
+      <span style="font-size:8pt;font-weight:bold;color:#64748b;text-transform:uppercase;">Telefone / WhatsApp</span><br/>
+      <span style="font-size:10pt;color:#0f172a;font-weight:bold;">{telefone}</span>
     </td>
   </tr>
   <tr>
@@ -366,11 +386,7 @@ def _html_pagina_ficha_pdf(aluno, cfg, host_url, data_hoje, logo_p_url, logo_s_u
     </td>
   </tr>
   <tr>
-    <td width="50%" style="padding:3px 2px;">
-      <span style="font-size:8pt;font-weight:bold;color:#64748b;text-transform:uppercase;">Telefone / WhatsApp</span><br/>
-      <span style="font-size:10pt;color:#0f172a;font-weight:bold;">{telefone}</span>
-    </td>
-    <td width="50%" style="padding:3px 2px;">
+    <td colspan="2" style="padding:3px 2px;">
       <span style="font-size:8pt;font-weight:bold;color:#64748b;text-transform:uppercase;">E-mail de Contato</span><br/>
       <span style="font-size:10pt;color:#0f172a;font-weight:bold;">{email}</span>
     </td>
@@ -497,14 +513,12 @@ def gerar_word_ficha_bytes(aluno):
 
         doc = _DocxDocument()
 
-        # --- Margens A4 estreitas ---
         for sec in doc.sections:
             sec.top_margin    = _Pt(36)
             sec.bottom_margin = _Pt(36)
             sec.left_margin   = _Pt(50)
             sec.right_margin  = _Pt(50)
 
-        # --- Cabeçalho ---
         h = doc.add_heading(titulo_proj, level=1)
         h.alignment = _WD_ALIGN.CENTER
         h.runs[0].font.size = _Pt(13)
@@ -547,11 +561,24 @@ def gerar_word_ficha_bytes(aluno):
             run_v = p.add_run(str(valor) if valor else "Não informado")
             run_v.font.size = _Pt(10)
 
+        # 🚀 LÓGICA DE PRIORIDADE RG -> CPF PARA O WORD
+        rg_raw = str(aluno.get("rg", ""))
+        cpf_raw = str(aluno.get("cpf", ""))
+
+        def is_clean(v):
+            return v.strip() and v.strip().upper() not in ["NÃO INFORMADO", "NAN", "NONE"]
+
+        if is_clean(rg_raw):
+            doc_label, doc_val = "RG", rg_raw.strip()
+        elif is_clean(cpf_raw):
+            doc_label, doc_val = "CPF", cpf_raw.strip()
+        else:
+            doc_label, doc_val = "Documento Oficial", "Não informado"
+
         _secao("1. IDENTIFICAÇÃO DO ALUNO")
         _campo("Nome Completo",        aluno.get("nome"))
         _campo("Data de Nascimento",   aluno.get("data_nascimento") or aluno.get("nascimento"))
-        _campo("CPF",                  aluno.get("cpf"))
-        _campo("RG",                   aluno.get("rg"))
+        _campo(doc_label,              doc_val)
         _campo("Turma",                aluno.get("turma"))
         _campo("Status",               aluno.get("status"))
         doc.add_paragraph()
@@ -689,10 +716,8 @@ def tela_impressao_ficha():
 
             st.success(f"✅ Ficha gerada para: **{nome_aluno}**")
 
-            # --- Gerar HTML (sempre disponível, usado para preview e download) ---
             html_gerado = gerar_html_fichas([aluno_dados], host)
 
-            # --- Linha de botões de download ---
             col_pdf, col_word, col_html = st.columns(3)
 
             with col_pdf:
@@ -739,7 +764,6 @@ def tela_impressao_ficha():
                     help="Abra no navegador e use Ctrl+P para imprimir/salvar como PDF.",
                 )
 
-            # --- Pré-visualização ---
             with st.expander("👀 Pré-visualização da Ficha", expanded=True):
                 st.info("💡 **Dica:** Use os botões acima para baixar. Para imprimir direto, baixe o HTML e pressione Ctrl+P no navegador.")
                 st.components.v1.html(html_gerado, height=950, scrolling=True)
@@ -836,63 +860,3 @@ def tela_impressao_ficha():
                     type="primary",
                     use_container_width=True,
                 )
-import streamlit as st
-
-def renderizar_aba_socioeconomica():
-    st.markdown("### 🏘️ Perfil Socioeconômico e Complementar")
-
-    aluno_ativo = st.session_state.get("aluno_prontuario", {})
-    aluno_id = aluno_ativo.get("id", None)
-
-    if not aluno_id:
-        st.warning("Selecione um aluno primeiro.")
-        return
-
-    with st.form(key=f"form_socio_{aluno_id}", border=True):
-        st.info("Dados de mapeamento demográfico e social para relatórios institucionais.")
-
-        c1, c2, c3 = st.columns(3)
-        naturalidade = c1.text_input("Naturalidade", value=aluno_ativo.get("naturalidade", ""))
-        sexo = c2.selectbox("Sexo", ["Feminino", "Masculino", "Outro", "Prefiro não informar"], 
-                            index=0 if aluno_ativo.get("sexo", "") == "Feminino" else 1) # Simplificado para exemplo
-        estado_civil = c3.text_input("Estado Civil", value=aluno_ativo.get("estado_civil", ""))
-
-        c4, c5, c6 = st.columns(3)
-        grau_instrucao = c4.text_input("Grau de Instrução", value=aluno_ativo.get("grau_instrucao", ""))
-        qtd_moradores = c5.text_input("Residentes na Moradia", value=aluno_ativo.get("qtd_moradores", ""))
-        nome_conjuge = c6.text_input("Nome do Cônjuge", value=aluno_ativo.get("nome_conjuge", ""))
-
-        c7, c8, c9 = st.columns(3)
-        aposentado = c7.selectbox("Aposentado?", ["Sim", "Não"], 
-                                  index=0 if str(aluno_ativo.get("aposentado", "")).lower() == "sim" else 1)
-        fonte_renda = c8.text_input("Principal Fonte de Renda", value=aluno_ativo.get("principal_fonte_renda", ""))
-        faixa_renda = c9.text_input("Renda da Casa", value=aluno_ativo.get("faixa_renda", ""))
-
-        st.markdown("#### 🤝 Voluntariado e Anamnese Extra")
-        vol_interesse = st.selectbox("Interesse em Trabalho Voluntário?", ["Sim", "Não"], 
-                                     index=0 if str(aluno_ativo.get("trabalho_voluntario_interesse", "")).lower() == "sim" else 1)
-        vol_areas = st.text_area("Áreas de interesse para voluntariado", value=aluno_ativo.get("trabalho_voluntario_areas", ""), height=68)
-        anamnese = st.text_area("Incômodos durante/após a atividade física", value=aluno_ativo.get("anamnese_incomodo_atividade", ""), height=100)
-
-        submit = st.form_submit_button("💾 Salvar Perfil Social", use_container_width=True, type="primary")
-
-        if submit:
-            with st.spinner("Atualizando banco de dados..."):
-                payload = {
-                    "naturalidade": naturalidade, "sexo": sexo, "estado_civil": estado_civil,
-                    "grau_instrucao": grau_instrucao, "qtd_moradores": qtd_moradores, "nome_conjuge": nome_conjuge,
-                    "aposentado": aposentado, "principal_fonte_renda": fonte_renda, "faixa_renda": faixa_renda,
-                    "trabalho_voluntario_interesse": vol_interesse, "trabalho_voluntario_areas": vol_areas,
-                    "anamnese_incomodo_atividade": anamnese
-                }
-
-                # Importa a função que criamos no database.py
-                from database import atualizar_dados_sociais_aluno
-
-                sucesso, msg = atualizar_dados_sociais_aluno(aluno_id, payload)
-                if sucesso:
-                    st.session_state.aluno_prontuario.update(payload)
-                    st.success(msg)
-                    st.rerun()
-                else:
-                    st.error(msg)
