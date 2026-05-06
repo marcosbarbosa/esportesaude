@@ -1,8 +1,8 @@
 # ==============================================================================
 # 📄 Arquivo: main.py novo modulo
-# 🏷️ VERSÃO: 14.2 (PRO Elite - Dashboard Integrado + Radar de Acolhimento)
+# 🏷️ VERSÃO: 14.3 (PRO Elite - Dashboard Integrado + Seletor Dark Mode)
 # 👤 AUTOR: Marcos Barbosa - MoveRight (c)
-# ⚙️ FUNÇÃO: Roteador Central, Segurança e Dashboard Principal.
+# ⚙️ FUNÇÃO: Roteador Central, Segurança, Dashboard Principal e Temas.
 # ==============================================================================
 
 import streamlit as st
@@ -30,6 +30,72 @@ from database import (
     ADMIN_MASTER,
     supabase,
 )
+
+
+# ==============================================================================
+# 🎨 SELETOR DINÂMICO DE TEMA (DARK/LIGHT MODE)
+# ==============================================================================
+def renderizar_seletor_tema():
+    """
+    Gera um seletor na barra lateral para alternar o tema da interface dinamicamente.
+    Utiliza a memória (session_state) para lembrar a escolha e injeta CSS pesado.
+    """
+    st.sidebar.markdown("### 🌗 Preferência Visual")
+
+    if "tema_operador" not in st.session_state:
+        st.session_state.tema_operador = "Claro"
+
+    tema_escolhido = st.sidebar.selectbox(
+        "Escolha o Tema:",
+        ["Claro", "Escuro"],
+        index=0 if st.session_state.tema_operador == "Claro" else 1,
+        help="Altera as cores de fundo e texto para maior conforto visual.",
+    )
+
+    if tema_escolhido != st.session_state.tema_operador:
+        st.session_state.tema_operador = tema_escolhido
+        st.rerun()
+
+    if st.session_state.tema_operador == "Escuro":
+        # CSS Super-Blindado para o Modo Escuro
+        css_tema = """
+        <style>
+            /* Fundo principal */
+            .stApp { background: #0E1117 !important; }
+
+            /* Fundo da barra lateral */
+            .stSidebar { background-color: #1E293B !important; }
+
+            /* Fundo dos painéis e bordas dos containers (Cards) */
+            div[data-testid="stVerticalBlockBorderWrapper"] { 
+                background-color: #1E293B !important; 
+                border-color: #334155 !important; 
+            }
+
+            /* Força os textos a ficarem claros */
+            p, span, h1, h2, h3, h4, h5, h6, label, .stMarkdown { color: #F8FAFC !important; }
+
+            /* Ajuste do menu superior (Radiogroup) para o Dark Mode */
+            div[role="radiogroup"] { 
+                background: #1E293B !important; 
+                border-color: #334155 !important; 
+            }
+            div[role="radiogroup"]::before { color: #3B82F6 !important; }
+            div[role="radiogroup"] label p { color: #94A3B8 !important; }
+            div[role="radiogroup"] label:hover { background: #334155 !important; }
+            div[role="radiogroup"] label[data-checked="true"] { background: #3B82F6 !important; }
+            div[role="radiogroup"] label[data-checked="true"] p { color: #FFFFFF !important; }
+
+            /* Ajustes nos inputs */
+            div[data-baseweb="input"] > div {
+                background: #0E1117 !important;
+                border-color: #334155 !important;
+                color: #F8FAFC !important;
+            }
+        </style>
+        """
+        st.markdown(css_tema, unsafe_allow_html=True)
+
 
 # ==============================================================================
 # 🚪 ROTEADOR PÚBLICO COM "BOTÃO DE VOLTAR" E VALIDADOR DE QR CODE
@@ -110,9 +176,10 @@ if st.session_state.usuario_logado:
     st.session_state.ultimo_acesso = time.time()
 
 # ==============================================================================
-# 🎨 CSS PRIME — MINIMALISTA & EXCELÊNCIA
+# 🎨 CSS PRIME — MINIMALISTA & EXCELÊNCIA (TEMA CLARO BASE)
 # ==============================================================================
-st.markdown("""
+st.markdown(
+    """
 <style>
 /* ── BASE ──────────────────────────────────────────────────────────────────── */
 #MainMenu, header, footer { visibility: hidden; }
@@ -141,7 +208,7 @@ div[data-testid="column"] > div[data-testid="stVerticalBlockBorderWrapper"]
     box-shadow: none !important; padding: 0 !important; margin: 0 !important;
 }
 
-/* ── INPUTS ─────────────────────────────────────────────────────────────────── */
+/* ── INPUTS ──────────────────────────────────────────────────────────────  �──── */
 div[data-baseweb="input"] > div {
     border-radius: 10px !important;
     border: 1.5px solid #E2E8F0 !important;
@@ -250,7 +317,9 @@ div[role="radiogroup"] label[data-checked="true"] p {
     font-size: 13px !important; letter-spacing: .2px;
 }
 </style>
-""", unsafe_allow_html=True)
+""",
+    unsafe_allow_html=True,
+)
 
 # ==============================================================================
 # 🔐 PORTAL DE ACESSO — PRIME
@@ -265,7 +334,11 @@ if not st.session_state.usuario_logado:
 
         with st.container(border=True):
             # ── HEADER ESCURO COM LOGO ──────────────────────────────────────
-            from utils.identidade import get_config as _gc_l, get_logo_data_url as _gld_l
+            from utils.identidade import (
+                get_config as _gc_l,
+                get_logo_data_url as _gld_l,
+            )
+
             _cfg_l = _gc_l()
             _logo_b64 = _gld_l(_cfg_l.get("logo_principal", "logo-imbra.png"))
             _logo_html = (
@@ -280,7 +353,7 @@ if not st.session_state.usuario_logado:
                     {_logo_html}
                     <h2 style="color:#FFFFFF;margin:0;font-size:13px;font-weight:800;
                                letter-spacing:.2px;line-height:1.3;white-space:nowrap;">
-                        {_cfg_l.get("titulo_projeto","ESPORTE E SAÚDE NA COMUNIDADE")}
+                        {_cfg_l.get("titulo_projeto", "ESPORTE E SAÚDE NA COMUNIDADE")}
                     </h2>
                     <p style="color:rgba(255,255,255,.72);font-size:12px;margin:6px 0 2px;
                               font-weight:500;letter-spacing:.1px;">
@@ -305,7 +378,8 @@ if not st.session_state.usuario_logado:
                         key="l_email",
                     )
                     senha = st.text_input(
-                        "SENHA", type="password",
+                        "SENHA",
+                        type="password",
                         placeholder="••••••••",
                         key="l_pwd",
                     )
@@ -319,8 +393,10 @@ if not st.session_state.usuario_logado:
                         )
                     with col_resp:
                         resp = st.text_input(
-                            "Resultado", label_visibility="collapsed",
-                            placeholder="Resposta", key="l_cap",
+                            "Resultado",
+                            label_visibility="collapsed",
+                            placeholder="Resposta",
+                            key="l_cap",
                         )
                     btn_login = st.form_submit_button(
                         "ENTRAR  →", type="primary", use_container_width=True
@@ -352,13 +428,15 @@ if not st.session_state.usuario_logado:
                 st.markdown("<div style='height:4px;'></div>", unsafe_allow_html=True)
                 cb1, cb2 = st.columns(2)
                 with cb1:
-                    if st.button("👤 Novo Operador", use_container_width=True,
-                                 type="secondary"):
+                    if st.button(
+                        "👤 Novo Operador", use_container_width=True, type="secondary"
+                    ):
                         st.session_state.auth_tab = "up"
                         st.rerun()
                 with cb2:
-                    if st.button("🔑 Recuperar Senha", use_container_width=True,
-                                 type="secondary"):
+                    if st.button(
+                        "🔑 Recuperar Senha", use_container_width=True, type="secondary"
+                    ):
                         st.session_state.auth_tab = "forgot"
                         st.rerun()
 
@@ -372,13 +450,13 @@ if not st.session_state.usuario_logado:
                 with cp:
                     st.markdown(
                         '<a href="/?rota=inscricao" target="_self" class="pub-pill">'
-                        '➕ Novo Aluno</a>',
+                        "➕ Novo Aluno</a>",
                         unsafe_allow_html=True,
                     )
                 with cq:
                     st.markdown(
                         '<a href="/?rota=pesquisa" target="_self" class="pub-pill">'
-                        '⭐ Avaliar Projeto</a>',
+                        "⭐ Avaliar Projeto</a>",
                         unsafe_allow_html=True,
                     )
 
@@ -436,6 +514,7 @@ if not st.session_state.usuario_logado:
 
     # ── Rodapé do Login ─────────────────────────────────────────────────────
     from utils.identidade import get_config as _gcfg_login
+
     _lcfg = _gcfg_login()
     _links = []
     if _lcfg.get("site"):
@@ -448,12 +527,12 @@ if not st.session_state.usuario_logado:
             f' target="_blank">📸 {_lcfg["instagram"]}</a>'
         )
     if _lcfg.get("cnpj"):
-        _links.append(f'CNPJ: {_lcfg["cnpj"]}')
+        _links.append(f"CNPJ: {_lcfg['cnpj']}")
     st.markdown(
         f'<div class="rodape-prime">'
-        f'<strong>{_lcfg.get("nome_organizacao","Instituto Muda Brasil")}</strong>'
-        f'&nbsp;·&nbsp;{" &nbsp;|&nbsp; ".join(_links)}'
-        f'</div>',
+        f"<strong>{_lcfg.get('nome_organizacao', 'Instituto Muda Brasil')}</strong>"
+        f"&nbsp;·&nbsp;{' &nbsp;|&nbsp; '.join(_links)}"
+        f"</div>",
         unsafe_allow_html=True,
     )
     st.stop()
@@ -461,6 +540,10 @@ if not st.session_state.usuario_logado:
 # ==============================================================================
 # 🧭 NAVEGAÇÃO INTERNA E DASHBOARD
 # ==============================================================================
+
+# Executa o nosso seletor de tema na barra lateral APENAS se o usuário estiver logado
+renderizar_seletor_tema()
+
 menu = [
     "Principal",
     "Frequência",
@@ -474,28 +557,30 @@ menu = [
     "Conferência Facial",
 ]
 if st.session_state.perfil == "SuperAdmin":
-    menu.extend(["Turmas", "Mensagens", "Mesclar Fichas", "Identidade Visual", "Backup"])
+    menu.extend(
+        ["Turmas", "Mensagens", "Mesclar Fichas", "Identidade Visual", "Backup"]
+    )
 menu.append("Sair")
 
 
 def format_nav(opt):
     mapa = {
-        "Principal":          "🏠 Início",
-        "Frequência":         "✅ Frequência",
-        "Portal do Aluno":    "🩺 Portal do Aluno",
-        "Nova Matrícula":     "📝 Nova Matrícula",
+        "Principal": "🏠 Início",
+        "Frequência": "✅ Frequência",
+        "Portal do Aluno": "🩺 Portal do Aluno",
+        "Nova Matrícula": "📝 Nova Matrícula",
         "Radar de Acolhimento": "💙 Radar",
-        "BI Prime":           "📊 BI Prime",
-        "Relatórios":         "📋 Relatórios",
-        "Satisfação":         "⭐ Satisfação",
+        "BI Prime": "📊 BI Prime",
+        "Relatórios": "📋 Relatórios",
+        "Satisfação": "⭐ Satisfação",
         "Ficha de Matrícula": "🖨️ Ficha",
         "Conferência Facial": "📸 Conf. Facial",
-        "Turmas":             "🏫 Turmas",
-        "Mensagens":          "💬 Mensagens",
-        "Mesclar Fichas":     "🔀 Mesclar",
-        "Identidade Visual":  "🎨 Identidade",
-        "Backup":             "🛠️ Admin",
-        "Sair":               "🔓 Sair",
+        "Turmas": "🏫 Turmas",
+        "Mensagens": "💬 Mensagens",
+        "Mesclar Fichas": "🔀 Mesclar",
+        "Identidade Visual": "🎨 Identidade",
+        "Backup": "🛠️ Admin",
+        "Sair": "🔓 Sair",
     }
     return mapa.get(opt, opt)
 
@@ -517,16 +602,35 @@ if st.session_state.nav == "Sair":
 if st.session_state.menu_atual == "Principal":
     # ── Saudação compacta ──────────────────────────────────────────────────
     _hoje = datetime.date.today()
-    _ds = ["Segunda","Terça","Quarta","Quinta","Sexta","Sábado","Domingo"][_hoje.weekday()]
-    _meses_pt = ["jan","fev","mar","abr","mai","jun","jul","ago","set","out","nov","dez"]
-    _nome_curto = st.session_state.usuario_nome.split()[0] if st.session_state.usuario_nome else "Gestor"
+    _ds = ["Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado", "Domingo"][
+        _hoje.weekday()
+    ]
+    _meses_pt = [
+        "jan",
+        "fev",
+        "mar",
+        "abr",
+        "mai",
+        "jun",
+        "jul",
+        "ago",
+        "set",
+        "out",
+        "nov",
+        "dez",
+    ]
+    _nome_curto = (
+        st.session_state.usuario_nome.split()[0]
+        if st.session_state.usuario_nome
+        else "Gestor"
+    )
     st.markdown(
         f"<div style='display:flex;align-items:center;justify-content:space-between;"
         f"margin-bottom:12px;'>"
         f"<div><h3 style='color:#0A2540;margin:0;font-size:1.25rem;font-weight:800;'>"
         f"Olá, {_nome_curto} 👋</h3>"
         f"<p style='color:#94A3B8;font-size:12px;margin:2px 0 0;'>"
-        f"{_ds}, {_hoje.day} {_meses_pt[_hoje.month-1]} {_hoje.year}</p></div>"
+        f"{_ds}, {_hoje.day} {_meses_pt[_hoje.month - 1]} {_hoje.year}</p></div>"
         f"<span style='background:#EFF6FF;border:1px solid #BFDBFE;border-radius:8px;"
         f"padding:5px 12px;font-size:11px;font-weight:700;color:#1E40AF;'>"
         f"● {st.session_state.perfil}</span>"
@@ -537,23 +641,32 @@ if st.session_state.menu_atual == "Principal":
     # ── Atalhos rápidos (1 clique) ─────────────────────────────────────────
     qa1, qa2, qa3, qa4 = st.columns(4, gap="small")
     with qa1:
-        if st.button("✅  Frequência", use_container_width=True, type="primary",
-                     help="Lançar presenças do dia"):
+        if st.button(
+            "✅  Frequência",
+            use_container_width=True,
+            type="primary",
+            help="Lançar presenças do dia",
+        ):
             st.session_state.menu_atual = "Frequência"
             st.rerun()
     with qa2:
-        if st.button("🩺  Portal do Aluno", use_container_width=True,
-                     help="Prontuário e ficha clínica"):
+        if st.button(
+            "🩺  Portal do Aluno",
+            use_container_width=True,
+            help="Prontuário e ficha clínica",
+        ):
             st.session_state.menu_atual = "Portal do Aluno"
             st.rerun()
     with qa3:
-        if st.button("📊  BI & Análises", use_container_width=True,
-                     help="Dashboard analítico"):
+        if st.button(
+            "📊  BI & Análises", use_container_width=True, help="Dashboard analítico"
+        ):
             st.session_state.menu_atual = "BI Prime"
             st.rerun()
     with qa4:
-        if st.button("📝  Nova Matrícula", use_container_width=True,
-                     help="Cadastrar novo aluno"):
+        if st.button(
+            "📝  Nova Matrícula", use_container_width=True, help="Cadastrar novo aluno"
+        ):
             st.session_state.menu_atual = "Nova Matrícula"
             st.rerun()
 
@@ -563,6 +676,7 @@ if st.session_state.menu_atual == "Principal":
     def load_niver_geral():
         try:
             from database import buscar_alunos_geral
+
             df = buscar_alunos_geral("")
             df["dt"] = pd.to_datetime(df["data_nascimento"], errors="coerce")
             df = df.dropna(subset=["dt"]).copy()
@@ -684,6 +798,7 @@ if st.session_state.menu_atual == "Principal":
                                 from modulos_frequencia.tab_niver import (
                                     gerar_cartaz_word_core,
                                 )
+
                                 _wb = gerar_cartaz_word_core(
                                     df_n, titulo_doc, subtitulo_doc, ""
                                 )
@@ -692,7 +807,8 @@ if st.session_state.menu_atual == "Principal":
                             except Exception as e:
                                 st.error(f"Erro ao gerar Word: {e}")
 
-                st.markdown("""
+                st.markdown(
+                    """
 <style>
 /* Avatar wrapper — isolado, não afeta outros elementos */
 .avatar-niver-wrap {
@@ -728,7 +844,9 @@ if st.session_state.menu_atual == "Principal":
     display:flex; align-items:center; justify-content:center;
     color:#fff; font-weight:900; font-size:15px; letter-spacing:-0.5px;
 }
-</style>""", unsafe_allow_html=True)
+</style>""",
+                    unsafe_allow_html=True,
+                )
 
                 hoje_dia = datetime.date.today().day
                 hoje_mes = datetime.date.today().month
@@ -763,18 +881,18 @@ if st.session_state.menu_atual == "Principal":
                         avatar_html = (
                             f'<div class="avatar-niver-wrap">'
                             f'<div class="avatar-niver-circle" '
-                            f'onerror="this.className+=\' initials\';this.innerHTML=\'{iniciais}\'">'
+                            f"onerror=\"this.className+=' initials';this.innerHTML='{iniciais}'\">"
                             f'<img src="{foto_url}" alt="{iniciais}" '
-                            f'onerror="this.parentElement.classList.add(\'initials\');'
-                            f'this.parentElement.innerHTML=\'{iniciais}\'">'
-                            f'</div>'
-                            f'</div>'
+                            f"onerror=\"this.parentElement.classList.add('initials');"
+                            f"this.parentElement.innerHTML='{iniciais}'\">"
+                            f"</div>"
+                            f"</div>"
                         )
                     else:
                         avatar_html = (
                             f'<div class="avatar-niver-wrap">'
                             f'<div class="avatar-niver-circle initials">{iniciais}</div>'
-                            f'</div>'
+                            f"</div>"
                         )
 
                     with st.container(border=True):
@@ -846,9 +964,11 @@ elif st.session_state.menu_atual == "BI Prime":
     aba_bi = st.tabs(["📊 Dashboard Geral", "👤 Relatório Individual"])
     with aba_bi[0]:
         from views.bi_dashboard_view import render_bi_dashboard
+
         render_bi_dashboard()
     with aba_bi[1]:
         from views.bi_individual_view import render_bi_individual
+
         render_bi_individual()
 
 elif st.session_state.menu_atual == "Relatórios":
@@ -871,14 +991,17 @@ elif st.session_state.menu_atual == "Ficha de Matrícula":
 
 elif st.session_state.menu_atual == "Conferência Facial":
     from views.conferencia_facial_view import tela_conferencia_facial
+
     tela_conferencia_facial()
 
 elif st.session_state.menu_atual == "Mesclar Fichas":
     from views.merge_alunos_view import tela_merge_alunos
+
     tela_merge_alunos()
 
 elif st.session_state.menu_atual == "Identidade Visual":
     from views.identidade_view import tela_identidade_visual
+
     tela_identidade_visual()
 
 elif st.session_state.menu_atual == "Turmas":
@@ -909,10 +1032,13 @@ elif st.session_state.menu_atual == "Backup":
 
 # ── Rodapé Fixo ─────────────────────────────────────────────────────────────
 from utils.identidade import get_config as _gcfg_rodape
+
 _rcfg = _gcfg_rodape()
 _rlinks = []
 if _rcfg.get("site"):
-    _rlinks.append(f'<a href="https://{_rcfg["site"]}" target="_blank">🌐 {_rcfg["site"]}</a>')
+    _rlinks.append(
+        f'<a href="https://{_rcfg["site"]}" target="_blank">🌐 {_rcfg["site"]}</a>'
+    )
 if _rcfg.get("instagram"):
     _rlinks.append(
         f'<a href="https://instagram.com/{_rcfg["instagram"].lstrip("@")}"'
@@ -920,9 +1046,9 @@ if _rcfg.get("instagram"):
     )
 st.markdown(
     f'<div class="rodape-prime">'
-    f'<strong>{_rcfg.get("nome_organizacao","Instituto Muda Brasil")}</strong>'
-    f'&nbsp;·&nbsp; MoveRight Elite'
-    f'{"&nbsp;&nbsp;" + "&nbsp;|&nbsp;".join(_rlinks) if _rlinks else ""}'
-    f'</div>',
+    f"<strong>{_rcfg.get('nome_organizacao', 'Instituto Muda Brasil')}</strong>"
+    f"&nbsp;·&nbsp; MoveRight Elite"
+    f"{'&nbsp;&nbsp;' + '&nbsp;|&nbsp;'.join(_rlinks) if _rlinks else ''}"
+    f"</div>",
     unsafe_allow_html=True,
 )
