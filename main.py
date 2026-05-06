@@ -1,6 +1,6 @@
 # ==============================================================================
 # 📄 Arquivo: main.py novo modulo
-# 🏷️ VERSÃO: 14.3 (PRO Elite - Dashboard Integrado + Seletor Dark Mode)
+# 🏷️ VERSÃO: 14.4 (PRO Elite - Seletor de Tema na Tela Principal)
 # 👤 AUTOR: Marcos Barbosa - MoveRight (c)
 # ⚙️ FUNÇÃO: Roteador Central, Segurança, Dashboard Principal e Temas.
 # ==============================================================================
@@ -33,49 +33,27 @@ from database import (
 
 
 # ==============================================================================
-# 🎨 SELETOR DINÂMICO DE TEMA (DARK/LIGHT MODE)
+# 🎨 SELETOR DINÂMICO DE TEMA (DARK/LIGHT MODE) - AGORA NA TELA PRINCIPAL
 # ==============================================================================
 def renderizar_seletor_tema():
     """
-    Gera um seletor na barra lateral para alternar o tema da interface dinamicamente.
-    Utiliza a memória (session_state) para lembrar a escolha e injeta CSS pesado.
+    Gera um seletor na tela principal (alinhado à direita) para alternar o tema.
+    Utiliza a memória (session_state) para lembrar a escolha e injeta CSS.
     """
-    st.sidebar.markdown("### 🌗 Preferência Visual")
-
     if "tema_operador" not in st.session_state:
         st.session_state.tema_operador = "Claro"
 
-    tema_escolhido = st.sidebar.selectbox(
-        "Escolha o Tema:",
-        ["Claro", "Escuro"],
-        index=0 if st.session_state.tema_operador == "Claro" else 1,
-        help="Altera as cores de fundo e texto para maior conforto visual.",
-    )
-
-    if tema_escolhido != st.session_state.tema_operador:
-        st.session_state.tema_operador = tema_escolhido
-        st.rerun()
-
+    # Injeção de CSS Dinâmico com base na escolha
     if st.session_state.tema_operador == "Escuro":
-        # CSS Super-Blindado para o Modo Escuro
         css_tema = """
         <style>
-            /* Fundo principal */
             .stApp { background: #0E1117 !important; }
-
-            /* Fundo da barra lateral */
             .stSidebar { background-color: #1E293B !important; }
-
-            /* Fundo dos painéis e bordas dos containers (Cards) */
             div[data-testid="stVerticalBlockBorderWrapper"] { 
                 background-color: #1E293B !important; 
                 border-color: #334155 !important; 
             }
-
-            /* Força os textos a ficarem claros */
             p, span, h1, h2, h3, h4, h5, h6, label, .stMarkdown { color: #F8FAFC !important; }
-
-            /* Ajuste do menu superior (Radiogroup) para o Dark Mode */
             div[role="radiogroup"] { 
                 background: #1E293B !important; 
                 border-color: #334155 !important; 
@@ -85,8 +63,6 @@ def renderizar_seletor_tema():
             div[role="radiogroup"] label:hover { background: #334155 !important; }
             div[role="radiogroup"] label[data-checked="true"] { background: #3B82F6 !important; }
             div[role="radiogroup"] label[data-checked="true"] p { color: #FFFFFF !important; }
-
-            /* Ajustes nos inputs */
             div[data-baseweb="input"] > div {
                 background: #0E1117 !important;
                 border-color: #334155 !important;
@@ -95,6 +71,22 @@ def renderizar_seletor_tema():
         </style>
         """
         st.markdown(css_tema, unsafe_allow_html=True)
+
+    # Criamos colunas invisíveis para empurrar o botão de tema para a direita
+    col_vazia, col_tema = st.columns([6, 2], vertical_alignment="center")
+
+    with col_tema:
+        tema_escolhido = st.selectbox(
+            "🌗 Preferência Visual:",
+            ["Claro", "Escuro"],
+            index=0 if st.session_state.tema_operador == "Claro" else 1,
+            label_visibility="collapsed",  # Esconde o texto da etiqueta para ficar mais limpo
+        )
+
+    # Se o operador mudar, atualiza a memória e recarrega a página
+    if tema_escolhido != st.session_state.tema_operador:
+        st.session_state.tema_operador = tema_escolhido
+        st.rerun()
 
 
 # ==============================================================================
@@ -208,14 +200,14 @@ div[data-testid="column"] > div[data-testid="stVerticalBlockBorderWrapper"]
     box-shadow: none !important; padding: 0 !important; margin: 0 !important;
 }
 
-/* ── INPUTS ──────────────────────────────────────────────────────────────  �──── */
-div[data-baseweb="input"] > div {
+/* ── INPUTS ─────────────────────────────────────────────────────────────────── */
+div[data-baseweb="input"] > div, div[data-baseweb="select"] > div {
     border-radius: 10px !important;
     border: 1.5px solid #E2E8F0 !important;
     background: #F8FAFC !important;
     transition: all .2s ease !important;
 }
-div[data-baseweb="input"] > div:focus-within {
+div[data-baseweb="input"] > div:focus-within, div[data-baseweb="select"] > div:focus-within {
     border-color: #0056b3 !important;
     background: #FFFFFF !important;
     box-shadow: 0 0 0 3px rgba(0,86,179,.08) !important;
@@ -286,7 +278,7 @@ div[role="radiogroup"] {
     background: #FFFFFF !important; padding: 7px 16px !important;
     border-radius: 14px !important; gap: 3px !important; align-items: center !important;
     box-shadow: 0 2px 8px rgba(0,0,0,.05) !important; border: 1px solid #E2E8F0 !important;
-    margin-bottom: 16px !important; margin-top: -.5rem !important;
+    margin-bottom: 16px !important; margin-top: 0 !important; /* Ajuste para caber o seletor em cima */
     justify-content: flex-end !important;
 }
 div[role="radiogroup"]::before {
@@ -541,7 +533,7 @@ if not st.session_state.usuario_logado:
 # 🧭 NAVEGAÇÃO INTERNA E DASHBOARD
 # ==============================================================================
 
-# Executa o nosso seletor de tema na barra lateral APENAS se o usuário estiver logado
+# Executa o nosso seletor de tema no topo, acima do menu principal
 renderizar_seletor_tema()
 
 menu = [
@@ -553,7 +545,7 @@ menu = [
     "BI Prime",
     "Relatórios",
     "Satisfação",
-    "Ficha de Matrícula",
+    "Ficha de Matrs�cula",
     "Conferência Facial",
 ]
 if st.session_state.perfil == "SuperAdmin":
@@ -742,7 +734,6 @@ if st.session_state.menu_atual == "Principal":
                     ["mes", "dia"]
                 )
 
-                # 🚀 LÓGICA DE TÍTULO INTELIGENTE (MULTI-MÊS JANEIRO À ABRIL)
                 if len(meses_selecionados) == 1:
                     titulo_doc = f"ANIVERSARIANTES DE {meses_selecionados[0].upper()}"
                     subtitulo_doc = ""
@@ -764,7 +755,6 @@ if st.session_state.menu_atual == "Principal":
                                     gerar_cartaz_pdf_core,
                                 )
 
-                                # Enviamos titulo e subtitulo perfeitamente formatados
                                 pdf_bytes = gerar_cartaz_pdf_core(
                                     df_n, titulo_doc, subtitulo_doc, ""
                                 )
@@ -810,40 +800,11 @@ if st.session_state.menu_atual == "Principal":
                 st.markdown(
                     """
 <style>
-/* Avatar wrapper — isolado, não afeta outros elementos */
-.avatar-niver-wrap {
-    display:flex; align-items:center; justify-content:center;
-    position: relative;
-}
-/* Círculo base — clip-path mantém o corte circular mesmo com overflow */
-.avatar-niver-circle {
-    width:46px; height:46px;
-    border-radius:50%;
-    clip-path: circle(50% at 50% 50%);
-    border:2.5px solid #0056b3;
-    flex-shrink:0;
-    transition: transform 0.28s cubic-bezier(0.34,1.56,0.64,1), box-shadow 0.28s ease;
-    cursor:zoom-in;
-    position:relative;
-    z-index:2;
-    background: linear-gradient(135deg,#0056b3,#00a8cc);
-    overflow: hidden;
-}
-.avatar-niver-circle:hover {
-    transform: scale(2.6);
-    box-shadow: 0 10px 30px rgba(0,0,0,0.40);
-    z-index: 9999;
-    position: relative;
-}
-.avatar-niver-circle img {
-    width:100%; height:100%;
-    object-fit:cover; object-position: center top;
-    display:block;
-}
-.avatar-niver-circle.initials {
-    display:flex; align-items:center; justify-content:center;
-    color:#fff; font-weight:900; font-size:15px; letter-spacing:-0.5px;
-}
+.avatar-niver-wrap { display:flex; align-items:center; justify-content:center; position: relative; }
+.avatar-niver-circle { width:46px; height:46px; border-radius:50%; clip-path: circle(50% at 50% 50%); border:2.5px solid #0056b3; flex-shrink:0; transition: transform 0.28s cubic-bezier(0.34,1.56,0.64,1), box-shadow 0.28s ease; cursor:zoom-in; position:relative; z-index:2; background: linear-gradient(135deg,#0056b3,#00a8cc); overflow: hidden; }
+.avatar-niver-circle:hover { transform: scale(2.6); box-shadow: 0 10px 30px rgba(0,0,0,0.40); z-index: 9999; position: relative; }
+.avatar-niver-circle img { width:100%; height:100%; object-fit:cover; object-position: center top; display:block; }
+.avatar-niver-circle.initials { display:flex; align-items:center; justify-content:center; color:#fff; font-weight:900; font-size:15px; letter-spacing:-0.5px; }
 </style>""",
                     unsafe_allow_html=True,
                 )
@@ -871,13 +832,11 @@ if st.session_state.menu_atual == "Principal":
                         else None
                     )
 
-                    # Avatar: foto circular ou iniciais
                     foto_url = r.get("url_foto") or ""
                     iniciais = "".join(
                         p[0].upper() for p in str(r["nome"]).split()[:2] if p
                     )
                     if foto_url and str(foto_url).startswith("http"):
-                        # div.avatar-niver-circle tem overflow:hidden → mantém o círculo no zoom
                         avatar_html = (
                             f'<div class="avatar-niver-wrap">'
                             f'<div class="avatar-niver-circle" '
@@ -925,7 +884,7 @@ if st.session_state.menu_atual == "Principal":
             st.info("Nenhum dado encontrado.")
 
 # ==============================================================================
-# 🚀 ROTEAMENTO DE VISTAS (INCLUI A NOVA MATRÍCULA E O RADAR)
+# 🚀 ROTEAMENTO DE VISTAS
 # ==============================================================================
 elif st.session_state.menu_atual == "Frequência":
     from views.frequencia_view import tela_frequencia
@@ -938,10 +897,8 @@ elif st.session_state.menu_atual == "Radar de Acolhimento":
     tela_radar_acolhimento()
 
 elif st.session_state.menu_atual == "Nova Matrícula":
-    # 🚀 FIX DE ROTA E SALVAMENTO BLINDADO
     if "rota" in st.query_params:
         st.query_params.clear()
-
     from views.inscricao_publica_view import tela_inscricao_publica_move_right
 
     st.markdown("### 📝 Cadastro Oficial de Novo Aluno")
@@ -1014,20 +971,12 @@ elif st.session_state.menu_atual == "Mensagens":
 
     tela_gestao_templates()
 
-# --------------------------------------------------------------------------
-# ⚙️ ROTA DO MENU: BACKUP E MANUTENÇÃO
-# --------------------------------------------------------------------------
 elif st.session_state.menu_atual == "Backup":
     from views.backup_view import tela_backup
     from database import ferramenta_reparacao_turmas
 
-    # 1. Desenha a tela de backup APENAS UMA VEZ
     tela_backup()
-
-    # 2. Desenha uma linha divisória visual
     st.markdown("---")
-
-    # 3. Desenha a ferramenta de reparação de turmas logo abaixo
     ferramenta_reparacao_turmas()
 
 # ── Rodapé Fixo ─────────────────────────────────────────────────────────────
