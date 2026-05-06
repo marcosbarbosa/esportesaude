@@ -1,11 +1,11 @@
 # ==============================================================================
 # 📄 ARQUIVO: modulos_frequencia/tab_diario.py
-# 🏷️ VERSÃO: 3.1 (PRO Elite - Integração Clínica e Social 60+ com Pandas Fix)
+# 🏷️ VERSÃO: 3.2 (PRO Elite - Altura Dinâmica Inteligente em TextAreas)
 # 📅 DATA: Atualizado
 # ⚙️ FUNÇÃO: Registo completo da aula com foto de grupo, exercícios e impacto social.
 # ==============================================================================
 import streamlit as st
-import pandas as pd  # <--- AQUI ESTAVA A FALTAR ESTA LINHA! 🚀
+import pandas as pd
 import time
 import io
 from PIL import Image
@@ -19,6 +19,33 @@ from database import (
 )
 
 
+# ==============================================================================
+# 📏 FUNÇÃO INTELIGENTE DE ALTURA DINÂMICA
+# ==============================================================================
+def calcular_altura_caixa(texto, min_altura=100, chars_por_linha=85):
+    """
+    Analisa o tamanho do texto e calcula a altura ideal da caixa em pixéis.
+    Previne o uso de scrollbars desnecessárias.
+    """
+    if not texto:
+        return min_altura
+
+    texto_str = str(texto)
+
+    linhas_explicitas = texto_str.count("\n")
+    linhas_implicitas = sum(
+        len(linha) // chars_por_linha for linha in texto_str.split("\n")
+    )
+
+    total_linhas = linhas_explicitas + linhas_implicitas + 2
+    altura_calculada = total_linhas * 25
+
+    return max(min_altura, altura_calculada)
+
+
+# ==============================================================================
+# 📝 RENDERIZAÇÃO DA ABA DO DIÁRIO
+# ==============================================================================
 def renderizar_aba_diario(data_aula, turma_selecionada, chave_unica):
     diario = get_diario_dia(data_aula, turma_selecionada)
     midias_existentes = get_midias_diario(diario["id"]) if diario else []
@@ -26,31 +53,43 @@ def renderizar_aba_diario(data_aula, turma_selecionada, chave_unica):
     with st.container(border=True):
         st.markdown("### 📝 Diário de Bordo")
 
-        # 1. TEXTOS DO DIÁRIO (BÁSICO)
+        # 1. TEXTOS DO DIÁRIO (COMPORTAMENTO EXPANSÍVEL MÁGICO)
+
+        # Extrair dados do BD
+        val_obj = diario["objetivo_geral"] if diario else ""
+        val_ex = diario.get("exercicios_executados", "") if diario else ""
+
+        # Calcular alturas ideais
+        alt_obj = calcular_altura_caixa(val_obj)
+        alt_ex = calcular_altura_caixa(val_ex)
+
         obj = st.text_area(
             "🎯 Objetivo da Sessão:",
-            value=diario["objetivo_geral"] if diario else "",
-            height=80,
+            value=val_obj,
+            height=alt_obj,
             key=f"obj_{chave_unica}",
         )
         ex = st.text_area(
             "🏃 Exercícios Executados:",
-            value=diario.get("exercicios_executados", "") if diario else "",
-            height=80,
+            value=val_ex,
+            height=alt_ex,
             key=f"ex_{chave_unica}",
         )
 
         st.divider()
 
         # ==============================================================================
-        # 🚀 NOVO: INTEGRAÇÃO CLÍNICA E SOCIAL (MÓDULO 60+)
+        # 🚀 INTEGRAÇÃO CLÍNICA E SOCIAL (MÓDULO 60+)
         # ==============================================================================
         st.markdown("### 🧠 Integração Clínica e Social (60+)")
-        st.caption("Marque os focos terapêuticos e sociais abordados com os alunos hoje:")
+        st.caption(
+            "Marque os focos terapêuticos e sociais abordados com os alunos hoje:"
+        )
 
-        # Tratamento seguro dos dados já guardados no banco
         focos_salvos = diario.get("foco_clinico_social", "") if diario else ""
-        focos_lista = [f.strip() for f in str(focos_salvos).split(",")] if focos_salvos else []
+        focos_lista = (
+            [f.strip() for f in str(focos_salvos).split(",")] if focos_salvos else []
+        )
 
         opcoes_foco = [
             "Correção Postural Fina (Nível Consultório)",
@@ -58,10 +97,9 @@ def renderizar_aba_diario(data_aula, turma_selecionada, chave_unica):
             "Consciência Corporal e Biomecânica",
             "Prevenção de Quedas / Equilíbrio",
             "Hábitos Alimentares e Qualidade de Vida",
-            "Avaliação / Medição Coletiva"
+            "Avaliação / Medição Coletiva",
         ]
 
-        # Renderização dinâmica de Checkboxes em 2 Colunas para UI Limpa
         c_ck1, c_ck2 = st.columns(2)
         selecionados = []
         for i, op in enumerate(opcoes_foco):
@@ -72,14 +110,17 @@ def renderizar_aba_diario(data_aula, turma_selecionada, chave_unica):
 
         foco_final_str = ", ".join(selecionados)
 
-        # Campo Qualitativo (Opcional, mas de altíssimo valor)
+        # Campo Qualitativo com Altura Dinâmica
         relatos_atuais = diario.get("relatos_melhora", "") if diario else ""
+        val_relatos = relatos_atuais if pd.notna(relatos_atuais) else ""
+        alt_relatos = calcular_altura_caixa(val_relatos)
+
         relatos = st.text_area(
             "🗣️ Relatos de Melhora e Impacto (Qualitativo):",
-            value=relatos_atuais if pd.notna(relatos_atuais) else "",
+            value=val_relatos,
             placeholder="Ex: Hoje vários alunos relataram alívio de dores lombares após os ajustes biomecânicos. A Dona Maria comentou que já consegue varrer a casa com mais autonomia...",
-            height=100,
-            key=f"rel_{chave_unica}"
+            height=alt_relatos,
+            key=f"rel_{chave_unica}",
         )
 
         st.divider()
@@ -194,7 +235,6 @@ def renderizar_aba_diario(data_aula, turma_selecionada, chave_unica):
                             {"url": url_ex, "descricao": item["desc"], "tipo": "foto"}
                         )
 
-                # Chama a nova função atualizada no database.py com os novos campos
                 sucesso, msg = salvar_diario(
                     data_aula,
                     turma_selecionada,
@@ -202,8 +242,8 @@ def renderizar_aba_diario(data_aula, turma_selecionada, chave_unica):
                     ex,
                     final_url_grupo,
                     midias_para_banco,
-                    foco_final_str, # A string consolidada dos checkboxes
-                    relatos         # O texto qualitativo
+                    foco_final_str,
+                    relatos,
                 )
 
                 if sucesso:

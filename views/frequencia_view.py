@@ -301,8 +301,11 @@ def tela_frequencia():
                 f"Nenhum aluno encontrado com o nome '{busca_grid}' (nem ativos, nem inativos)."
             )
 
-            # 🚀 AQUI A MÁGICA: O BOTÃO AGORA TRANSPORTA PARA O MÓDULO CORRETO!
-            if st.button("➕ O Aluno é Novo? CADASTRAR AGORA", type="primary", use_container_width=True):
+            if st.button(
+                "➕ O Aluno é Novo? CADASTRAR AGORA",
+                type="primary",
+                use_container_width=True,
+            ):
                 st.session_state.menu_atual = "Nova Matrícula"
                 st.rerun()
     else:
