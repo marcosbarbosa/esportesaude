@@ -1,12 +1,18 @@
 # ==============================================================================
-# 🎨 ARQUIVO: .streamlit/config.toml
-# 🎯 FUNÇÃO: Tema Global do Sistema (Dark Mode Profissional para Produção)
+# ⚙️ ARQUIVO: .streamlit/config.toml
+# 🎯 FUNÇÃO: Configurações de Servidor (Sem forçar temas para permitir a troca dinâmica)
 # ==============================================================================
 
-[theme]
-base="dark"
-primaryColor="#3B82F6"
-backgroundColor="#0E1117"
-secondaryBackgroundColor="#1E293B"
-textColor="#F8FAFC"
-font="sans serif"
+[server]
+headless = true
+address = "0.0.0.0"
+port = 8000
+enableCORS = false
+enableXsrfProtection = false
+enableWebsocketCompression = false
+maxUploadSize = 200
+
+[browser]
+serverAddress = "8859dbcc-e36e-4d16-8217-c288d14b7b73-00-3ce8mxj6fzww0.riker.replit.dev"
+serverPort = 8000
+gatherUsageStats = false
