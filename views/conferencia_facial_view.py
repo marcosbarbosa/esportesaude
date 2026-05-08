@@ -19,8 +19,14 @@ from database import supabase
 
 # ── Helpers de DB ─────────────────────────────────────────────────────────────
 
+
 def _buscar_turmas():
-    r = supabase.table("turmas").select("id,nome,horario,dias_semana").eq("status", "Ativa").execute()
+    r = (
+        supabase.table("turmas")
+        .select("id,nome,horario,dias_semana")
+        .eq("status", "Ativa")
+        .execute()
+    )
     return r.data or []
 
 
@@ -71,10 +77,13 @@ def _gravar_frequencias(resultados: list, data_aula: str):
         {"aluno_id": item["aluno_id"], "data_aula": data_aula, "status": item["status"]}
         for item in resultados
     ]
-    supabase.table("frequencia").upsert(rows, on_conflict="aluno_id,data_aula").execute()
+    supabase.table("frequencia").upsert(
+        rows, on_conflict="aluno_id,data_aula"
+    ).execute()
 
 
 # ── Download de imagem para numpy array ───────────────────────────────────────
+
 
 def _url_para_array(url: str) -> np.ndarray | None:
     try:
@@ -95,6 +104,7 @@ def _upload_para_array(uploaded_file) -> np.ndarray | None:
 
 
 # ── Motor de reconhecimento facial ────────────────────────────────────────────
+
 
 def _reconhecer_presencas(img_grupo: np.ndarray, alunos: list) -> list:
     """
@@ -117,27 +127,31 @@ def _reconhecer_presencas(img_grupo: np.ndarray, alunos: list) -> list:
             url_foto = aluno.get("url_foto") or ""
 
             if not url_foto:
-                resultados.append({
-                    "aluno_id": aluno_id,
-                    "nome": nome,
-                    "status": "FALTA",
-                    "confianca": 0,
-                    "tem_foto": False,
-                    "motivo": "Sem foto cadastrada",
-                })
+                resultados.append(
+                    {
+                        "aluno_id": aluno_id,
+                        "nome": nome,
+                        "status": "FALTA",
+                        "confianca": 0,
+                        "tem_foto": False,
+                        "motivo": "Sem foto cadastrada",
+                    }
+                )
                 continue
 
             # Download foto individual
             arr_individual = _url_para_array(url_foto)
             if arr_individual is None:
-                resultados.append({
-                    "aluno_id": aluno_id,
-                    "nome": nome,
-                    "status": "FALTA",
-                    "confianca": 0,
-                    "tem_foto": True,
-                    "motivo": "Erro ao carregar foto",
-                })
+                resultados.append(
+                    {
+                        "aluno_id": aluno_id,
+                        "nome": nome,
+                        "status": "FALTA",
+                        "confianca": 0,
+                        "tem_foto": True,
+                        "motivo": "Erro ao carregar foto",
+                    }
+                )
                 continue
 
             individual_path = os.path.join(tmpdir, f"{aluno_id}.jpg")
@@ -148,7 +162,7 @@ def _reconhecer_presencas(img_grupo: np.ndarray, alunos: list) -> list:
                     img_path=individual_path,
                     db_path=tmpdir,
                     model_name="Facenet",
-                    detector_backend="retinaface",
+                    detector_backend="opencv",  # "retinaface",
                     enforce_detection=False,
                     silent=True,
                 )
@@ -177,35 +191,42 @@ def _reconhecer_presencas(img_grupo: np.ndarray, alunos: list) -> list:
                     distancia = verify.get("distance", 1.0)
                     limiar = verify.get("threshold", 0.4)
                     # Confiança invertida: quanto menor a distância, maior a confiança
-                    confianca = max(0, int((1 - distancia / max(limiar * 2, 0.01)) * 100))
+                    confianca = max(
+                        0, int((1 - distancia / max(limiar * 2, 0.01)) * 100)
+                    )
                     confianca = min(confianca, 99)
                 except Exception:
                     encontrado = False
                     confianca = 0
 
-                resultados.append({
-                    "aluno_id": aluno_id,
-                    "nome": nome,
-                    "status": "PRESENTE" if encontrado else "FALTA",
-                    "confianca": confianca,
-                    "tem_foto": True,
-                    "motivo": "",
-                })
+                resultados.append(
+                    {
+                        "aluno_id": aluno_id,
+                        "nome": nome,
+                        "status": "PRESENTE" if encontrado else "FALTA",
+                        "confianca": confianca,
+                        "tem_foto": True,
+                        "motivo": "",
+                    }
+                )
 
             except Exception as e:
-                resultados.append({
-                    "aluno_id": aluno_id,
-                    "nome": nome,
-                    "status": "FALTA",
-                    "confianca": 0,
-                    "tem_foto": True,
-                    "motivo": f"Erro: {str(e)[:60]}",
-                })
+                resultados.append(
+                    {
+                        "aluno_id": aluno_id,
+                        "nome": nome,
+                        "status": "FALTA",
+                        "confianca": 0,
+                        "tem_foto": True,
+                        "motivo": f"Erro: {str(e)[:60]}",
+                    }
+                )
 
     return resultados
 
 
 # ── Tela principal ────────────────────────────────────────────────────────────
+
 
 def tela_conferencia_facial():
     st.markdown(
@@ -293,7 +314,9 @@ def tela_conferencia_facial():
         )
         if uploaded:
             img_grupo = _upload_para_array(uploaded)
-            st.image(uploaded, caption="Foto da turma carregada", use_container_width=True)
+            st.image(
+                uploaded, caption="Foto da turma carregada", use_container_width=True
+            )
 
     else:
         # Buscar do diário
@@ -306,7 +329,9 @@ def tela_conferencia_facial():
             opcoes_diario = {
                 f"{d['data_aula']} — {d['turma']}": d for d in entradas_com_foto
             }
-            entrada_sel_key = st.selectbox("Selecione a aula", list(opcoes_diario.keys()))
+            entrada_sel_key = st.selectbox(
+                "Selecione a aula", list(opcoes_diario.keys())
+            )
             entrada_sel = opcoes_diario[entrada_sel_key]
             url_grupo_usada = entrada_sel["url_foto_grupo"]
 
@@ -319,7 +344,11 @@ def tela_conferencia_facial():
             arr = _url_para_array(url_grupo_usada)
             if arr is not None:
                 img_grupo = arr
-                st.image(url_grupo_usada, caption=f"Foto do diário — {entrada_sel['data_aula']}", use_container_width=True)
+                st.image(
+                    url_grupo_usada,
+                    caption=f"Foto do diário — {entrada_sel['data_aula']}",
+                    use_container_width=True,
+                )
             else:
                 st.error("Não foi possível carregar a foto do diário.")
 
@@ -357,7 +386,9 @@ def tela_conferencia_facial():
 
         for i, aluno in enumerate(alunos):
             pct = int((i / total) * 100)
-            barra.progress(pct, text=f"Analisando {i+1}/{total}: {aluno['nome'][:30]}…")
+            barra.progress(
+                pct, text=f"Analisando {i + 1}/{total}: {aluno['nome'][:30]}…"
+            )
             status_box.caption(f"🔎 Verificando {aluno['nome']}…")
 
             # Processar um aluno de cada vez para feedback em tempo real
@@ -382,7 +413,7 @@ def tela_conferencia_facial():
             data_fmt = data_str
 
         presentes = [r for r in resultados if r["status"] == "PRESENTE"]
-        faltas    = [r for r in resultados if r["status"] == "FALTA"]
+        faltas = [r for r in resultados if r["status"] == "FALTA"]
         sem_foto_lst = [r for r in resultados if not r["tem_foto"]]
 
         st.markdown("---")
@@ -408,7 +439,9 @@ def tela_conferencia_facial():
             }
 
         # Listar todos os alunos com controle de status
-        for r in sorted(resultados, key=lambda x: (-1 if x["status"] == "PRESENTE" else 1)):
+        for r in sorted(
+            resultados, key=lambda x: (-1 if x["status"] == "PRESENTE" else 1)
+        ):
             aluno_id = r["aluno_id"]
             nome = r["nome"]
             conf = r["confianca"]
@@ -481,7 +514,13 @@ def tela_conferencia_facial():
                 use_container_width=True,
             ):
                 lista_gravar = [
-                    {"aluno_id": aid, "nome": next((r["nome"] for r in resultados if r["aluno_id"] == aid), ""), "status": st}
+                    {
+                        "aluno_id": aid,
+                        "nome": next(
+                            (r["nome"] for r in resultados if r["aluno_id"] == aid), ""
+                        ),
+                        "status": st,
+                    }
                     for aid, st in editado.items()
                 ]
                 with st.spinner("A gravar frequências…"):
@@ -491,12 +530,22 @@ def tela_conferencia_facial():
                     f"{total_presentes_final} presentes · {total_faltas_final} faltas."
                 )
                 # Limpar estado
-                for k in ["facial_resultado", "facial_data", "facial_alunos", "facial_editado"]:
+                for k in [
+                    "facial_resultado",
+                    "facial_data",
+                    "facial_alunos",
+                    "facial_editado",
+                ]:
                     st.session_state.pop(k, None)
                 st.rerun()
 
         with col_cancelar:
             if st.button("🗑️ Descartar Resultado", use_container_width=True):
-                for k in ["facial_resultado", "facial_data", "facial_alunos", "facial_editado"]:
+                for k in [
+                    "facial_resultado",
+                    "facial_data",
+                    "facial_alunos",
+                    "facial_editado",
+                ]:
                     st.session_state.pop(k, None)
                 st.rerun()
