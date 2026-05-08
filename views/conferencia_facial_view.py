@@ -162,7 +162,7 @@ def _reconhecer_presencas(img_grupo: np.ndarray, alunos: list) -> list:
                     img_path=individual_path,
                     db_path=tmpdir,
                     model_name="Facenet",
-                    detector_backend="opencv",  # "retinaface",
+                    detector_backend="retinaface",  # "retinaface", opencv
                     enforce_detection=False,
                     silent=True,
                 )
