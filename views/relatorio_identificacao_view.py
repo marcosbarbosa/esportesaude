@@ -208,7 +208,7 @@ def gerar_html_preview(df, campos_sel, opcoes_campos, orientacao, turma_sel):
     page_size = "A4 portrait" if "Retrato" in orientacao else "A4 landscape"
     data_hora = datetime.datetime.now().strftime("%d/%m/%Y às %H:%M")
     th = _cabecalhos_html(campos_sel, opcoes_campos)
-    tr = _linhas_html(df, campos_sel, opcoes_campos, com_fotos=True)
+    tr = _linhas_html(df, campos_sel, opcoes_campos, fotos_b64=None)
     return f"""<!DOCTYPE html><html><head><meta charset="UTF-8">
 <style>{_css_base(page_size)}</style>
 {_JS_SORT}
