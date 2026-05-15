@@ -5,6 +5,7 @@
 # ==============================================================================
 
 import json
+import re
 import pandas as pd
 import streamlit as st
 import datetime
@@ -824,59 +825,255 @@ def get_avaliacoes_aluno(aluno_id):
 def bi_resumo_studio():
     hoje = datetime.date.today()
     c30 = (hoje - datetime.timedelta(days=30)).isoformat()
+    c15 = (hoje - datetime.timedelta(days=15)).isoformat()
     try:
-        r_al = supabase.from_("alunos").select("status, cor_alerta_atual").execute()
+        r_al = supabase.from_("alunos").select("id, status, cor_alerta_atual").execute()
         df = pd.DataFrame(r_al.data or [])
-        ativos = int((df["status"] == "Ativo").sum()) if not df.empty else 0
-        inativos = int((df["status"] == "Inativo").sum()) if not df.empty else 0
-        risco_v = int((df["cor_alerta_atual"] == "🔴").sum()) if not df.empty else 0
-    except:
-        ativos = inativos = risco_v = 0
+        ativos    = int((df["status"] == "Ativo").sum())   if not df.empty else 0
+        inativos  = int((df["status"] == "Inativo").sum()) if not df.empty else 0
+        risco_v   = int((df.get("cor_alerta_atual", pd.Series()) == "🔴").sum()) if not df.empty else 0
+        risco_a   = int((df.get("cor_alerta_atual", pd.Series()) == "🟡").sum()) if not df.empty else 0
+        ids_ativos = set(df[df["status"] == "Ativo"]["id"].tolist()) if not df.empty else set()
+    except Exception:
+        ativos = inativos = risco_v = risco_a = 0
+        ids_ativos = set()
     try:
-        r_f = (
-            supabase.from_("frequencia")
-            .select("status")
-            .gte("data_aula", c30)
-            .execute()
-        )
+        r_f = supabase.from_("frequencia").select("status").gte("data_aula", c30).execute()
         df_f = pd.DataFrame(r_f.data or [])
         t_reg = len(df_f)
-        pres = int((df_f["status"] == "PRESENTE").sum()) if not df_f.empty else 0
-        taxa = round(pres / t_reg * 100, 1) if t_reg > 0 else 0.0
-    except:
+        pres  = int((df_f["status"] == "PRESENTE").sum()) if not df_f.empty else 0
+        taxa  = round(pres / t_reg * 100, 1) if t_reg > 0 else 0.0
+    except Exception:
         taxa = 0.0
+    try:
+        r_f15 = (supabase.from_("frequencia").select("aluno_id")
+                 .gte("data_aula", c15).eq("status", "PRESENTE").execute())
+        ids_com_pres = {r["aluno_id"] for r in (r_f15.data or [])}
+        sem_pres_15  = len(ids_ativos - ids_com_pres)
+    except Exception:
+        sem_pres_15 = 0
     return {
-        "total_ativos": ativos,
-        "total_inativos": inativos,
+        "total_ativos":    ativos,
+        "total_inativos":  inativos,
         "taxa_presenca_30": taxa,
-        "risco_vermelho": risco_v,
+        "risco_vermelho":  risco_v,
+        "risco_amarelo":   risco_a,
+        "sem_presenca_15": sem_pres_15,
     }
+
+
+@st.cache_data(ttl=120)
+def bi_evolucao_cadastros():
+    try:
+        r = supabase.from_("alunos").select("created_at").execute()
+        df = pd.DataFrame(r.data or [])
+        if df.empty or "created_at" not in df.columns:
+            return pd.DataFrame()
+        df["created_at"] = pd.to_datetime(df["created_at"], errors="coerce")
+        corte = datetime.date.today() - datetime.timedelta(days=18 * 30)
+        df = df[df["created_at"].dt.date >= corte]
+        df["mes"] = df["created_at"].dt.strftime("%b/%y")
+        df["ordem"] = df["created_at"].dt.to_period("M")
+        contagem = (df.groupby(["ordem", "mes"]).size()
+                    .reset_index(name="novos_alunos")
+                    .sort_values("ordem"))
+        return contagem[["mes", "novos_alunos"]].reset_index(drop=True)
+    except Exception:
+        return pd.DataFrame()
+
+
+@st.cache_data(ttl=120)
+def bi_frequencia_turmas(dias=30):
+    try:
+        corte = (datetime.date.today() - datetime.timedelta(days=dias)).isoformat()
+        r_f = (supabase.from_("frequencia").select("aluno_id, status")
+               .gte("data_aula", corte).execute())
+        df_f = pd.DataFrame(r_f.data or [])
+        if df_f.empty:
+            return pd.DataFrame()
+        r_al = supabase.from_("alunos").select("id, turma").eq("status", "Ativo").execute()
+        df_al = pd.DataFrame(r_al.data or [])
+        if df_al.empty:
+            return pd.DataFrame()
+        df = df_f.merge(df_al, left_on="aluno_id", right_on="id", how="left")
+        df = df.dropna(subset=["turma"])
+        agg = df.groupby("turma").apply(
+            lambda g: round((g["status"] == "PRESENTE").sum() / len(g) * 100, 1)
+        ).reset_index(name="taxa_presenca")
+        return agg.sort_values("taxa_presenca", ascending=False).reset_index(drop=True)
+    except Exception:
+        return pd.DataFrame()
+
+
+@st.cache_data(ttl=120)
+def bi_distribuicao_risco():
+    try:
+        r = supabase.from_("alunos").select("cor_alerta_atual").eq("status", "Ativo").execute()
+        df = pd.DataFrame(r.data or [])
+        if df.empty:
+            return pd.DataFrame()
+        df["cor_alerta_atual"] = df["cor_alerta_atual"].fillna("⚪").replace("", "⚪")
+        contagem = df["cor_alerta_atual"].value_counts().reset_index()
+        contagem.columns = ["cor_alerta_atual", "total"]
+        return contagem
+    except Exception:
+        return pd.DataFrame()
+
+
+@st.cache_data(ttl=120)
+def bi_dores_studio():
+    try:
+        r = supabase.from_("anamnese_dores").select("regiao").execute()
+        df = pd.DataFrame(r.data or [])
+        if df.empty or "regiao" not in df.columns:
+            return pd.DataFrame()
+        contagem = df["regiao"].value_counts().head(10).reset_index()
+        contagem.columns = ["label", "count"]
+        return contagem
+    except Exception:
+        return pd.DataFrame()
 
 
 @st.cache_data(ttl=120)
 def bi_alunos_risco_abandono(dias=30):
     try:
-        corte = (datetime.date.today() - datetime.timedelta(days=dias)).isoformat()
-        r_al = (
-            supabase.from_("alunos")
-            .select("id, nome, turma, whatsapp")
-            .eq("status", "Ativo")
-            .execute()
-        )
-        r_f = (
-            supabase.from_("frequencia")
-            .select("aluno_id")
-            .gte("data_aula", corte)
-            .eq("status", "PRESENTE")
-            .execute()
-        )
+        hoje = datetime.date.today()
+        corte = (hoje - datetime.timedelta(days=dias)).isoformat()
+        r_al = (supabase.from_("alunos")
+                .select("id, nome, turma, whatsapp, cor_alerta_atual")
+                .eq("status", "Ativo").execute())
         df_al = pd.DataFrame(r_al.data or [])
         if df_al.empty:
             return pd.DataFrame()
-        pres_ids = set(r["aluno_id"] for r in (r_f.data or []))
-        return df_al[~df_al["id"].isin(pres_ids)].copy()
-    except:
+        r_f = (supabase.from_("frequencia").select("aluno_id, data_aula")
+               .gte("data_aula", corte).eq("status", "PRESENTE").execute())
+        df_f = pd.DataFrame(r_f.data or [])
+        pres_ids = set(df_f["aluno_id"].tolist()) if not df_f.empty else set()
+        ausentes = df_al[~df_al["id"].isin(pres_ids)].copy()
+        if ausentes.empty:
+            return pd.DataFrame()
+        # Última presença de todos os tempos
+        r_ult = (supabase.from_("frequencia").select("aluno_id, data_aula")
+                 .in_("aluno_id", ausentes["id"].tolist())
+                 .eq("status", "PRESENTE").execute())
+        df_ult = pd.DataFrame(r_ult.data or [])
+        if not df_ult.empty:
+            ult_pres = (df_ult.groupby("aluno_id")["data_aula"].max()
+                        .reset_index().rename(columns={"data_aula": "ultima_presenca"}))
+            ausentes = ausentes.merge(ult_pres, left_on="id", right_on="aluno_id", how="left")
+        else:
+            ausentes["ultima_presenca"] = None
+        ausentes["dias_ausente"] = ausentes["ultima_presenca"].apply(
+            lambda d: (hoje - datetime.date.fromisoformat(str(d))).days
+            if d and str(d) not in ("None", "nan", "") else dias + 1
+        )
+        return ausentes.reset_index(drop=True)
+    except Exception:
         return pd.DataFrame()
+
+
+# ==============================================================================
+# 🔧 FUNÇÕES COMPLEMENTARES (turma, estatísticas, prontuário, CRM, atestados)
+# ==============================================================================
+
+def atualizar_turma_aluno(aluno_id, nova_turma):
+    try:
+        supabase.from_("alunos").update({"turma": nova_turma}).eq("id", str(aluno_id)).execute()
+        return True
+    except Exception:
+        return False
+
+
+def get_estatisticas_frequencia_aluno(aluno_id):
+    try:
+        res = supabase.from_("frequencia").select("status").eq("aluno_id", str(aluno_id)).execute()
+        if not res.data:
+            return {"total": 0, "presentes": 0, "faltas": 0, "percentual": 0.0}
+        total = len(res.data)
+        presentes = sum(1 for r in res.data if r["status"] == "PRESENTE")
+        return {"total": total, "presentes": presentes, "faltas": total - presentes,
+                "percentual": (presentes / total) * 100 if total > 0 else 0.0}
+    except Exception:
+        return {"total": 0, "presentes": 0, "faltas": 0, "percentual": 0.0}
+
+
+def excluir_avaliacao_prontuario(aval_id):
+    try:
+        supabase.from_("prontuario_avaliacoes").delete().eq("id", aval_id).execute()
+        return True, "Excluído."
+    except Exception as e:
+        return False, str(e)
+
+
+def get_historico_aulas_aluno(aluno_id):
+    try:
+        turma_aluno = supabase.from_("alunos").select("turma").eq("id", str(aluno_id)).execute().data[0]["turma"]
+        datas_presente = [
+            r["data_aula"] for r in
+            supabase.from_("frequencia").select("data_aula")
+            .eq("aluno_id", str(aluno_id)).eq("status", "PRESENTE")
+            .order("data_aula", desc=True).execute().data
+        ]
+        match = re.search(r"(0[789]|1[012])", str(turma_aluno))
+        hora_busca = match.group(1) if match else str(turma_aluno).split(" - ")[0].strip()
+        mapa_diarios = {
+            d["data_aula"]: d for d in
+            supabase.from_("diario_aulas")
+            .select("data_aula, objetivo_geral, exercicios_executados, foco_clinico_social, relatos_melhora")
+            .ilike("turma", f"%{hora_busca}%")
+            .in_("data_aula", datas_presente).execute().data
+        }
+        return [
+            {"data_aula": dt,
+             "objetivo_geral": mapa_diarios.get(dt, {}).get("objetivo_geral", "⚠️ Sem diário."),
+             "exercicios_executados": mapa_diarios.get(dt, {}).get("exercicios_executados", ""),
+             "foco_clinico_social": mapa_diarios.get(dt, {}).get("foco_clinico_social", ""),
+             "relatos_melhora": mapa_diarios.get(dt, {}).get("relatos_melhora", "")}
+            for dt in datas_presente
+        ]
+    except Exception:
+        return []
+
+
+def get_crm_templates():
+    try:
+        return pd.DataFrame(supabase.from_("crm_templates").select("*").order("titulo").execute().data)
+    except Exception:
+        return pd.DataFrame()
+
+
+def atualizar_crm_template(gatilho, nova_mensagem):
+    try:
+        supabase.from_("crm_templates").update(
+            {"mensagem": nova_mensagem.strip(), "atualizado_em": datetime.datetime.now().isoformat()}
+        ).eq("gatilho", gatilho).execute()
+        return True, "Sucesso"
+    except Exception as e:
+        return False, str(e)
+
+
+def salvar_atestado_temporario(aluno_id, data_registro, motivo, url_documento):
+    try:
+        supabase.table("atestados_temporarios").insert({
+            "aluno_id": str(aluno_id),
+            "data_registro": str(data_registro),
+            "motivo": str(motivo).strip(),
+            "url_documento": str(url_documento),
+        }).execute()
+        return True, "Sucesso"
+    except Exception as e:
+        return False, str(e)
+
+
+def get_atestados_temporarios(aluno_id):
+    try:
+        df = pd.DataFrame(
+            supabase.table("atestados_temporarios").select("*")
+            .eq("aluno_id", str(aluno_id)).order("data_registro", desc=True).execute().data
+        )
+        return df if not df.empty else None
+    except Exception:
+        return None
 
 
 # ==============================================================================
