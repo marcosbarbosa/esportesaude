@@ -722,7 +722,9 @@ if st.session_state.menu_atual == "Principal":
         if agendamentos:
             for a in agendamentos:
                 with st.container(border=True):
-                    st.markdown(f"🕒 **{a['horario']}** — {a['alunos']['nome']}")
+                    _nome_ag = (a.get("alunos") or {}).get("nome") or a.get("nome_aluno") or "—"
+                    _hora_ag = a.get("horario") or a.get("data_hora") or "—"
+                    st.markdown(f"🕒 **{_hora_ag}** — {_nome_ag}")
         else:
             st.info("Agenda livre no momento.")
 

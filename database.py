@@ -166,14 +166,24 @@ def get_agendamentos_pendentes(limite=8):
     try:
         res = (
             supabase.from_("agendamentos")
-            .select("*")
+            .select("*, alunos(nome)")
             .eq("status", "Pendente")
             .limit(limite)
             .execute()
         )
         return res.data if res.data else []
     except Exception:
-        return []
+        try:
+            res = (
+                supabase.from_("agendamentos")
+                .select("*")
+                .eq("status", "Pendente")
+                .limit(limite)
+                .execute()
+            )
+            return res.data if res.data else []
+        except Exception:
+            return []
 
 
 # ==============================================================================
