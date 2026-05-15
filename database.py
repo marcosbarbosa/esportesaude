@@ -95,11 +95,9 @@ def blindar_float(valor):
 # 🔐 AUTENTICAÇÃO, CRM E COMPATIBILIDADE MAIN.PY
 # ==============================================================================
 def autenticar_usuario(email, senha):
-    """Função de Login com busca dupla isolada (não falha se a tabela não existir)"""
+    """Função de Login — usa somente a tabela 'usuarios'"""
     email_limpo = str(email).strip().lower()
     senha_limpa = str(senha).strip()
-
-    # TENTATIVA 1: Procura na tabela 'usuarios' (Padrão Original V5)
     try:
         res = (
             supabase.table("usuarios")
@@ -108,27 +106,11 @@ def autenticar_usuario(email, senha):
             .eq("senha", senha_limpa)
             .execute()
         )
-        if hasattr(res, "data") and res.data:
+        if res.data:
             return True, res.data[0]
-    except Exception:
-        pass  # Se a tabela não existir, ignora o erro e segue para a próxima
-
-    # TENTATIVA 2: Procura na tabela 'usuarios_admin' (Padrão Novo)
-    try:
-        res2 = (
-            supabase.table("usuarios_admin")
-            .select("*")
-            .eq("email", email_limpo)
-            .eq("senha", senha_limpa)
-            .execute()
-        )
-        if hasattr(res2, "data") and res2.data:
-            return True, res2.data[0]
-    except Exception:
-        pass  # Se também der erro, ignora
-
-    # Se passou pelas duas tabelas e não retornou True, então as credenciais estão erradas
-    return False, "E-mail ou senha incorretos."
+        return False, "E-mail ou senha incorretos."
+    except Exception as e:
+        return False, f"Erro no servidor: {str(e)}"
 
 
 def get_template_seguro_db(chave, nome_aluno=""):
@@ -152,23 +134,23 @@ def get_template_seguro_db(chave, nome_aluno=""):
 
 
 def cadastrar_usuario_sistema(nome, email, senha):
-    """Função de registo solicitada pelo main.py"""
+    """Função de registo solicitada pelo main.py — usa tabela 'usuarios'"""
     try:
         res = (
-            supabase.table("usuarios_admin")
-            .select("*")
-            .eq("email", email.lower())
+            supabase.table("usuarios")
+            .select("id")
+            .eq("email", email.strip().lower())
             .execute()
         )
         if res.data:
             return False, "E-mail já está registado."
         novo_usuario = {
-            "nome": nome,
-            "email": email.lower(),
+            "nome": nome.strip(),
+            "email": email.strip().lower(),
             "senha": senha,
             "perfil": "Admin",
         }
-        supabase.table("usuarios_admin").insert(novo_usuario).execute()
+        supabase.table("usuarios").insert(novo_usuario).execute()
         return True, "✅ Conta criada com sucesso!"
     except Exception as e:
         return False, str(e)
