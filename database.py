@@ -1,7 +1,7 @@
 # ==============================================================================
 # 📄 ARQUIVO: database.py
 # 🎯 FUNÇÃO: Motor Central de Dados. Preserva 100% da Lógica Original + Cadastro Full.
-# 📅 VERSÃO: 7.2 (ULTRA-PRIME - Código Integral c/ 100% de Compatibilidade main.py)
+# 📅 VERSÃO: 7.3 (ULTRA-PRIME - Código Integral c/ Login Blindado Anti-Crash)
 # ==============================================================================
 
 import json
@@ -95,22 +95,40 @@ def blindar_float(valor):
 # 🔐 AUTENTICAÇÃO, CRM E COMPATIBILIDADE MAIN.PY
 # ==============================================================================
 def autenticar_usuario(email, senha):
-    """Função de Login solicitada pelo main.py"""
+    """Função de Login com busca dupla isolada (não falha se a tabela não existir)"""
+    email_limpo = str(email).strip().lower()
+    senha_limpa = str(senha).strip()
+
+    # TENTATIVA 1: Procura na tabela 'usuarios' (Padrão Original V5)
     try:
         res = (
-            supabase.table("usuarios_admin")
+            supabase.table("usuarios")
             .select("*")
-            .eq("email", email.lower())
+            .eq("email", email_limpo)
+            .eq("senha", senha_limpa)
             .execute()
         )
-        if res.data:
-            user = res.data[0]
-            if user["senha"] == senha:
-                return True, user
-        return False, None
-    except Exception as e:
-        print(f"Erro no login: {e}")
-        return False, None
+        if hasattr(res, "data") and res.data:
+            return True, res.data[0]
+    except Exception:
+        pass  # Se a tabela não existir, ignora o erro e segue para a próxima
+
+    # TENTATIVA 2: Procura na tabela 'usuarios_admin' (Padrão Novo)
+    try:
+        res2 = (
+            supabase.table("usuarios_admin")
+            .select("*")
+            .eq("email", email_limpo)
+            .eq("senha", senha_limpa)
+            .execute()
+        )
+        if hasattr(res2, "data") and res2.data:
+            return True, res2.data[0]
+    except Exception:
+        pass  # Se também der erro, ignora
+
+    # Se passou pelas duas tabelas e não retornou True, então as credenciais estão erradas
+    return False, "E-mail ou senha incorretos."
 
 
 def get_template_seguro_db(chave, nome_aluno=""):
