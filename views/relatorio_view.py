@@ -1,6 +1,6 @@
 # ==============================================================================
 # 📄 Arquivo: views/relatorio_view.py
-# 🏷️ VERSÃO: 8.33 PRIMEMAX (A MURALHA - PDF Nativo, Grid Interativo e Word Nativo)
+# 🏷️ VERSÃO: 8.40 PRIMEMAX (A MURALHA - PDF Nativo, Excel e Sincronização Anti-Furo)
 # 📏 LINHAS: ~900
 # 👤 DESENVOLVEDOR: Parceiro de Programação Gemini & Marcos Barbosa
 # ⚙️ FUNÇÃO: Relatórios, B.I., Auditoria Interativa (PDF) e Prestação Pedagógica
@@ -12,6 +12,7 @@ import datetime
 import plotly.express as px
 import io
 import os
+from views.relatorio_identificacao_view import renderizar_aba_caracracha
 
 from database import (
     get_relatorio_periodo,
@@ -140,9 +141,14 @@ def gerar_excel_planilha_frequencia(
             {"font_size": 8, "font_color": "#0A2540", "bold": True, "align": "left"}
         )
 
-        from utils.identidade import get_config as _gcfg_xls, get_logo_data_url as _gld_xls
+        from utils.identidade import (
+            get_config as _gcfg_xls,
+            get_logo_data_url as _gld_xls,
+        )
+
         _xcfg = _gcfg_xls()
         import os as _os_xls
+
         _lp = _xcfg.get("logo_principal", "logo-imbra.png")
         _ls = _xcfg.get("logo_secundaria", "logo-secretaria.png")
         try:
@@ -158,7 +164,7 @@ def gerar_excel_planilha_frequencia(
 
         worksheet.merge_range(
             "A6:E6",
-            f'{_xcfg.get("titulo_projeto","PROJETO ESPORTE E SAÚDE NA COMUNIDADE")} - PLANILHA DE FREQUÊNCIA',
+            f"{_xcfg.get('titulo_projeto', 'PROJETO ESPORTE E SAÚDE NA COMUNIDADE')} - PLANILHA DE FREQUÊNCIA",
             f_tit,
         )
         worksheet.merge_range("A7:E7", f"Período: {periodo_str}", f_sub)
@@ -194,20 +200,38 @@ def gerar_excel_planilha_frequencia(
             worksheet.set_column(3, len(df_grid.columns) - 1, 7.5)
 
         linha_rodape = 13 + len(df_grid) + 2
-        worksheet.write(linha_rodape, 0, "Sistema Esporte e Saúde - Gestão Inteligente Moveright™", f_rodape_bold)
-        worksheet.write(linha_rodape + 1, 0, f'{_xcfg.get("nome_organizacao","Instituto Muda Brasil")} | CNPJ: {_xcfg.get("cnpj","08.817.519/0001-79")}', f_rodape)
-        worksheet.write(linha_rodape + 2, 0, f'Site: {_xcfg.get("site","imbra.org.br")} | Instagram: {_xcfg.get("instagram","@institutomudabrasil")}', f_rodape)
-        worksheet.write(linha_rodape + 3, 0, f'Endereço: {_xcfg.get("endereco","")}', f_rodape)
+        worksheet.write(
+            linha_rodape,
+            0,
+            "Sistema Esporte e Saúde - Gestão Inteligente Moveright™",
+            f_rodape_bold,
+        )
+        worksheet.write(
+            linha_rodape + 1,
+            0,
+            f"{_xcfg.get('nome_organizacao', 'Instituto Muda Brasil')} | CNPJ: {_xcfg.get('cnpj', '08.817.519/0001-79')}",
+            f_rodape,
+        )
+        worksheet.write(
+            linha_rodape + 2,
+            0,
+            f"Site: {_xcfg.get('site', 'imbra.org.br')} | Instagram: {_xcfg.get('instagram', '@institutomudabrasil')}",
+            f_rodape,
+        )
+        worksheet.write(
+            linha_rodape + 3, 0, f"Endereço: {_xcfg.get('endereco', '')}", f_rodape
+        )
         if _xcfg.get("telefone"):
-            worksheet.write(linha_rodape + 4, 0, f'Tel: {_xcfg["telefone"]}', f_rodape)
+            worksheet.write(linha_rodape + 4, 0, f"Tel: {_xcfg['telefone']}", f_rodape)
 
         # ======================================================================
         # ABA B.I.: DASHBOARD MILIMÉTRICO
         # ======================================================================
         ws_bi = workbook.add_worksheet("Dashboard B.I.")
         df_al = df_grid.iloc[1:]
-        tp, tf = df_al["Total P"].sum(), df_al["Total F"].sum()
-        r_cnt = len(df_al[df_al["Total F"] > df_al["Total P"]])
+        tp = df_al["Total P"].sum() if "Total P" in df_al.columns else 0
+        tf = df_al["Total F"].sum() if "Total F" in df_al.columns else 0
+        r_cnt = len(df_al[df_al.get("Total F", 0) > df_al.get("Total P", 0)])
 
         ws_bi.write("A1", "Métrica", f_cab_e)
         ws_bi.write("B1", "Quantidade", f_cab_c)
@@ -237,7 +261,16 @@ def gerar_excel_planilha_frequencia(
         dias_bi = [
             c
             for c in df_grid.columns
-            if c not in ["Ordem", "Aluno", "Turma", "Total P", "Total F"]
+            if c
+            not in [
+                "Ordem",
+                "Aluno",
+                "Turma",
+                "Total P",
+                "Total F",
+                "Total J",
+                "% Presença",
+            ]
         ]
         ws_bi.write(10, 0, "Data Aula", f_cab_e)
         ws_bi.write(10, 1, "Presentes", f_cab_c)
@@ -304,17 +337,20 @@ def gerar_pdf_auditoria_core(falhas, contagem_falhas, turma_aud):
 
     # Base64 para as imagens não quebrarem no PDF
     from utils.identidade import get_config as _gcfg_pdf, get_logo_data_url as _gld_pdf
+
     _pcfg = _gcfg_pdf()
     logo_imbra = _gld_pdf(_pcfg.get("logo_principal", "logo-imbra.png"))
-    logo_sec   = _gld_pdf(_pcfg.get("logo_secundaria", "logo-secretaria.png"))
+    logo_sec = _gld_pdf(_pcfg.get("logo_secundaria", "logo-secretaria.png"))
 
     html_logo_imbra = (
         f'<img src="{logo_imbra}" style="width: 100px; height: auto;">'
-        if logo_imbra else "<b>IMBRA</b>"
+        if logo_imbra
+        else "<b>IMBRA</b>"
     )
     html_logo_sec = (
         f'<img src="{logo_sec}" style="width: 140px; height: auto;">'
-        if logo_sec else "<b>SECRETARIA SP</b>"
+        if logo_sec
+        else "<b>SECRETARIA SP</b>"
     )
 
     data_hoje = datetime.date.today().strftime("%d/%m/%Y")
@@ -358,8 +394,8 @@ def gerar_pdf_auditoria_core(falhas, contagem_falhas, turma_aud):
             <tr>
                 <td style="width: 25%; text-align: left; vertical-align: middle;">{html_logo_sec}</td>
                 <td style="width: 50%; text-align: center; vertical-align: middle;">
-                    <h1>{_pcfg.get("nome_organizacao","INSTITUTO MUDA BRASIL").upper()}</h1>
-                    <h2>{_pcfg.get("titulo_projeto","PROJETO ESPORTE E SAÚDE NA COMUNIDADE")}</h2>
+                    <h1>{_pcfg.get("nome_organizacao", "INSTITUTO MUDA BRASIL").upper()}</h1>
+                    <h2>{_pcfg.get("titulo_projeto", "PROJETO ESPORTE E SAÚDE NA COMUNIDADE")}</h2>
                 </td>
                 <td style="width: 25%; text-align: right; vertical-align: middle;">{html_logo_imbra}</td>
             </tr>
@@ -424,6 +460,7 @@ def gerar_word_prestacao_contas(
     p_sec = c_sec.paragraphs[0]
     p_sec.alignment = WD_ALIGN_PARAGRAPH.LEFT
     from utils.identidade import get_config as _gcfg_word
+
     _wcfg = _gcfg_word()
     _wlogo_s = _wcfg.get("logo_secundaria", "logo-secretaria.png")
     _wlogo_p = _wcfg.get("logo_principal", "logo-imbra.png")
@@ -432,11 +469,15 @@ def gerar_word_prestacao_contas(
 
     p_txt = c_txt.paragraphs[0]
     p_txt.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    run_t1 = p_txt.add_run(f'{_wcfg.get("nome_organizacao","INSTITUTO MUDA BRASIL").upper()}\n')
+    run_t1 = p_txt.add_run(
+        f"{_wcfg.get('nome_organizacao', 'INSTITUTO MUDA BRASIL').upper()}\n"
+    )
     run_t1.bold = True
     run_t1.font.size = Pt(14)
     run_t1.font.color.rgb = RGBColor(10, 37, 64)
-    run_t2 = p_txt.add_run(f'PROJETO: {_wcfg.get("titulo_projeto","ESPORTE E SAÚDE NA COMUNIDADE - FASE 2")}')
+    run_t2 = p_txt.add_run(
+        f"PROJETO: {_wcfg.get('titulo_projeto', 'ESPORTE E SAÚDE NA COMUNIDADE - FASE 2')}"
+    )
     run_t2.bold = True
     run_t2.font.size = Pt(10)
     run_t2.font.color.rgb = RGBColor(100, 116, 139)
@@ -561,15 +602,18 @@ def tela_relatorio():
         unsafe_allow_html=True,
     )
 
-    tab_f, tab_a, tab_w = st.tabs(
+    tab_f, tab_id, tab_a, tab_w = st.tabs(
         [
             "📊 Planilha de Frequência",
+            "🪪 Relatório Cara-Crachá",
             "🔎 Auditoria de Cadastros",
             "🏆 Prestação de Conta Pedagógica",
         ]
     )
 
-    # --- ABA 1: FREQUÊNCIA ---
+    # ==============================================================================
+    # --- ABA 1: FREQUÊNCIA (MOTOR ANTI-FURO IMPLEMENTADO) ---
+    # ==============================================================================
     with tab_f:
         c1, c2, c3 = st.columns([1, 1, 2], vertical_alignment="bottom")
         d_i = c1.date_input(
@@ -590,102 +634,124 @@ def tela_relatorio():
             type="primary",
             use_container_width=True,
         ):
-            with st.spinner("Analisando tendências e limpando ruídos..."):
-                df_raw = get_relatorio_periodo(
+            with st.spinner(
+                "Analisando tendências, cruzando diários e resolvendo lacunas (Anti-Furo)..."
+            ):
+                # O motor inteligente do database.py agora faz o trabalho sujo!
+                df_matriz = get_relatorio_periodo(
                     d_i, d_f, "" if t_sel == "Todas as Turmas" else t_sel
                 )
-                if df_raw.empty:
-                    st.warning("Sem dados encontrados no período.")
+
+                if df_matriz.empty:
+                    st.warning(
+                        "⚠️ Não foram encontradas aulas no Diário para este período."
+                    )
                     return
 
-                df_p = df_raw.pivot_table(
-                    index=["nome", "turma"],
-                    columns=pd.to_datetime(df_raw["data_aula"]).dt.strftime("%d/%m"),
-                    values="status",
-                    aggfunc="first",
-                ).fillna("-")
-                cols_vazias = [
-                    c for c in df_p.columns if (df_p[c] == "PRESENTE").sum() == 0
-                ]
-                df_p = df_p.drop(columns=cols_vazias)
+                # Renomear colunas para manter a compatibilidade com a exportação Excel
+                if "Nome" in df_matriz.columns:
+                    df_matriz.rename(columns={"Nome": "Aluno"}, inplace=True)
 
-                if df_p.empty:
-                    st.error("⚠️ Sem presenças úteis no período.")
-                    return
+                # Inserir a coluna "Ordem"
+                df_matriz.insert(0, "Ordem", range(1, 1 + len(df_matriz)))
 
-                df_p = df_p.replace({"PRESENTE": "P", "FALTA": "F"}).reset_index()
-                df_p.rename(columns={"nome": "Aluno", "turma": "Turma"}, inplace=True)
-                df_p["Total P"] = (df_p == "P").sum(axis=1)
-                df_p["Total F"] = (df_p == "F").sum(axis=1)
-                df_p.insert(0, "Ordem", range(1, 1 + len(df_p)))
-
+                # Encontrar quais são as colunas de data reais
                 cols_data_reais = [
                     c
-                    for c in df_p.columns
-                    if c not in ["Ordem", "Aluno", "Turma", "Total P", "Total F"]
+                    for c in df_matriz.columns
+                    if c
+                    not in [
+                        "Ordem",
+                        "Aluno",
+                        "Turma",
+                        "Total P",
+                        "Total F",
+                        "Total J",
+                        "% Presença",
+                    ]
                 ]
                 n_aulas = len(cols_data_reais)
-                tp_geral = df_p["Total P"].sum()
 
+                # Variáveis Globais de Soma
+                tp_geral = int(df_matriz["Total P"].sum())
+                tf_geral = int(df_matriz["Total F"].sum())
+                tj_geral = int(df_matriz.get("Total J", pd.Series(dtype=int)).sum())
+
+                # Criar a linha de Totalizador no final
                 tot_d = {
                     "Ordem": "-",
                     "Aluno": "TOTAL DE PRESENÇAS DIÁRIAS",
                     "Turma": "-",
                 }
-                for c in df_p.columns:
-                    if c not in tot_d:
-                        tot_d[c] = (
-                            (df_p[c] == "P").sum()
-                            if c not in ["Total P", "Total F"]
-                            else df_p[c].sum()
-                        )
 
-                df_final = pd.concat([pd.DataFrame([tot_d]), df_p], ignore_index=True)
+                for c in df_matriz.columns:
+                    if c not in tot_d:
+                        if c in cols_data_reais:
+                            tot_d[c] = (df_matriz[c] == "P").sum()
+                        elif c == "Total P":
+                            tot_d[c] = tp_geral
+                        elif c == "Total F":
+                            tot_d[c] = tf_geral
+                        elif c == "Total J":
+                            tot_d[c] = tj_geral
+                        else:
+                            tot_d[c] = "-"
+
+                df_final = pd.concat(
+                    [pd.DataFrame([tot_d]), df_matriz], ignore_index=True
+                )
                 periodo_formatado = (
                     f"{d_i.strftime('%d/%m/%Y')} a {d_f.strftime('%d/%m/%Y')}"
                 )
+
+                # Gerar arquivo Excel seguro
                 excel = gerar_excel_planilha_frequencia(
                     df_final,
                     t_sel,
                     periodo_formatado,
                     "logo-imbra.png",
                     "logo-secretaria.png",
-                    len(df_p),
+                    len(df_matriz),
                     tp_geral,
                     n_aulas,
                 )
 
                 st.success(
-                    f"✅ Sucesso! {n_aulas} aulas úteis detectadas no período de {periodo_formatado}."
+                    f"✅ Sucesso! {n_aulas} aulas úteis cruzadas de {periodo_formatado}."
                 )
+
                 st.download_button(
                     "📥 BAIXAR PLANILHA DE FREQUÊNCIA (EXCEL)",
                     excel,
-                    f"Relatorio_{t_sel}_{d_i.strftime('%d_%m_%Y')}.xlsx",
+                    f"Relatorio_AntiFuro_{t_sel}_{d_i.strftime('%d_%m_%Y')}.xlsx",
                     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                     use_container_width=True,
                     type="primary",
                 )
 
+                # --- RENDERIZAÇÃO VISUAL: DASHBOARD E TABELA ---
                 st.markdown("### 📊 Dashboard Analítico")
-                ck1, ck2 = st.columns(2)
+                ck1, ck2, ck3 = st.columns(3)
                 ck1.metric("Aulas Realizadas", n_aulas)
                 ck2.metric("Total Presenças", tp_geral)
+                ck3.metric("Total Faltas / Justif.", f"{tf_geral} / {tj_geral}")
+
                 cg1, cg2 = st.columns(2)
                 cg1.plotly_chart(
                     px.pie(
-                        names=["Presenças", "Faltas"],
-                        values=[tp_geral, df_p["Total F"].sum()],
-                        title="Assiduidade",
-                        color_discrete_sequence=["#10B981", "#EF4444"],
+                        names=["Presenças", "Faltas", "Justificadas"],
+                        values=[tp_geral, tf_geral, tj_geral],
+                        title="Assiduidade Global",
+                        color_discrete_sequence=["#10B981", "#EF4444", "#F59E0B"],
                     ),
                     use_container_width=True,
                 )
-                r_st = len(df_p[df_p["Total F"] > df_p["Total P"]])
+
+                r_st = len(df_matriz[df_matriz["Total F"] > df_matriz["Total P"]])
                 cg2.plotly_chart(
                     px.pie(
                         names=["Regulares", "Em Risco"],
-                        values=[len(df_p) - r_st, r_st],
+                        values=[len(df_matriz) - r_st, r_st],
                         title="Saúde da Turma",
                         color_discrete_sequence=["#3B82F6", "#F59E0B"],
                     ),
@@ -693,13 +759,31 @@ def tela_relatorio():
                 )
 
                 st.markdown("#### 📅 Planilha de Frequência Detalhada")
-                df_st = df_final.style.set_properties(
+
+                # Colorir os P, F e J visualmente no Streamlit
+                def colorir_status(val):
+                    if val == "P":
+                        return "color: #10B981; font-weight: bold; background-color: #D1FAE5;"
+                    if val == "F":
+                        return "color: #EF4444; font-weight: bold; background-color: #FEE2E2;"
+                    if val == "J":
+                        return "color: #F59E0B; font-weight: bold; background-color: #FEF3C7;"
+                    return ""
+
+                df_st = df_final.style.applymap(colorir_status).set_properties(
                     subset=[c for c in df_final.columns if c not in ["Aluno", "Turma"]],
                     **{"text-align": "center"},
                 )
                 st.dataframe(df_st, use_container_width=True, hide_index=True)
+    # ==============================================================================
+    # --- ABA 1.5: RELATÓRIO CARA-CRACHÁ ---
+    # ==============================================================================
+    with tab_id:
+        renderizar_aba_caracracha()
 
+    # ==============================================================================
     # --- ABA 2: AUDITORIA COM PDF NATIVO E GRID INTERATIVO ---
+    # ==============================================================================
     with tab_a:
         st.markdown("### 🔎 Auditoria de Cadastros e Documentos")
         st.write(
@@ -712,7 +796,14 @@ def tela_relatorio():
                 c_aud1, _ = st.columns(2)
                 turma_aud = c_aud1.selectbox(
                     "Turma para Auditoria",
-                    ["Todas"] + sorted([t for t in df_aud["turma"].unique().tolist() if isinstance(t, str)]),
+                    ["Todas"]
+                    + sorted(
+                        [
+                            t
+                            for t in df_aud["turma"].unique().tolist()
+                            if isinstance(t, str)
+                        ]
+                    ),
                 )
                 if turma_aud != "Todas":
                     df_aud = df_aud[df_aud["turma"] == turma_aud]
@@ -848,7 +939,9 @@ def tela_relatorio():
                         "🎉 Todos os alunos desta turma possuem documentos e cadastros 100% completos!"
                     )
 
+    # ==============================================================================
     # --- ABA 3: PRESTAÇÃO PEDAGÓGICA (MOTOR NATIVO .DOCX) ---
+    # ==============================================================================
     with tab_w:
         st.markdown("### 🏆 Prestação de Conta Pedagógica")
         st.info(
@@ -914,14 +1007,28 @@ def tela_relatorio():
 
                 total_alunos_w = len(df_alunos_w) if not df_alunos_w.empty else 0
                 df_freq_w = get_relatorio_periodo(data_ini_w, data_fim_w, turma_query)
-                total_aulas_w = (
-                    df_freq_w["data_aula"].nunique() if not df_freq_w.empty else 0
-                )
+
+                # A nova função já nos dá as aulas úteis perfeitamente no DataFrame
+                if not df_freq_w.empty:
+                    cols_data = [
+                        c
+                        for c in df_freq_w.columns
+                        if c
+                        not in [
+                            "Nome",
+                            "Turma",
+                            "Total P",
+                            "Total F",
+                            "Total J",
+                            "% Presença",
+                        ]
+                    ]
+                    total_aulas_w = len(cols_data)
+                else:
+                    total_aulas_w = 0
 
                 if not df_freq_w.empty and total_aulas_w > 0:
-                    presencas_totais_w = len(
-                        df_freq_w[df_freq_w["status"] == "PRESENTE"]
-                    )
+                    presencas_totais_w = df_freq_w["Total P"].sum()
                     possiveis = total_alunos_w * total_aulas_w
                     assiduidade_w = (
                         (presencas_totais_w / possiveis * 100) if possiveis > 0 else 0.0
@@ -991,6 +1098,6 @@ def tela_relatorio():
                     )
 
     st.markdown(
-        "<br><p style='text-align:center; color:#94a3b8; font-size:10px;'>Moveright™ Gestão Inteligente - Projeto Esporte e Saúde Community Phase 2 - v8.33 PRIMEMAX</p>",
+        "<br><p style='text-align:center; color:#94a3b8; font-size:10px;'>Moveright™ Gestão Inteligente - Projeto Esporte e Saúde Community Phase 2 - v8.40 PRIMEMAX</p>",
         unsafe_allow_html=True,
     )
