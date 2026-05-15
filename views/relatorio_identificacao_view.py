@@ -1,6 +1,6 @@
 # ==============================================================================
 # 📄 Arquivo: views/relatorio_identificacao_view.py
-# 🏷️ VERSÃO: 1.1 (Correções: filtro turma, PDF, datetime)
+# 🏷️ VERSÃO: 1.2 (Ordenação clicável no grid + PDF segue última ordenação)
 # ==============================================================================
 
 import streamlit as st
@@ -16,6 +16,55 @@ except ImportError:
     XHTML_DISPONIVEL = False
 
 
+_JS_SORT = """
+<script>
+(function () {
+  var _dir = {};   // colIdx -> 'asc'|'desc'
+
+  function updateArrows(ths, activeIdx, asc) {
+    ths.forEach(function (th, i) {
+      var txt = th.textContent.replace(/ [▲▼]$/, '').trimEnd();
+      th.textContent = txt + (i === activeIdx ? (asc ? ' ▲' : ' ▼') : '');
+    });
+  }
+
+  function sortTable(idx) {
+    var table  = document.getElementById('cc-table');
+    var tbody  = table.querySelector('tbody');
+    var ths    = Array.from(table.querySelectorAll('thead th'));
+    var rows   = Array.from(tbody.querySelectorAll('tr'));
+
+    var asc = (_dir[idx] !== 'asc');
+    _dir[idx] = asc ? 'asc' : 'desc';
+
+    rows.sort(function (a, b) {
+      var av = (a.cells[idx] ? a.cells[idx].textContent.trim() : '');
+      var bv = (b.cells[idx] ? b.cells[idx].textContent.trim() : '');
+      // Tenta comparação numérica/data primeiro
+      var an = parseFloat(av.replace(/[^0-9.]/g, ''));
+      var bn = parseFloat(bv.replace(/[^0-9.]/g, ''));
+      if (!isNaN(an) && !isNaN(bn)) {
+        return asc ? an - bn : bn - an;
+      }
+      return asc ? av.localeCompare(bv, 'pt-BR') : bv.localeCompare(av, 'pt-BR');
+    });
+    rows.forEach(function (r) { tbody.appendChild(r); });
+    updateArrows(ths, idx, asc);
+  }
+
+  document.addEventListener('DOMContentLoaded', function () {
+    var ths = document.querySelectorAll('#cc-table thead th');
+    ths.forEach(function (th, idx) {
+      th.style.cursor = 'pointer';
+      th.title = 'Clique para ordenar';
+      th.addEventListener('click', function () { sortTable(idx); });
+    });
+  });
+})();
+</script>
+"""
+
+
 def _css_base(page_size):
     return f"""
         @page {{ size: {page_size}; margin: 1cm; }}
@@ -24,6 +73,23 @@ def _css_base(page_size):
               text-transform: uppercase; font-size: 18px; }}
         p {{ text-align: center; color: #64748B; margin-top: 0;
              margin-bottom: 20px; font-size: 10px; }}
+        table {{ width: 100%; border-collapse: collapse; margin-top: 10px; }}
+        th, td {{ border: 1px solid #CBD5E1; padding: 8px; vertical-align: middle; }}
+        th {{ background-color: #0F172A; color: white; font-weight: bold;
+              font-size: 10px; user-select: none; }}
+        th:hover {{ background-color: #1E3A5F; }}
+        tr:nth-child(even) {{ background-color: #F8FAFC; }}
+        .footer {{ text-align: center; font-size: 8px; color: #94A3B8; margin-top: 20px; }}
+    """
+
+
+def _css_pdf(page_size):
+    return f"""
+        @page {{ size: {page_size}; margin: 1cm; }}
+        body {{ font-family: Helvetica, Arial, sans-serif; font-size: 11px; color: #1E293B; }}
+        h2 {{ text-align: center; color: #0F172A; margin-bottom: 5px;
+              text-transform: uppercase; font-size: 18px; }}
+        p {{ text-align: center; color: #64748B; margin-top: 0; margin-bottom: 20px; font-size: 10px; }}
         table {{ width: 100%; border-collapse: collapse; margin-top: 10px; }}
         th, td {{ border: 1px solid #CBD5E1; padding: 8px; vertical-align: middle; }}
         th {{ background-color: #0F172A; color: white; font-weight: bold; font-size: 10px; }}
@@ -44,87 +110,94 @@ def _formatar_valor(row, c):
     return val
 
 
-def gerar_html_preview(df, campos_sel, opcoes_campos, orientacao, turma_sel):
-    """HTML para exibição no browser — inclui imagens externas."""
-    page_size = "A4 portrait" if "Retrato" in orientacao else "A4 landscape"
-
-    th_html = ("<th style='width:60px;text-align:center;'>FOTO</th>"
-               "<th>NOME DO ALUNO</th><th>TURMA</th>")
+def _cabecalhos_html(campos_sel, opcoes_campos):
+    th = ("<th style='width:60px;text-align:center;'>FOTO</th>"
+          "<th>NOME DO ALUNO</th><th>TURMA</th>")
     for c in campos_sel:
-        th_html += f"<th>{opcoes_campos[c].upper()}</th>"
-
-    tr_html = ""
-    for _, row in df.iterrows():
-        foto_url = row.get("url_foto") or ""
-        if pd.isna(foto_url) or not str(foto_url).strip():
-            foto_cell = ("<div style='width:45px;height:45px;background:#E2E8F0;"
-                         "text-align:center;line-height:45px;border-radius:50%;"
-                         "font-size:9px;color:#64748B;margin:0 auto;'>Sem Foto</div>")
-        else:
-            foto_cell = (f"<img src='{foto_url}' style='width:45px;height:45px;"
-                         "border-radius:50%;object-fit:cover;'>")
-
-        nome  = str(row.get("nome", "")).upper()
-        turma = str(row.get("turma", ""))
-        tds   = (f"<td style='text-align:center;'>{foto_cell}</td>"
-                 f"<td><b>{nome}</b></td><td>{turma}</td>")
-        for c in campos_sel:
-            tds += f"<td>{_formatar_valor(row, c)}</td>"
-        tr_html += f"<tr>{tds}</tr>"
-
-    data_hora = datetime.datetime.now().strftime("%d/%m/%Y às %H:%M")
-    return f"""<html><head><meta charset="UTF-8">
-    <style>{_css_base(page_size)}</style></head>
-    <body>
-        <h2>Relatório de Identificação (Cara-Crachá)</h2>
-        <p>Escopo: <b>{turma_sel}</b> | Gerado em: {data_hora}</p>
-        <table><thead><tr>{th_html}</tr></thead><tbody>{tr_html}</tbody></table>
-        <div class="footer">Sistema Esporte e Saúde — Gestão Inteligente Moveright™</div>
-    </body></html>"""
+        th += f"<th>{opcoes_campos[c].upper()}</th>"
+    return th
 
 
-def gerar_html_pdf(df, campos_sel, opcoes_campos, orientacao, turma_sel):
-    """HTML para xhtml2pdf — sem imagens externas (placeholder textual)."""
-    page_size = "A4 portrait" if "Retrato" in orientacao else "A4 landscape"
-
-    th_html = ("<th style='width:50px;text-align:center;'>FOTO</th>"
-               "<th>NOME DO ALUNO</th><th>TURMA</th>")
-    for c in campos_sel:
-        th_html += f"<th>{opcoes_campos[c].upper()}</th>"
-
-    tr_html = ""
+def _linhas_html(df, campos_sel, opcoes_campos, com_fotos=True):
+    tr = ""
     for _, row in df.iterrows():
         foto_url = row.get("url_foto") or ""
         tem_foto = bool(foto_url and not pd.isna(foto_url) and str(foto_url).strip())
-        foto_cell = ("📷" if tem_foto else
-                     "<span style='color:#94A3B8;font-size:8px;'>Sem Foto</span>")
+
+        if com_fotos:
+            foto_cell = (
+                f"<img src='{foto_url}' style='width:45px;height:45px;"
+                "border-radius:50%;object-fit:cover;'>"
+                if tem_foto else
+                "<div style='width:45px;height:45px;background:#E2E8F0;"
+                "text-align:center;line-height:45px;border-radius:50%;"
+                "font-size:9px;color:#64748B;margin:0 auto;'>Sem Foto</div>"
+            )
+        else:
+            foto_cell = "📷" if tem_foto else "<span style='color:#94A3B8;font-size:8px;'>Sem Foto</span>"
 
         nome  = str(row.get("nome", "")).upper()
         turma = str(row.get("turma", ""))
-        tds   = (f"<td style='text-align:center;'>{foto_cell}</td>"
-                 f"<td><b>{nome}</b></td><td>{turma}</td>")
+        tds = (f"<td style='text-align:center;'>{foto_cell}</td>"
+               f"<td><b>{nome}</b></td><td>{turma}</td>")
         for c in campos_sel:
             tds += f"<td>{_formatar_valor(row, c)}</td>"
-        tr_html += f"<tr>{tds}</tr>"
+        tr += f"<tr>{tds}</tr>"
+    return tr
 
+
+def gerar_html_preview(df, campos_sel, opcoes_campos, orientacao, turma_sel):
+    page_size = "A4 portrait" if "Retrato" in orientacao else "A4 landscape"
     data_hora = datetime.datetime.now().strftime("%d/%m/%Y às %H:%M")
+    th = _cabecalhos_html(campos_sel, opcoes_campos)
+    tr = _linhas_html(df, campos_sel, opcoes_campos, com_fotos=True)
+    return f"""<!DOCTYPE html><html><head><meta charset="UTF-8">
+<style>{_css_base(page_size)}</style>
+{_JS_SORT}
+</head><body>
+<h2>Relatório de Identificação (Cara-Crachá)</h2>
+<p>Escopo: <b>{turma_sel}</b> | Gerado em: {data_hora}</p>
+<table id="cc-table">
+  <thead><tr>{th}</tr></thead>
+  <tbody>{tr}</tbody>
+</table>
+<div class="footer">Sistema Esporte e Saúde — Gestão Inteligente Moveright™</div>
+</body></html>"""
+
+
+def gerar_html_pdf(df, campos_sel, opcoes_campos, orientacao, turma_sel, sort_col, sort_asc):
+    """HTML para xhtml2pdf — sem imagens externas, com ordenação aplicada."""
+    df_sorted = df.sort_values(
+        by=sort_col,
+        ascending=sort_asc,
+        key=lambda s: s.astype(str).str.lower(),
+        na_position="last",
+    )
+    page_size = "A4 portrait" if "Retrato" in orientacao else "A4 landscape"
+    data_hora = datetime.datetime.now().strftime("%d/%m/%Y às %H:%M")
+    label_dir = "crescente ▲" if sort_asc else "decrescente ▼"
+    th = _cabecalhos_html(campos_sel, opcoes_campos)
+    tr = _linhas_html(df_sorted, campos_sel, opcoes_campos, com_fotos=False)
     return f"""<html><head><meta charset="UTF-8">
-    <style>{_css_base(page_size)}</style></head>
-    <body>
-        <h2>Relatório de Identificação (Cara-Crachá)</h2>
-        <p>Escopo: <b>{turma_sel}</b> | Gerado em: {data_hora}</p>
-        <table><thead><tr>{th_html}</tr></thead><tbody>{tr_html}</tbody></table>
-        <div class="footer">Sistema Esporte e Saúde — Gestão Inteligente Moveright™</div>
-    </body></html>"""
+<style>{_css_pdf(page_size)}</style>
+</head><body>
+<h2>Relatório de Identificação (Cara-Crachá)</h2>
+<p>Escopo: <b>{turma_sel}</b> | Ordenado por: <b>{sort_col}</b> ({label_dir}) | {data_hora}</p>
+<table>
+  <thead><tr>{th}</tr></thead>
+  <tbody>{tr}</tbody>
+</table>
+<div class="footer">Sistema Esporte e Saúde — Gestão Inteligente Moveright™</div>
+</body></html>"""
 
 
-def _gerar_pdf(html_pdf):
-    result = io.BytesIO()
+def _gerar_pdf(html):
+    buf = io.BytesIO()
     try:
-        status = pisa.pisaDocument(io.StringIO(html_pdf), result)
+        status = pisa.pisaDocument(io.StringIO(html), buf)
         if status.err:
             return None, f"Erro na geração do PDF (código {status.err})."
-        return result.getvalue(), None
+        return buf.getvalue(), None
     except Exception as e:
         return None, str(e)
 
@@ -134,8 +207,9 @@ def renderizar_aba_caracracha():
         "<h4 style='color: #0A2540; font-weight: 800;'>🪪 Relatório Cara-Crachá (Identificação)</h4>",
         unsafe_allow_html=True,
     )
-    st.caption("Relatório visual com foto dos alunos. Configure os campos, gere o preview e baixe o PDF.")
+    st.caption("Relatório visual com foto dos alunos. Configure os campos, clique nos cabeçalhos para ordenar e baixe o PDF.")
 
+    # ── Configurações ─────────────────────────────────────────────────────────
     with st.container(border=True):
         c1, c2, c3 = st.columns([2, 3, 2], vertical_alignment="top")
 
@@ -174,9 +248,7 @@ def renderizar_aba_caracracha():
 
     if st.button("👁️ GERAR PREVIEW DO RELATÓRIO", type="primary", use_container_width=True):
         with st.spinner("Buscando alunos e montando o relatório..."):
-            # Busca todos os alunos ativos e filtra por turma DEPOIS
             df_todos = buscar_alunos_geral(incluir_inativos=False)
-
             if df_todos.empty:
                 st.warning("⚠️ Nenhum aluno encontrado.")
                 return
@@ -190,44 +262,91 @@ def renderizar_aba_caracracha():
                 st.warning(f"⚠️ Nenhum aluno encontrado para a turma: **{turma_sel}**.")
                 return
 
-            df_alunos = df_alunos.sort_values(by="nome")
+            df_alunos = df_alunos.sort_values(by="nome").reset_index(drop=True)
 
-            st.session_state["html_caracracha_preview"] = gerar_html_preview(
-                df_alunos, campos_selecionados, opcoes_campos, orientacao, turma_sel
-            )
-            st.session_state["html_caracracha_pdf"] = gerar_html_pdf(
-                df_alunos, campos_selecionados, opcoes_campos, orientacao, turma_sel
-            )
-            st.session_state["turma_caracracha"] = turma_sel
-            st.session_state["total_caracracha"] = len(df_alunos)
+            st.session_state["cc_df"]       = df_alunos
+            st.session_state["cc_turma_sel"]= turma_sel
+            st.session_state["cc_campos"]   = campos_selecionados
+            st.session_state["cc_orient"]   = orientacao
+            st.session_state["cc_sort_col"] = "nome"
+            st.session_state["cc_sort_asc"] = True
 
-    # --- SEÇÃO DE PREVIEW E IMPRESSÃO ---
-    if "html_caracracha_preview" in st.session_state:
-        st.markdown("<hr style='margin-top:10px;margin-bottom:20px;'/>", unsafe_allow_html=True)
+    # ── Preview + ordenação ───────────────────────────────────────────────────
+    if "cc_df" not in st.session_state:
+        return
 
-        col_prev, col_btn = st.columns([3, 1], vertical_alignment="bottom")
-        col_prev.markdown(
-            f"#### 👀 Preview — {st.session_state.get('total_caracracha', '?')} aluno(s) "
-            f"| {st.session_state.get('turma_caracracha', '')}"
+    df_alunos      = st.session_state["cc_df"]
+    turma_label    = st.session_state["cc_turma_sel"]
+    campos_ativos  = st.session_state["cc_campos"]
+    orient         = st.session_state["cc_orient"]
+
+    st.markdown("<hr style='margin-top:10px;margin-bottom:14px;'/>", unsafe_allow_html=True)
+
+    # Controles de ordenação para o PDF
+    cols_disponiveis = {"nome": "Nome do Aluno", "turma": "Turma"}
+    for c in campos_ativos:
+        cols_disponiveis[c] = opcoes_campos[c]
+
+    col_ord1, col_ord2, col_pdf = st.columns([2, 2, 2], vertical_alignment="bottom")
+
+    sort_col = col_ord1.selectbox(
+        "📋 Ordenar PDF por",
+        options=list(cols_disponiveis.keys()),
+        format_func=lambda x: cols_disponiveis[x],
+        index=list(cols_disponiveis.keys()).index(
+            st.session_state.get("cc_sort_col", "nome")
+        ),
+        key="cc_sort_col_sel",
+    )
+    sort_dir = col_ord2.radio(
+        "Direção",
+        ["Crescente ▲", "Decrescente ▼"],
+        horizontal=True,
+        index=0 if st.session_state.get("cc_sort_asc", True) else 1,
+        key="cc_sort_dir_sel",
+    )
+    sort_asc = "Crescente" in sort_dir
+
+    # Persiste a escolha de ordenação
+    st.session_state["cc_sort_col"] = sort_col
+    st.session_state["cc_sort_asc"] = sort_asc
+
+    # Botão PDF
+    if XHTML_DISPONIVEL:
+        html_pdf = gerar_html_pdf(
+            df_alunos, campos_ativos, opcoes_campos, orient, turma_label, sort_col, sort_asc
         )
-
-        if XHTML_DISPONIVEL:
-            pdf_bytes, pdf_erro = _gerar_pdf(st.session_state["html_caracracha_pdf"])
-            if pdf_bytes:
-                col_btn.download_button(
-                    label="🖨️ BAIXAR PDF",
-                    data=pdf_bytes,
-                    file_name=f"CaraCracha_{st.session_state['turma_caracracha']}.pdf",
-                    mime="application/pdf",
-                    type="primary",
-                    use_container_width=True,
-                )
-            else:
-                col_btn.error(f"Erro PDF: {pdf_erro}")
+        pdf_bytes, pdf_erro = _gerar_pdf(html_pdf)
+        if pdf_bytes:
+            col_pdf.download_button(
+                label="🖨️ BAIXAR PDF",
+                data=pdf_bytes,
+                file_name=f"CaraCracha_{turma_label}.pdf",
+                mime="application/pdf",
+                type="primary",
+                use_container_width=True,
+            )
         else:
-            col_btn.error("Biblioteca xhtml2pdf não instalada.")
+            col_pdf.error(f"Erro PDF: {pdf_erro}")
+    else:
+        col_pdf.error("xhtml2pdf não instalado.")
 
-        st.iframe(
-            st.session_state["html_caracracha_preview"],
-            height=620,
-        )
+    st.caption(
+        f"💡 **Preview:** clique nos cabeçalhos da tabela para ordenar. "
+        f"**PDF:** use os controles acima — ordenação atual: "
+        f"**{cols_disponiveis[sort_col]}** {'▲' if sort_asc else '▼'}"
+    )
+
+    # Gera o HTML de preview com a ordenação atual aplicada de antemão no df
+    df_preview = df_alunos.sort_values(
+        by=sort_col,
+        ascending=sort_asc,
+        key=lambda s: s.astype(str).str.lower(),
+        na_position="last",
+    )
+    html_preview = gerar_html_preview(df_preview, campos_ativos, opcoes_campos, orient, turma_label)
+
+    st.markdown(
+        f"#### 👀 Preview — {len(df_alunos)} aluno(s) | {turma_label}",
+    )
+    st.iframe(html_preview, height=640)
