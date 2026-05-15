@@ -7,6 +7,9 @@ import streamlit as st
 import pandas as pd
 import datetime
 import io
+import base64
+import requests
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from database import buscar_alunos_geral, get_todas_turmas
 
 try:
@@ -14,6 +17,41 @@ try:
     XHTML_DISPONIVEL = True
 except ImportError:
     XHTML_DISPONIVEL = False
+
+
+def _url_para_base64(url, timeout=4):
+    """Baixa uma imagem e retorna data URI base64, ou None se falhar."""
+    try:
+        r = requests.get(url, timeout=timeout)
+        if r.status_code == 200:
+            mime = r.headers.get("Content-Type", "image/jpeg").split(";")[0]
+            b64 = base64.b64encode(r.content).decode("utf-8")
+            return f"data:{mime};base64,{b64}"
+    except Exception:
+        pass
+    return None
+
+
+def _prefetch_fotos(df, max_workers=12):
+    """
+    Retorna dict {url: data_uri} para todas as fotos do DataFrame.
+    Usa ThreadPoolExecutor para downloads paralelos.
+    """
+    urls = [
+        str(u) for u in df["url_foto"].dropna().unique()
+        if str(u).strip() and str(u) != "nan"
+    ]
+    resultado = {}
+    if not urls:
+        return resultado
+    with ThreadPoolExecutor(max_workers=max_workers) as ex:
+        fut_map = {ex.submit(_url_para_base64, u): u for u in urls}
+        for fut in as_completed(fut_map):
+            url = fut_map[fut]
+            data_uri = fut.result()
+            if data_uri:
+                resultado[url] = data_uri
+    return resultado
 
 
 _JS_SORT = """
@@ -118,23 +156,43 @@ def _cabecalhos_html(campos_sel, opcoes_campos):
     return th
 
 
-def _linhas_html(df, campos_sel, opcoes_campos, com_fotos=True):
+def _linhas_html(df, campos_sel, opcoes_campos, fotos_b64=None):
+    """
+    fotos_b64: dict {url: data_uri} para PDF.
+                None = usa URLs externas (preview no browser).
+    """
     tr = ""
     for _, row in df.iterrows():
-        foto_url = row.get("url_foto") or ""
-        tem_foto = bool(foto_url and not pd.isna(foto_url) and str(foto_url).strip())
+        foto_url = str(row.get("url_foto") or "").strip()
+        tem_foto = bool(foto_url and foto_url not in ("nan", "None"))
 
-        if com_fotos:
-            foto_cell = (
-                f"<img src='{foto_url}' style='width:45px;height:45px;"
-                "border-radius:50%;object-fit:cover;'>"
-                if tem_foto else
-                "<div style='width:45px;height:45px;background:#E2E8F0;"
-                "text-align:center;line-height:45px;border-radius:50%;"
-                "font-size:9px;color:#64748B;margin:0 auto;'>Sem Foto</div>"
-            )
+        if fotos_b64 is not None:
+            # Modo PDF: usa base64 quando disponível
+            data_uri = fotos_b64.get(foto_url) if tem_foto else None
+            if data_uri:
+                foto_cell = (
+                    f"<img src='{data_uri}' "
+                    "style='width:45px;height:45px;border-radius:50%;object-fit:cover;'>"
+                )
+            else:
+                foto_cell = (
+                    "<div style='width:38px;height:38px;background:#E2E8F0;"
+                    "text-align:center;line-height:38px;border-radius:50%;"
+                    "font-size:8px;color:#64748B;margin:0 auto;'>Sem<br>Foto</div>"
+                )
         else:
-            foto_cell = "📷" if tem_foto else "<span style='color:#94A3B8;font-size:8px;'>Sem Foto</span>"
+            # Modo preview: usa URL externa diretamente
+            if tem_foto:
+                foto_cell = (
+                    f"<img src='{foto_url}' style='width:45px;height:45px;"
+                    "border-radius:50%;object-fit:cover;'>"
+                )
+            else:
+                foto_cell = (
+                    "<div style='width:45px;height:45px;background:#E2E8F0;"
+                    "text-align:center;line-height:45px;border-radius:50%;"
+                    "font-size:9px;color:#64748B;margin:0 auto;'>Sem Foto</div>"
+                )
 
         nome  = str(row.get("nome", "")).upper()
         turma = str(row.get("turma", ""))
@@ -165,8 +223,8 @@ def gerar_html_preview(df, campos_sel, opcoes_campos, orientacao, turma_sel):
 </body></html>"""
 
 
-def gerar_html_pdf(df, campos_sel, opcoes_campos, orientacao, turma_sel, sort_col, sort_asc):
-    """HTML para xhtml2pdf — sem imagens externas, com ordenação aplicada."""
+def gerar_html_pdf(df, campos_sel, opcoes_campos, orientacao, turma_sel, sort_col, sort_asc, fotos_b64=None):
+    """HTML para xhtml2pdf — imagens base64 embutidas, com ordenação aplicada."""
     df_sorted = df.sort_values(
         by=sort_col,
         ascending=sort_asc,
@@ -177,7 +235,7 @@ def gerar_html_pdf(df, campos_sel, opcoes_campos, orientacao, turma_sel, sort_co
     data_hora = datetime.datetime.now().strftime("%d/%m/%Y às %H:%M")
     label_dir = "crescente ▲" if sort_asc else "decrescente ▼"
     th = _cabecalhos_html(campos_sel, opcoes_campos)
-    tr = _linhas_html(df_sorted, campos_sel, opcoes_campos, com_fotos=False)
+    tr = _linhas_html(df_sorted, campos_sel, opcoes_campos, fotos_b64=fotos_b64 or {})
     return f"""<html><head><meta charset="UTF-8">
 <style>{_css_pdf(page_size)}</style>
 </head><body>
@@ -247,7 +305,7 @@ def renderizar_aba_caracracha():
         )
 
     if st.button("👁️ GERAR PREVIEW DO RELATÓRIO", type="primary", use_container_width=True):
-        with st.spinner("Buscando alunos e montando o relatório..."):
+        with st.spinner("Buscando alunos e baixando fotos para o PDF..."):
             df_todos = buscar_alunos_geral(incluir_inativos=False)
             if df_todos.empty:
                 st.warning("⚠️ Nenhum aluno encontrado.")
@@ -264,12 +322,16 @@ def renderizar_aba_caracracha():
 
             df_alunos = df_alunos.sort_values(by="nome").reset_index(drop=True)
 
-            st.session_state["cc_df"]       = df_alunos
-            st.session_state["cc_turma_sel"]= turma_sel
-            st.session_state["cc_campos"]   = campos_selecionados
-            st.session_state["cc_orient"]   = orientacao
-            st.session_state["cc_sort_col"] = "nome"
-            st.session_state["cc_sort_asc"] = True
+            # Prefetch de fotos em paralelo para embutir no PDF
+            fotos_b64 = _prefetch_fotos(df_alunos)
+
+            st.session_state["cc_df"]        = df_alunos
+            st.session_state["cc_fotos_b64"] = fotos_b64
+            st.session_state["cc_turma_sel"] = turma_sel
+            st.session_state["cc_campos"]    = campos_selecionados
+            st.session_state["cc_orient"]    = orientacao
+            st.session_state["cc_sort_col"]  = "nome"
+            st.session_state["cc_sort_asc"]  = True
 
     # ── Preview + ordenação ───────────────────────────────────────────────────
     if "cc_df" not in st.session_state:
@@ -313,8 +375,10 @@ def renderizar_aba_caracracha():
 
     # Botão PDF
     if XHTML_DISPONIVEL:
+        fotos_b64 = st.session_state.get("cc_fotos_b64", {})
         html_pdf = gerar_html_pdf(
-            df_alunos, campos_ativos, opcoes_campos, orient, turma_label, sort_col, sort_asc
+            df_alunos, campos_ativos, opcoes_campos, orient, turma_label,
+            sort_col, sort_asc, fotos_b64=fotos_b64,
         )
         pdf_bytes, pdf_erro = _gerar_pdf(html_pdf)
         if pdf_bytes:
