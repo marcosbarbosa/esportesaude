@@ -494,6 +494,22 @@ def get_diarios_periodo(data_inicio, data_fim, turma=""):
         return pd.DataFrame()
 
 
+def get_diario_dia(data_aula, turma):
+    """Retorna o registro do diário de aulas para uma data e turma específicas, ou None."""
+    try:
+        res = (
+            supabase.from_("diario_aulas")
+            .select("*")
+            .eq("data_aula", str(data_aula))
+            .eq("turma", str(turma))
+            .limit(1)
+            .execute()
+        )
+        return res.data[0] if res.data else None
+    except Exception:
+        return None
+
+
 def get_midias_diario(diario_id):
     try:
         res = (
