@@ -280,7 +280,19 @@ def renderizar_aba_caracracha():
         "<h4 style='color: #0A2540; font-weight: 800;'>🪪 Relatório Cara-Crachá (Identificação)</h4>",
         unsafe_allow_html=True,
     )
-    st.caption("Relatório visual com foto dos alunos. Configure os campos, clique nos cabeçalhos para ordenar e baixe o PDF.")
+    st.caption("Configure os campos e gere o preview. Para imprimir, clique em 'Preparar PDF' — as fotos serão embutidas.")
+
+    opcoes_campos = {
+        "whatsapp":           "WhatsApp / Celular",
+        "data_nascimento":    "Data de Nascimento",
+        "cpf":                "CPF",
+        "rg":                 "RG",
+        "endereco":           "Endereço",
+        "bairro":             "Bairro",
+        "contato_emergencia": "Contato de Emergência",
+        "problemas_saude":    "Problemas de Saúde",
+        "medicamentos":       "Medicamentos",
+    }
 
     # ── Configurações ─────────────────────────────────────────────────────────
     with st.container(border=True):
@@ -291,141 +303,131 @@ def renderizar_aba_caracracha():
             ["Todas as Turmas"] + turmas["nome"].tolist()
             if not turmas.empty else ["Todas as Turmas"]
         )
-        turma_sel = c1.selectbox("Filtrar Turma", lista_turmas, key="cc_turma")
-
-        opcoes_campos = {
-            "whatsapp":           "WhatsApp / Celular",
-            "data_nascimento":    "Data de Nascimento",
-            "cpf":                "CPF",
-            "rg":                 "RG",
-            "endereco":           "Endereço",
-            "bairro":             "Bairro",
-            "contato_emergencia": "Contato de Emergência",
-            "problemas_saude":    "Problemas de Saúde",
-            "medicamentos":       "Medicamentos",
-        }
-
-        campos_selecionados = c2.multiselect(
+        turma_sel  = c1.selectbox("Filtrar Turma", lista_turmas, key="cc_turma")
+        campos_sel = c2.multiselect(
             "Campos Extras (Foto, Nome e Turma já fixos)",
             options=list(opcoes_campos.keys()),
             format_func=lambda x: opcoes_campos[x],
             default=["whatsapp", "data_nascimento"],
             help="Se escolher muitos campos, mude a Orientação para Paisagem.",
         )
-
         orientacao = c3.radio(
             "Orientação da Folha",
             ["Retrato (Vertical)", "Paisagem (Wide/Horizontal)"],
             key="cc_ori",
         )
 
+    # ── PASSO 1 — Gerar Preview (rápido, sem download de fotos) ───────────────
     if st.button("👁️ GERAR PREVIEW DO RELATÓRIO", type="primary", use_container_width=True):
-        with st.spinner("Buscando alunos e baixando fotos para o PDF..."):
+        with st.spinner("Buscando alunos..."):
             df_todos = buscar_alunos_geral(incluir_inativos=False)
             if df_todos.empty:
                 st.warning("⚠️ Nenhum aluno encontrado.")
                 return
 
-            if turma_sel != "Todas as Turmas":
-                df_alunos = df_todos[df_todos["turma"] == turma_sel].copy()
-            else:
-                df_alunos = df_todos.copy()
-
+            df_alunos = (
+                df_todos[df_todos["turma"] == turma_sel].copy()
+                if turma_sel != "Todas as Turmas" else df_todos.copy()
+            )
             if df_alunos.empty:
-                st.warning(f"⚠️ Nenhum aluno encontrado para a turma: **{turma_sel}**.")
+                st.warning(f"⚠️ Nenhum aluno para a turma: **{turma_sel}**.")
                 return
 
-            df_alunos = df_alunos.sort_values(by="nome").reset_index(drop=True)
+            df_alunos = df_alunos.sort_values("nome").reset_index(drop=True)
 
-            # Prefetch de fotos em paralelo para embutir no PDF
-            fotos_b64 = _prefetch_fotos(df_alunos)
+            # Salva estado — sem fotos (PDF ainda não preparado)
+            st.session_state.update({
+                "cc_df":        df_alunos,
+                "cc_turma_sel": turma_sel,
+                "cc_campos":    campos_sel,
+                "cc_orient":    orientacao,
+                "cc_sort_col":  "nome",
+                "cc_sort_asc":  True,
+                "cc_pdf_bytes": None,   # PDF será gerado no passo 2
+                "cc_fotos_b64": {},
+            })
 
-            st.session_state["cc_df"]        = df_alunos
-            st.session_state["cc_fotos_b64"] = fotos_b64
-            st.session_state["cc_turma_sel"] = turma_sel
-            st.session_state["cc_campos"]    = campos_selecionados
-            st.session_state["cc_orient"]    = orientacao
-            st.session_state["cc_sort_col"]  = "nome"
-            st.session_state["cc_sort_asc"]  = True
-
-    # ── Preview + ordenação ───────────────────────────────────────────────────
+    # ── Sem dados ainda ───────────────────────────────────────────────────────
     if "cc_df" not in st.session_state:
         return
 
-    df_alunos      = st.session_state["cc_df"]
-    turma_label    = st.session_state["cc_turma_sel"]
-    campos_ativos  = st.session_state["cc_campos"]
-    orient         = st.session_state["cc_orient"]
+    df_alunos     = st.session_state["cc_df"]
+    turma_label   = st.session_state["cc_turma_sel"]
+    campos_ativos = st.session_state["cc_campos"]
+    orient        = st.session_state["cc_orient"]
 
-    st.markdown("<hr style='margin-top:10px;margin-bottom:14px;'/>", unsafe_allow_html=True)
+    st.markdown("<hr style='margin-top:8px;margin-bottom:12px;'/>", unsafe_allow_html=True)
 
-    # Controles de ordenação para o PDF
-    cols_disponiveis = {"nome": "Nome do Aluno", "turma": "Turma"}
+    # ── Controles de ordenação ────────────────────────────────────────────────
+    cols_disp = {"nome": "Nome do Aluno", "turma": "Turma"}
     for c in campos_ativos:
-        cols_disponiveis[c] = opcoes_campos[c]
+        cols_disp[c] = opcoes_campos[c]
 
-    col_ord1, col_ord2, col_pdf = st.columns([2, 2, 2], vertical_alignment="bottom")
+    col_ord1, col_ord2, col_prep, col_dl = st.columns([2, 2, 2, 2], vertical_alignment="bottom")
 
     sort_col = col_ord1.selectbox(
-        "📋 Ordenar PDF por",
-        options=list(cols_disponiveis.keys()),
-        format_func=lambda x: cols_disponiveis[x],
-        index=list(cols_disponiveis.keys()).index(
-            st.session_state.get("cc_sort_col", "nome")
-        ),
+        "📋 Ordenar por",
+        options=list(cols_disp.keys()),
+        format_func=lambda x: cols_disp[x],
+        index=list(cols_disp.keys()).index(st.session_state.get("cc_sort_col", "nome")),
         key="cc_sort_col_sel",
     )
     sort_dir = col_ord2.radio(
-        "Direção",
-        ["Crescente ▲", "Decrescente ▼"],
+        "Direção", ["Crescente ▲", "Decrescente ▼"],
         horizontal=True,
         index=0 if st.session_state.get("cc_sort_asc", True) else 1,
         key="cc_sort_dir_sel",
     )
     sort_asc = "Crescente" in sort_dir
-
-    # Persiste a escolha de ordenação
     st.session_state["cc_sort_col"] = sort_col
     st.session_state["cc_sort_asc"] = sort_asc
 
-    # Botão PDF
-    if XHTML_DISPONIVEL:
-        fotos_b64 = st.session_state.get("cc_fotos_b64", {})
-        html_pdf = gerar_html_pdf(
-            df_alunos, campos_ativos, opcoes_campos, orient, turma_label,
-            sort_col, sort_asc, fotos_b64=fotos_b64,
-        )
-        pdf_bytes, pdf_erro = _gerar_pdf(html_pdf)
-        if pdf_bytes:
-            col_pdf.download_button(
-                label="🖨️ BAIXAR PDF",
-                data=pdf_bytes,
-                file_name=f"CaraCracha_{turma_label}.pdf",
-                mime="application/pdf",
-                type="primary",
-                use_container_width=True,
+    # ── PASSO 2 — Preparar PDF com fotos (download paralelo) ─────────────────
+    if col_prep.button("📥 Preparar PDF com fotos", use_container_width=True):
+        with st.spinner(f"Baixando fotos de {len(df_alunos)} aluno(s)..."):
+            fotos = _prefetch_fotos(df_alunos)
+            st.session_state["cc_fotos_b64"] = fotos
+
+        with st.spinner("Gerando PDF..."):
+            html_pdf = gerar_html_pdf(
+                df_alunos, campos_ativos, opcoes_campos, orient, turma_label,
+                sort_col, sort_asc, fotos_b64=fotos,
             )
-        else:
-            col_pdf.error(f"Erro PDF: {pdf_erro}")
+            pdf_bytes, pdf_erro = _gerar_pdf(html_pdf)
+            if pdf_bytes:
+                st.session_state["cc_pdf_bytes"] = pdf_bytes
+                st.session_state["cc_pdf_nome"]  = f"CaraCracha_{turma_label}.pdf"
+            else:
+                st.session_state["cc_pdf_bytes"] = None
+                st.error(f"Erro ao gerar PDF: {pdf_erro}")
+
+    # ── Botão de download (aparece quando PDF está pronto) ────────────────────
+    pdf_bytes = st.session_state.get("cc_pdf_bytes")
+    if pdf_bytes and XHTML_DISPONIVEL:
+        col_dl.download_button(
+            label="🖨️ BAIXAR PDF",
+            data=pdf_bytes,
+            file_name=st.session_state.get("cc_pdf_nome", "CaraCracha.pdf"),
+            mime="application/pdf",
+            type="primary",
+            use_container_width=True,
+        )
+    elif not XHTML_DISPONIVEL:
+        col_dl.error("xhtml2pdf não instalado.")
     else:
-        col_pdf.error("xhtml2pdf não instalado.")
+        col_dl.info("← Prepare o PDF primeiro")
 
     st.caption(
-        f"💡 **Preview:** clique nos cabeçalhos da tabela para ordenar. "
-        f"**PDF:** use os controles acima — ordenação atual: "
-        f"**{cols_disponiveis[sort_col]}** {'▲' if sort_asc else '▼'}"
+        f"💡 Clique nos **cabeçalhos** da tabela para reordenar o preview. "
+        f"Ordenação atual para PDF: **{cols_disp[sort_col]}** {'▲' if sort_asc else '▼'}"
     )
 
-    # Gera o HTML de preview com a ordenação atual aplicada de antemão no df
-    df_preview = df_alunos.sort_values(
-        by=sort_col,
-        ascending=sort_asc,
-        key=lambda s: s.astype(str).str.lower(),
-        na_position="last",
+    # ── Preview ───────────────────────────────────────────────────────────────
+    df_prev = df_alunos.sort_values(
+        by=sort_col, ascending=sort_asc,
+        key=lambda s: s.astype(str).str.lower(), na_position="last",
     )
-    html_preview = gerar_html_preview(df_preview, campos_ativos, opcoes_campos, orient, turma_label)
+    html_prev = gerar_html_preview(df_prev, campos_ativos, opcoes_campos, orient, turma_label)
 
-    st.markdown(
-        f"#### 👀 Preview — {len(df_alunos)} aluno(s) | {turma_label}",
-    )
-    st.iframe(html_preview, height=640)
+    st.markdown(f"#### 👀 Preview — {len(df_alunos)} aluno(s) | {turma_label}")
+    st.iframe(html_prev, height=640)
