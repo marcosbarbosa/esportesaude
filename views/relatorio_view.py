@@ -867,7 +867,7 @@ def tela_relatorio():
                                   "Total P", "Total F", "Total J", "% Presença"]
                     cols_risco_ok = [c for c in cols_risco if c in df_risco.columns]
                     st.dataframe(
-                        df_risco[cols_risco_ok].sort_values("_taxa_num"),
+                        df_risco.sort_values("_taxa_num")[cols_risco_ok],
                         use_container_width=True,
                         hide_index=True,
                     )
