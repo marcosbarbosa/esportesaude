@@ -11,6 +11,7 @@ import base64
 import requests
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from database import buscar_alunos_geral, get_todas_turmas
+from utils.identidade import render_cabecalho_html, render_rodape_html, get_config as _get_id_cfg
 
 try:
     from xhtml2pdf import pisa
@@ -156,11 +157,15 @@ def _cabecalhos_html(campos_sel, opcoes_campos):
     return th
 
 
+_FOTO_SIZE = 68   # 1.5× de 45 px
+
+
 def _linhas_html(df, campos_sel, opcoes_campos, fotos_b64=None):
     """
     fotos_b64: dict {url: data_uri} para PDF.
                 None = usa URLs externas (preview no browser).
     """
+    sz  = _FOTO_SIZE
     tr = ""
     for _, row in df.iterrows():
         foto_url = str(row.get("url_foto") or "").strip()
@@ -172,25 +177,25 @@ def _linhas_html(df, campos_sel, opcoes_campos, fotos_b64=None):
             if data_uri:
                 foto_cell = (
                     f"<img src='{data_uri}' "
-                    "style='width:45px;height:45px;border-radius:50%;object-fit:cover;'>"
+                    f"style='width:{sz}px;height:{sz}px;border-radius:50%;object-fit:cover;'>"
                 )
             else:
                 foto_cell = (
-                    "<div style='width:38px;height:38px;background:#E2E8F0;"
-                    "text-align:center;line-height:38px;border-radius:50%;"
-                    "font-size:8px;color:#64748B;margin:0 auto;'>Sem<br>Foto</div>"
+                    f"<div style='width:{sz}px;height:{sz}px;background:#E2E8F0;"
+                    f"text-align:center;line-height:{sz}px;border-radius:50%;"
+                    "font-size:8px;color:#64748B;margin:0 auto;'>Sem Foto</div>"
                 )
         else:
             # Modo preview: usa URL externa diretamente
             if tem_foto:
                 foto_cell = (
-                    f"<img src='{foto_url}' style='width:45px;height:45px;"
+                    f"<img src='{foto_url}' style='width:{sz}px;height:{sz}px;"
                     "border-radius:50%;object-fit:cover;'>"
                 )
             else:
                 foto_cell = (
-                    "<div style='width:45px;height:45px;background:#E2E8F0;"
-                    "text-align:center;line-height:45px;border-radius:50%;"
+                    f"<div style='width:{sz}px;height:{sz}px;background:#E2E8F0;"
+                    f"text-align:center;line-height:{sz}px;border-radius:50%;"
                     "font-size:9px;color:#64748B;margin:0 auto;'>Sem Foto</div>"
                 )
 
@@ -205,26 +210,32 @@ def _linhas_html(df, campos_sel, opcoes_campos, fotos_b64=None):
 
 
 def gerar_html_preview(df, campos_sel, opcoes_campos, orientacao, turma_sel):
+    cfg = _get_id_cfg()
     page_size = "A4 portrait" if "Retrato" in orientacao else "A4 landscape"
     data_hora = datetime.datetime.now().strftime("%d/%m/%Y às %H:%M")
+    cabecalho = render_cabecalho_html(cfg, extra=f"Relatório de Identificação (Cara-Crachá) — {turma_sel}")
+    rodape    = render_rodape_html(cfg)
     th = _cabecalhos_html(campos_sel, opcoes_campos)
     tr = _linhas_html(df, campos_sel, opcoes_campos, fotos_b64=None)
     return f"""<!DOCTYPE html><html><head><meta charset="UTF-8">
 <style>{_css_base(page_size)}</style>
 {_JS_SORT}
 </head><body>
-<h2>Relatório de Identificação (Cara-Crachá)</h2>
-<p>Escopo: <b>{turma_sel}</b> | Gerado em: {data_hora}</p>
+{cabecalho}
+<p style="text-align:center;font-size:10px;color:#64748B;margin-bottom:12px;">
+  Escopo: <b>{turma_sel}</b> | Gerado em: {data_hora}
+</p>
 <table id="cc-table">
   <thead><tr>{th}</tr></thead>
   <tbody>{tr}</tbody>
 </table>
-<div class="footer">Sistema Esporte e Saúde — Gestão Inteligente Moveright™</div>
+{rodape}
 </body></html>"""
 
 
 def gerar_html_pdf(df, campos_sel, opcoes_campos, orientacao, turma_sel, sort_col, sort_asc, fotos_b64=None):
-    """HTML para xhtml2pdf — imagens base64 embutidas, com ordenação aplicada."""
+    """HTML para xhtml2pdf — imagens base64 embutidas, cabeçalho padrão, ordenação aplicada."""
+    cfg = _get_id_cfg()
     df_sorted = df.sort_values(
         by=sort_col,
         ascending=sort_asc,
@@ -234,18 +245,22 @@ def gerar_html_pdf(df, campos_sel, opcoes_campos, orientacao, turma_sel, sort_co
     page_size = "A4 portrait" if "Retrato" in orientacao else "A4 landscape"
     data_hora = datetime.datetime.now().strftime("%d/%m/%Y às %H:%M")
     label_dir = "crescente ▲" if sort_asc else "decrescente ▼"
+    cabecalho = render_cabecalho_html(cfg, extra="Relatório de Identificação (Cara-Crachá)")
+    rodape    = render_rodape_html(cfg)
     th = _cabecalhos_html(campos_sel, opcoes_campos)
     tr = _linhas_html(df_sorted, campos_sel, opcoes_campos, fotos_b64=fotos_b64 or {})
     return f"""<html><head><meta charset="UTF-8">
 <style>{_css_pdf(page_size)}</style>
 </head><body>
-<h2>Relatório de Identificação (Cara-Crachá)</h2>
-<p>Escopo: <b>{turma_sel}</b> | Ordenado por: <b>{sort_col}</b> ({label_dir}) | {data_hora}</p>
+{cabecalho}
+<p style="text-align:center;font-size:10px;color:#64748B;margin-bottom:12px;">
+  Escopo: <b>{turma_sel}</b> &nbsp;|&nbsp; Ordenado por: <b>{sort_col}</b> ({label_dir}) &nbsp;|&nbsp; {data_hora}
+</p>
 <table>
   <thead><tr>{th}</tr></thead>
   <tbody>{tr}</tbody>
 </table>
-<div class="footer">Sistema Esporte e Saúde — Gestão Inteligente Moveright™</div>
+{rodape}
 </body></html>"""
 
 
