@@ -524,6 +524,26 @@ def get_midias_diario(diario_id):
         return []
 
 
+def atualizar_legenda_midia(midia_id, nova_legenda):
+    """Atualiza o campo legenda de um registro em diario_midias."""
+    try:
+        supabase.from_("diario_midias").update(
+            {"legenda": nova_legenda}
+        ).eq("id", str(midia_id)).execute()
+        return True
+    except Exception:
+        return False
+
+
+def excluir_midia_diario(midia_id):
+    """Exclui um registro de mídia do diário de aulas."""
+    try:
+        supabase.from_("diario_midias").delete().eq("id", str(midia_id)).execute()
+        return True
+    except Exception:
+        return False
+
+
 # ==============================================================================
 # ✅ FREQUÊNCIA E RELATÓRIOS (MOTOR ANTI-FURO)
 # ==============================================================================
@@ -995,6 +1015,40 @@ def bi_alunos_risco_abandono(dias=30):
         return ausentes.reset_index(drop=True)
     except Exception:
         return pd.DataFrame()
+
+
+def bi_dados_individuais(aluno_id):
+    """
+    Retorna dict com DataFrames e listas para o relatório BI individual do aluno.
+    Chaves: 'avaliacoes', 'frequencias', 'atestados', 'dores'
+    """
+    resultado = {"avaliacoes": pd.DataFrame(), "frequencias": pd.DataFrame(),
+                 "atestados": pd.DataFrame(), "dores": []}
+    try:
+        r_av = (supabase.from_("prontuario_avaliacoes").select("*")
+                .eq("aluno_id", str(aluno_id)).order("data_avaliacao").execute())
+        resultado["avaliacoes"] = pd.DataFrame(r_av.data or [])
+    except Exception:
+        pass
+    try:
+        r_fr = (supabase.from_("frequencia").select("data_aula, status")
+                .eq("aluno_id", str(aluno_id)).order("data_aula").execute())
+        resultado["frequencias"] = pd.DataFrame(r_fr.data or [])
+    except Exception:
+        pass
+    try:
+        r_at = (supabase.from_("atestados_temporarios").select("*")
+                .eq("aluno_id", str(aluno_id)).execute())
+        resultado["atestados"] = pd.DataFrame(r_at.data or [])
+    except Exception:
+        pass
+    try:
+        r_do = (supabase.from_("anamnese_dores").select("*")
+                .eq("aluno_id", str(aluno_id)).execute())
+        resultado["dores"] = r_do.data or []
+    except Exception:
+        pass
+    return resultado
 
 
 # ==============================================================================
