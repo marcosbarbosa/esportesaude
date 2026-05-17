@@ -150,14 +150,15 @@ def _formatar_valor(row, c):
 
 
 def _cabecalhos_html(campos_sel, opcoes_campos):
-    th = ("<th style='width:60px;text-align:center;'>FOTO</th>"
+    th = (f"<th style='width:{_FOTO_COL_W}px;text-align:center;padding:4px;'>FOTO</th>"
           "<th>NOME DO ALUNO</th><th>TURMA</th>")
     for c in campos_sel:
         th += f"<th>{opcoes_campos[c].upper()}</th>"
     return th
 
 
-_FOTO_SIZE = 68   # 1.5× de 45 px
+_FOTO_SIZE    = 90   # preenchimento ~90% da coluna
+_FOTO_COL_W   = 100  # largura da coluna FOTO (px)
 
 
 def _linhas_html(df, campos_sel, opcoes_campos, fotos_b64=None):
@@ -201,7 +202,7 @@ def _linhas_html(df, campos_sel, opcoes_campos, fotos_b64=None):
 
         nome  = str(row.get("nome", "")).upper()
         turma = str(row.get("turma", ""))
-        tds = (f"<td style='text-align:center;'>{foto_cell}</td>"
+        tds = (f"<td style='text-align:center;padding:3px;width:{_FOTO_COL_W}px;'>{foto_cell}</td>"
                f"<td><b>{nome}</b></td><td>{turma}</td>")
         for c in campos_sel:
             tds += f"<td>{_formatar_valor(row, c)}</td>"
