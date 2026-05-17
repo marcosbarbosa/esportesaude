@@ -306,6 +306,7 @@ def excluir_turma(turma_id):
 # ==============================================================================
 # 🚀 PIPELINE DE INSCRIÇÕES (CADASTRO FULL 28 CAMPOS)
 # ==============================================================================
+@st.cache_data(ttl=60)
 def get_pre_cadastros_pendentes():
     try:
         res = (
@@ -409,6 +410,7 @@ def buscar_alunos_geral(termo="", incluir_inativos=False):
         return pd.DataFrame()
 
 
+@st.cache_data(ttl=120)
 def buscar_aluno_por_id(aluno_id):
     try:
         res = (
@@ -465,6 +467,7 @@ def excluir_aluno_completo(aluno_id, solicitante_email):
         return False, str(e)
 
 
+@st.cache_data(ttl=120)
 def get_alunos_por_turma(turma_nome):
     try:
         res = (
@@ -828,6 +831,7 @@ def salvar_avaliacao_prontuario(
         return False, str(e)
 
 
+@st.cache_data(ttl=120)
 def get_avaliacoes_aluno(aluno_id):
     try:
         res = (
@@ -1017,6 +1021,7 @@ def bi_alunos_risco_abandono(dias=30):
         return pd.DataFrame()
 
 
+@st.cache_data(ttl=120)
 def bi_dados_individuais(aluno_id):
     """
     Retorna dict com DataFrames e listas para o relatório BI individual do aluno.
@@ -1063,6 +1068,7 @@ def atualizar_turma_aluno(aluno_id, nova_turma):
         return False
 
 
+@st.cache_data(ttl=120)
 def get_estatisticas_frequencia_aluno(aluno_id):
     try:
         res = supabase.from_("frequencia").select("status").eq("aluno_id", str(aluno_id)).execute()
@@ -1084,6 +1090,7 @@ def excluir_avaliacao_prontuario(aval_id):
         return False, str(e)
 
 
+@st.cache_data(ttl=120)
 def get_historico_aulas_aluno(aluno_id):
     try:
         turma_aluno = supabase.from_("alunos").select("turma").eq("id", str(aluno_id)).execute().data[0]["turma"]
@@ -1114,6 +1121,7 @@ def get_historico_aulas_aluno(aluno_id):
         return []
 
 
+@st.cache_data(ttl=300)
 def get_crm_templates():
     try:
         return pd.DataFrame(supabase.from_("crm_templates").select("*").order("titulo").execute().data)
@@ -1144,6 +1152,7 @@ def salvar_atestado_temporario(aluno_id, data_registro, motivo, url_documento):
         return False, str(e)
 
 
+@st.cache_data(ttl=120)
 def get_atestados_temporarios(aluno_id):
     try:
         df = pd.DataFrame(
