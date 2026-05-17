@@ -630,14 +630,11 @@ def tela_relatorio():
         )
 
         if st.button(
-            "🔍 Processar Dados de Prestação de Contas",
+            "🔍 Processar Frequência",
             type="primary",
             use_container_width=True,
         ):
-            with st.spinner(
-                "Analisando tendências, cruzando diários e resolvendo lacunas (Anti-Furo)..."
-            ):
-                # O motor inteligente do database.py agora faz o trabalho sujo!
+            with st.spinner("Cruzando Diário de Aulas com registros de frequência..."):
                 df_matriz = get_relatorio_periodo(
                     d_i, d_f, "" if t_sel == "Todas as Turmas" else t_sel
                 )
@@ -648,130 +645,251 @@ def tela_relatorio():
                     )
                     return
 
-                # Renomear colunas para manter a compatibilidade com a exportação Excel
+                # Renomear para compatibilidade Excel
                 if "Nome" in df_matriz.columns:
                     df_matriz.rename(columns={"Nome": "Aluno"}, inplace=True)
 
-                # Inserir a coluna "Ordem"
-                df_matriz.insert(0, "Ordem", range(1, 1 + len(df_matriz)))
+                # Colunas meta — excluindo "Total Aulas" que é metadado, não data
+                _META = {"Ordem", "Aluno", "Turma", "Total Aulas",
+                         "Total P", "Total F", "Total J", "% Presença"}
+                cols_data_reais = [c for c in df_matriz.columns if c not in _META]
 
-                # Encontrar quais são as colunas de data reais
-                cols_data_reais = [
-                    c
-                    for c in df_matriz.columns
-                    if c
-                    not in [
-                        "Ordem",
-                        "Aluno",
-                        "Turma",
-                        "Total P",
-                        "Total F",
-                        "Total J",
-                        "% Presença",
-                    ]
-                ]
-                n_aulas = len(cols_data_reais)
-
-                # Variáveis Globais de Soma
+                # Totais globais
                 tp_geral = int(df_matriz["Total P"].sum())
                 tf_geral = int(df_matriz["Total F"].sum())
-                tj_geral = int(df_matriz.get("Total J", pd.Series(dtype=int)).sum())
+                tj_geral = int(df_matriz["Total J"].sum()) if "Total J" in df_matriz.columns else 0
+                n_alunos  = len(df_matriz)
 
-                # Criar a linha de Totalizador no final
-                tot_d = {
-                    "Ordem": "-",
-                    "Aluno": "TOTAL DE PRESENÇAS DIÁRIAS",
-                    "Turma": "-",
-                }
+                # Total de aulas: máximo por turma (evita dupla contagem em multi-turma)
+                if "Total Aulas" in df_matriz.columns and "Turma" in df_matriz.columns:
+                    n_aulas_por_turma = df_matriz.groupby("Turma")["Total Aulas"].first()
+                    n_aulas_total_desc = " / ".join(
+                        f"{t}: {v}" for t, v in n_aulas_por_turma.items()
+                    )
+                    n_aulas = int(n_aulas_por_turma.max())
+                else:
+                    n_aulas = len(cols_data_reais)
+                    n_aulas_total_desc = str(n_aulas)
 
+                # Taxa geral de presença (base: P / (P+F+J) que é o total de aulas reais)
+                total_registros = tp_geral + tf_geral + tj_geral
+                taxa_geral = round(tp_geral / total_registros * 100, 1) if total_registros > 0 else 0.0
+
+                # Alunos em risco: < 75 % de presença
+                def _perc(s):
+                    try:
+                        return float(str(s).replace("%", "").strip())
+                    except Exception:
+                        return 0.0
+                df_matriz["_taxa_num"] = df_matriz["% Presença"].apply(_perc)
+                df_risco = df_matriz[df_matriz["_taxa_num"] < 75].copy()
+
+                periodo_formatado = f"{d_i.strftime('%d/%m/%Y')} a {d_f.strftime('%d/%m/%Y')}"
+
+                # ── Inserir Ordem agora (após cálculos)
+                df_matriz.insert(0, "Ordem", range(1, 1 + len(df_matriz)))
+
+                # ── Linha totalizadora por dia
+                tot_d = {"Ordem": "-", "Aluno": "TOTAL PRESENÇAS / DIA", "Turma": "-",
+                         "Total Aulas": "-"}
                 for c in df_matriz.columns:
-                    if c not in tot_d:
-                        if c in cols_data_reais:
-                            tot_d[c] = (df_matriz[c] == "P").sum()
-                        elif c == "Total P":
-                            tot_d[c] = tp_geral
-                        elif c == "Total F":
-                            tot_d[c] = tf_geral
-                        elif c == "Total J":
-                            tot_d[c] = tj_geral
-                        else:
-                            tot_d[c] = "-"
+                    if c in tot_d:
+                        continue
+                    if c in cols_data_reais:
+                        tot_d[c] = int((df_matriz[c] == "P").sum())
+                    elif c == "Total P":
+                        tot_d[c] = tp_geral
+                    elif c == "Total F":
+                        tot_d[c] = tf_geral
+                    elif c == "Total J":
+                        tot_d[c] = tj_geral
+                    elif c == "_taxa_num":
+                        tot_d[c] = ""
+                    else:
+                        tot_d[c] = "-"
 
-                df_final = pd.concat(
-                    [pd.DataFrame([tot_d]), df_matriz], ignore_index=True
-                )
-                periodo_formatado = (
-                    f"{d_i.strftime('%d/%m/%Y')} a {d_f.strftime('%d/%m/%Y')}"
-                )
+                df_final = pd.concat([pd.DataFrame([tot_d]), df_matriz], ignore_index=True)
+                # Garante tipos homogêneos na coluna Ordem (evita erro Arrow int/str misto)
+                df_final["Ordem"] = df_final["Ordem"].astype(str)
 
-                # Gerar arquivo Excel seguro
+                # ── Excel
                 excel = gerar_excel_planilha_frequencia(
-                    df_final,
+                    df_final.drop(columns=["_taxa_num"], errors="ignore"),
                     t_sel,
                     periodo_formatado,
                     "logo-imbra.png",
                     "logo-secretaria.png",
-                    len(df_matriz),
+                    n_alunos,
                     tp_geral,
                     n_aulas,
                 )
 
                 st.success(
-                    f"✅ Sucesso! {n_aulas} aulas úteis cruzadas de {periodo_formatado}."
+                    f"✅ {n_alunos} alunos · {n_aulas_total_desc} aulas · período {periodo_formatado}"
                 )
 
                 st.download_button(
                     "📥 BAIXAR PLANILHA DE FREQUÊNCIA (EXCEL)",
                     excel,
-                    f"Relatorio_AntiFuro_{t_sel}_{d_i.strftime('%d_%m_%Y')}.xlsx",
+                    f"Frequencia_{t_sel}_{d_i.strftime('%d_%m_%Y')}.xlsx",
                     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                     use_container_width=True,
                     type="primary",
                 )
 
-                # --- RENDERIZAÇÃO VISUAL: DASHBOARD E TABELA ---
-                st.markdown("### 📊 Dashboard Analítico")
-                ck1, ck2, ck3 = st.columns(3)
-                ck1.metric("Aulas Realizadas", n_aulas)
-                ck2.metric("Total Presenças", tp_geral)
-                ck3.metric("Total Faltas / Justif.", f"{tf_geral} / {tj_geral}")
+                # ══════════════════════════════════════════════════════════════
+                # DASHBOARD
+                # ══════════════════════════════════════════════════════════════
+                st.markdown("---")
+                st.markdown("### 📊 Dashboard de Frequência")
 
+                # — Métricas principais
+                mk1, mk2, mk3, mk4, mk5 = st.columns(5)
+                mk1.metric("Alunos", n_alunos)
+                mk2.metric("Aulas (máx.)", n_aulas)
+                mk3.metric("Total Presenças", tp_geral)
+                mk4.metric("Total Faltas", tf_geral)
+                mk5.metric(
+                    "Taxa Geral",
+                    f"{taxa_geral:.1f}%",
+                    delta=f"{taxa_geral - 75:.1f}pp vs meta 75%",
+                    delta_color="normal",
+                )
+
+                # — Resumo por turma (tabela + gráfico de barras)
+                if "Turma" in df_matriz.columns:
+                    grp = (
+                        df_matriz.groupby("Turma")
+                        .agg(
+                            Alunos=("Aluno", "count"),
+                            Aulas=("Total Aulas", "first"),
+                            Presenças=("Total P", "sum"),
+                            Faltas=("Total F", "sum"),
+                            Justificadas=("Total J", "sum"),
+                        )
+                        .reset_index()
+                    )
+                    grp["Total Esperado"] = grp["Alunos"] * grp["Aulas"]
+                    grp["Taxa %"] = (
+                        grp["Presenças"] / grp["Total Esperado"].replace(0, 1) * 100
+                    ).round(1)
+                    grp["Taxa % fmt"] = grp["Taxa %"].apply(lambda x: f"{x:.1f}%")
+
+                    cres1, cres2 = st.columns([1, 1])
+                    with cres1:
+                        st.markdown("#### Resumo por Turma")
+                        st.dataframe(
+                            grp[["Turma", "Alunos", "Aulas", "Presenças",
+                                 "Faltas", "Justificadas", "Taxa % fmt"]]
+                            .rename(columns={"Taxa % fmt": "Taxa %"}),
+                            use_container_width=True,
+                            hide_index=True,
+                        )
+                    with cres2:
+                        fig_bar = px.bar(
+                            grp,
+                            x="Turma",
+                            y="Taxa %",
+                            text="Taxa % fmt",
+                            color="Taxa %",
+                            color_continuous_scale=["#EF4444", "#F59E0B", "#10B981"],
+                            range_color=[0, 100],
+                            title="Taxa de Presença por Turma (%)",
+                        )
+                        fig_bar.add_hline(
+                            y=75, line_dash="dash", line_color="#6366F1",
+                            annotation_text="Meta 75%", annotation_position="top left",
+                        )
+                        fig_bar.update_traces(textposition="outside")
+                        fig_bar.update_layout(
+                            coloraxis_showscale=False, showlegend=False, height=320
+                        )
+                        st.plotly_chart(fig_bar, use_container_width=True)
+
+                # — Linha do tempo: presenças brutas por data
+                if cols_data_reais:
+                    presencas_dia = {}
+                    faltas_dia = {}
+                    for col in cols_data_reais:
+                        presencas_dia[col] = int((df_matriz[col] == "P").sum())
+                        faltas_dia[col]    = int((df_matriz[col] == "F").sum())
+
+                    df_timeline = pd.DataFrame({
+                        "Data":      list(presencas_dia.keys()),
+                        "Presenças": list(presencas_dia.values()),
+                        "Faltas":    list(faltas_dia.values()),
+                    })
+
+                    fig_line = px.bar(
+                        df_timeline,
+                        x="Data",
+                        y=["Presenças", "Faltas"],
+                        barmode="stack",
+                        title="Presenças e Faltas por Dia de Aula",
+                        color_discrete_map={"Presenças": "#10B981", "Faltas": "#EF4444"},
+                    )
+                    fig_line.update_layout(height=300, legend_title_text="")
+                    st.plotly_chart(fig_line, use_container_width=True)
+
+                # — Pizza global P/F/J
                 cg1, cg2 = st.columns(2)
                 cg1.plotly_chart(
                     px.pie(
                         names=["Presenças", "Faltas", "Justificadas"],
                         values=[tp_geral, tf_geral, tj_geral],
-                        title="Assiduidade Global",
+                        title="Distribuição Global P / F / J",
                         color_discrete_sequence=["#10B981", "#EF4444", "#F59E0B"],
                     ),
                     use_container_width=True,
                 )
 
-                r_st = len(df_matriz[df_matriz["Total F"] > df_matriz["Total P"]])
+                # — Pizza saúde: regular vs risco (<75%)
+                n_risco = len(df_risco)
                 cg2.plotly_chart(
                     px.pie(
-                        names=["Regulares", "Em Risco"],
-                        values=[len(df_matriz) - r_st, r_st],
-                        title="Saúde da Turma",
+                        names=["Regulares (≥75%)", "Em Risco (<75%)"],
+                        values=[n_alunos - n_risco, n_risco],
+                        title=f"Saúde da Turma — {n_risco} aluno(s) em risco",
                         color_discrete_sequence=["#3B82F6", "#F59E0B"],
                     ),
                     use_container_width=True,
                 )
 
+                # — Tabela de alunos em risco
+                if n_risco > 0:
+                    st.markdown(
+                        f"<div style='background:#FEF3C7;border-left:4px solid #F59E0B;"
+                        f"padding:10px 14px;border-radius:6px;'>"
+                        f"⚠️ <b>{n_risco} aluno(s) com presença abaixo de 75%</b> — atenção recomendada.</div>",
+                        unsafe_allow_html=True,
+                    )
+                    cols_risco = ["Aluno", "Turma", "Total Aulas",
+                                  "Total P", "Total F", "Total J", "% Presença"]
+                    cols_risco_ok = [c for c in cols_risco if c in df_risco.columns]
+                    st.dataframe(
+                        df_risco[cols_risco_ok].sort_values("_taxa_num"),
+                        use_container_width=True,
+                        hide_index=True,
+                    )
+
+                # ══════════════════════════════════════════════════════════════
+                # PLANILHA DETALHADA
+                # ══════════════════════════════════════════════════════════════
+                st.markdown("---")
                 st.markdown("#### 📅 Planilha de Frequência Detalhada")
 
-                # Colorir os P, F e J visualmente no Streamlit
                 def colorir_status(val):
                     if val == "P":
-                        return "color: #10B981; font-weight: bold; background-color: #D1FAE5;"
+                        return "color:#10B981;font-weight:bold;background-color:#D1FAE5;"
                     if val == "F":
-                        return "color: #EF4444; font-weight: bold; background-color: #FEE2E2;"
+                        return "color:#EF4444;font-weight:bold;background-color:#FEE2E2;"
                     if val == "J":
-                        return "color: #F59E0B; font-weight: bold; background-color: #FEF3C7;"
+                        return "color:#F59E0B;font-weight:bold;background-color:#FEF3C7;"
                     return ""
 
-                df_st = df_final.style.applymap(colorir_status).set_properties(
-                    subset=[c for c in df_final.columns if c not in ["Aluno", "Turma"]],
+                df_show = df_final.drop(columns=["_taxa_num"], errors="ignore")
+                df_st = df_show.style.map(colorir_status).set_properties(
+                    subset=[c for c in df_show.columns if c not in ["Aluno", "Turma"]],
                     **{"text-align": "center"},
                 )
                 st.dataframe(df_st, use_container_width=True, hide_index=True)

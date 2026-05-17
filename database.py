@@ -611,7 +611,8 @@ def salvar_diario(
 def get_relatorio_periodo(data_inicio, data_fim, turma_filtro="Todas"):
     """
     Constrói a matriz cruzando os dias oficiais de aula (Diário) com os alunos.
-    Se não houver registo no dia da aula, converte automaticamente em FALTA (F).
+    Denominador correto: total de aulas registradas no Diário por turma.
+    Se não houver registro no dia da aula → FALTA (Motor Anti-Furo).
     """
     try:
         q_al = (
@@ -646,16 +647,21 @@ def get_relatorio_periodo(data_inicio, data_fim, turma_filtro="Todas"):
 
         resultados = []
         for _, aluno in df_alunos.iterrows():
-            aluno_id = aluno["id"]
+            aluno_id    = aluno["id"]
             turma_aluno = aluno["turma"]
-            dias_aula_turma = df_diario[df_diario["turma"] == turma_aluno][
-                "data_aula"
-            ].tolist()
+
+            # Dias reais de aula desta turma no período (fonte: Diário)
+            dias_aula_turma = sorted(set(
+                df_diario[df_diario["turma"] == turma_aluno]["data_aula"].tolist()
+            ))
+            total_aulas_turma = len(dias_aula_turma)
+            if total_aulas_turma == 0:
+                continue  # turma sem diário no período → pula aluno
 
             linha = {"Nome": aluno["nome"], "Turma": turma_aluno}
             faltas, presencas, justificadas = 0, 0, 0
 
-            for dia in sorted(set(dias_aula_turma)):
+            for dia in dias_aula_turma:
                 dia_str = pd.to_datetime(dia).strftime("%d/%m")
 
                 if not df_freq.empty:
@@ -675,19 +681,21 @@ def get_relatorio_periodo(data_inicio, data_fim, turma_filtro="Todas"):
                             linha[dia_str] = "F"
                             faltas += 1
                     else:
+                        # Dia existia no Diário mas sem registro → FALTA (Anti-Furo)
                         linha[dia_str] = "F"
                         faltas += 1
                 else:
                     linha[dia_str] = "F"
                     faltas += 1
 
-            linha["Total P"] = presencas
-            linha["Total F"] = faltas
-            linha["Total J"] = justificadas
+            # Denominador real: total de aulas da turma no Diário
+            linha["Total Aulas"] = total_aulas_turma
+            linha["Total P"]     = presencas
+            linha["Total F"]     = faltas
+            linha["Total J"]     = justificadas
 
-            total_aulas_uteis = presencas + faltas
-            taxa = (presencas / total_aulas_uteis * 100) if total_aulas_uteis > 0 else 0
-            linha["% Presença"] = f"{taxa:.1f}%"
+            taxa = (presencas / total_aulas_turma * 100) if total_aulas_turma > 0 else 0
+            linha["% Presença"]  = f"{taxa:.1f}%"
 
             resultados.append(linha)
 
