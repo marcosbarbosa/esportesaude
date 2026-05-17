@@ -100,10 +100,10 @@ def render_cabecalho_html(cfg: dict | None = None, extra: str = "") -> str:
   <tr>
     <td style="width:22%;text-align:left;vertical-align:middle;padding:8px 4px;">{html_logo_s}</td>
     <td style="width:56%;text-align:center;vertical-align:middle;padding:8px 4px;">
-      <h1 style="margin:0;font-size:13pt;color:#0A2540;text-transform:uppercase;font-weight:900;letter-spacing:-0.3px;">
+      <p style="margin:0;font-size:10pt;color:#0A2540;text-transform:uppercase;font-weight:900;letter-spacing:-0.3px;line-height:1.2;">
         {cfg.get("titulo_projeto","")}
-      </h1>
-      <p style="margin:4px 0 0 0;font-size:10pt;color:#475569;font-weight:600;">
+      </p>
+      <p style="margin:2px 0 0 0;font-size:9pt;color:#475569;font-weight:600;line-height:1.2;">
         {cfg.get("subtitulo_projeto","")}
       </p>
       {extra_html}
