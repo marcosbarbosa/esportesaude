@@ -1128,19 +1128,9 @@ def tela_relatorio():
 
                 # A nova função já nos dá as aulas úteis perfeitamente no DataFrame
                 if not df_freq_w.empty:
-                    cols_data = [
-                        c
-                        for c in df_freq_w.columns
-                        if c
-                        not in [
-                            "Nome",
-                            "Turma",
-                            "Total P",
-                            "Total F",
-                            "Total J",
-                            "% Presença",
-                        ]
-                    ]
+                    _META_W = {"Nome", "Turma", "Total Aulas",
+                               "Total P", "Total F", "Total J", "% Presença"}
+                    cols_data = [c for c in df_freq_w.columns if c not in _META_W]
                     total_aulas_w = len(cols_data)
                 else:
                     total_aulas_w = 0

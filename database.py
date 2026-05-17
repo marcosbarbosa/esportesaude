@@ -162,6 +162,7 @@ def recuperar_senha_usuario(email):
     return False, "Função de recuperação em manutenção."
 
 
+@st.cache_data(ttl=60)
 def get_agendamentos_pendentes(limite=8):
     """Retorna os agendamentos pendentes para a dashboard do main.py"""
     try:
