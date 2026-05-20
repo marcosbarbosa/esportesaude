@@ -467,6 +467,153 @@ def excluir_aluno_completo(aluno_id, solicitante_email):
         return False, str(e)
 
 
+def excluir_aluno(aluno_id):
+    """Remove o aluno da tabela alunos (sem cascade). Retorna (bool, msg)."""
+    try:
+        supabase.from_("alunos").delete().eq("id", str(aluno_id)).execute()
+        st.cache_data.clear()
+        return True, "Aluno removido."
+    except Exception as e:
+        return False, str(e)
+
+
+def cadastrar_novo_aluno(nome, turma, **kwargs):
+    """Insere um novo aluno com status Ativo. Retorna True/False."""
+    try:
+        payload = {"nome": str(nome).strip(), "turma": str(turma).strip(),
+                   "status": "Ativo"}
+        payload.update({k: v for k, v in kwargs.items() if v is not None})
+        supabase.from_("alunos").insert(payload).execute()
+        st.cache_data.clear()
+        return True
+    except Exception:
+        return False
+
+
+def atualizar_perfil_aluno(aluno_id, nome, data_nascimento, peso, altura,
+                           whatsapp, obs="", email_usuario=""):
+    """Atualiza campos do perfil do aluno. Retorna (bool, msg)."""
+    try:
+        dados = {
+            "nome": str(nome).strip(),
+            "data_nascimento": str(data_nascimento) if data_nascimento else None,
+            "peso": float(peso) if peso else None,
+            "altura": float(altura) if altura else None,
+            "whatsapp": str(whatsapp).strip() if whatsapp else None,
+        }
+        if obs:
+            dados["observacoes"] = str(obs).strip()
+        dados_limpos = {k: v for k, v in dados.items() if v is not None}
+        supabase.from_("alunos").update(dados_limpos).eq("id", str(aluno_id)).execute()
+        st.cache_data.clear()
+        return True, "Perfil atualizado!"
+    except Exception as e:
+        return False, str(e)
+
+
+def atualizar_perfil_aluno_dict(aluno_id, payload: dict):
+    """Atualiza aluno com um dicionário arbitrário de campos. Retorna (bool, msg)."""
+    try:
+        dados_limpos = {k: v for k, v in payload.items()
+                        if v is not None and str(v).strip() not in ("", "nan", "None")}
+        if not dados_limpos:
+            return False, "Nenhum campo para atualizar."
+        supabase.from_("alunos").update(dados_limpos).eq("id", str(aluno_id)).execute()
+        st.cache_data.clear()
+        return True, "Dados atualizados."
+    except Exception as e:
+        return False, str(e)
+
+
+def atualizar_aluno_completo(aluno_id, dados: dict):
+    """Atualiza o aluno com um dict completo de campos. Retorna (bool, msg)."""
+    try:
+        dados_limpos = {k: v for k, v in dados.items()
+                        if v is not None and str(v).strip() not in ("", "nan", "None")}
+        supabase.from_("alunos").update(dados_limpos).eq("id", str(aluno_id)).execute()
+        st.cache_data.clear()
+        return True, "Aluno atualizado."
+    except Exception as e:
+        return False, str(e)
+
+
+def atualizar_data_nascimento(aluno_id, data_nascimento):
+    """Atualiza somente a data de nascimento do aluno. Retorna (bool, msg)."""
+    try:
+        supabase.from_("alunos").update(
+            {"data_nascimento": str(data_nascimento)}
+        ).eq("id", str(aluno_id)).execute()
+        st.cache_data.clear()
+        return True, "Data de nascimento atualizada."
+    except Exception as e:
+        return False, str(e)
+
+
+def criar_agendamento(aluno_id, data, hora, tipo="Avaliação"):
+    """Cria um novo agendamento pendente. Retorna (bool, msg)."""
+    try:
+        supabase.from_("agendamentos").insert({
+            "aluno_id": str(aluno_id),
+            "data_agendamento": str(data),
+            "hora_agendamento": str(hora),
+            "tipo": str(tipo),
+            "status": "Pendente",
+        }).execute()
+        st.cache_data.clear()
+        return True, "Agendamento criado."
+    except Exception as e:
+        return False, str(e)
+
+
+def concluir_ou_cancelar_agendamento(agendamento_id, status):
+    """Atualiza o status de um agendamento (ex: 'Concluído', 'Cancelado')."""
+    try:
+        supabase.from_("agendamentos").update(
+            {"status": str(status)}
+        ).eq("id", str(agendamento_id)).execute()
+        st.cache_data.clear()
+        return True, "Agendamento atualizado."
+    except Exception as e:
+        return False, str(e)
+
+
+def obter_dependencias_lote(ids: list) -> dict:
+    """
+    Retorna {aluno_id: {frequencias: N, avaliacoes: N, atestados: N}}
+    para uma lista de aluno_ids — apenas 3 queries independente do tamanho.
+    """
+    resultado = {str(i): {"frequencias": 0, "avaliacoes": 0, "atestados": 0}
+                 for i in ids}
+    if not ids:
+        return resultado
+    ids_str = [str(i) for i in ids]
+    try:
+        r = supabase.from_("frequencia").select("aluno_id").in_("aluno_id", ids_str).execute()
+        for row in (r.data or []):
+            k = str(row["aluno_id"])
+            if k in resultado:
+                resultado[k]["frequencias"] += 1
+    except Exception:
+        pass
+    try:
+        r = supabase.from_("prontuario_avaliacoes").select("aluno_id").in_("aluno_id", ids_str).execute()
+        for row in (r.data or []):
+            k = str(row["aluno_id"])
+            if k in resultado:
+                resultado[k]["avaliacoes"] += 1
+    except Exception:
+        pass
+    try:
+        r = supabase.from_("atestados_temporarios").select("aluno_id").in_("aluno_id", ids_str).execute()
+        for row in (r.data or []):
+            k = str(row["aluno_id"])
+            if k in resultado:
+                resultado[k]["atestados"] += 1
+    except Exception:
+        pass
+    return resultado
+
+
 @st.cache_data(ttl=120)
 def get_alunos_por_turma(turma_nome):
     try:
