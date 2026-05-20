@@ -7,6 +7,7 @@
 import json
 import os
 import base64
+import streamlit as st
 
 _CONFIG_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "identidade.json")
 
@@ -27,12 +28,12 @@ _DEFAULTS = {
 
 # ── Leitura / escrita ──────────────────────────────────────────────────────────
 
+@st.cache_data(ttl=3600)
 def get_config() -> dict:
     """Retorna configuração actual (lê do ficheiro; usa defaults se falhar)."""
     try:
         with open(_CONFIG_PATH, encoding="utf-8") as f:
             data = json.load(f)
-        # garante campos ausentes com defaults
         for k, v in _DEFAULTS.items():
             data.setdefault(k, v)
         return data
@@ -50,6 +51,7 @@ def salvar_config(data: dict) -> None:
 
 # ── Logos em base64 ────────────────────────────────────────────────────────────
 
+@st.cache_data(ttl=3600)
 def get_logo_b64(nome_ficheiro: str) -> str:
     """Devolve string base64 da imagem ou '' se não existir."""
     if not nome_ficheiro:
@@ -64,6 +66,7 @@ def get_logo_b64(nome_ficheiro: str) -> str:
         return ""
 
 
+@st.cache_data(ttl=3600)
 def get_logo_data_url(nome_ficheiro: str) -> str:
     """Devolve data:image/png;base64,... para uso directo em HTML src=."""
     b64 = get_logo_b64(nome_ficheiro)

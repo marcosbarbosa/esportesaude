@@ -161,6 +161,23 @@ if rota in ["inscricao", "pesquisa", "validar"]:
 
 
 # ==============================================================================
+# 📦 FUNÇÕES CACHED (nível de módulo — nunca dentro de condicionais)
+# ==============================================================================
+@st.cache_data(ttl=3600)
+def load_niver_geral():
+    try:
+        from database import buscar_alunos_geral
+        df = buscar_alunos_geral("")
+        df["dt"] = pd.to_datetime(df["data_nascimento"], errors="coerce")
+        df = df.dropna(subset=["dt"]).copy()
+        df["dia"] = df["dt"].dt.day
+        df["mes"] = df["dt"].dt.month
+        return df
+    except Exception:
+        return pd.DataFrame()
+
+
+# ==============================================================================
 # 🛡️ MÓDULO DE SEGURANÇA E SESSÃO (8 HORAS)
 # ==============================================================================
 def gerar_captcha():
@@ -696,20 +713,6 @@ if st.session_state.menu_atual == "Principal":
             st.rerun()
 
     st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
-
-    @st.cache_data(ttl=3600)
-    def load_niver_geral():
-        try:
-            from database import buscar_alunos_geral
-
-            df = buscar_alunos_geral("")
-            df["dt"] = pd.to_datetime(df["data_nascimento"], errors="coerce")
-            df = df.dropna(subset=["dt"]).copy()
-            df["dia"] = df["dt"].dt.day
-            df["mes"] = df["dt"].dt.month
-            return df
-        except:
-            return pd.DataFrame()
 
     c_ag, c_ni = st.columns([1, 2], gap="large")
 
