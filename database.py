@@ -1165,6 +1165,52 @@ def get_atestados_temporarios(aluno_id):
 
 
 # ==============================================================================
+# 🩻 ANAMNESE DE DORES (mapa corporal)
+# ==============================================================================
+
+def salvar_anamnese_dores(aluno_id, data_avaliacao, regioes, intensidade, observacoes, criado_por):
+    try:
+        import json as _json
+        payload = {
+            "aluno_id": str(aluno_id),
+            "data_avaliacao": str(data_avaliacao),
+            "regioes": regioes if isinstance(regioes, list) else list(regioes),
+            "intensidade": intensidade if isinstance(intensidade, dict) else _json.loads(intensidade),
+            "observacoes": str(observacoes or "").strip(),
+            "criado_por": str(criado_por or "").strip(),
+        }
+        supabase.table("anamnese_dores").insert(payload).execute()
+        st.cache_data.clear()
+        return True, "Salvo com sucesso."
+    except Exception as e:
+        return False, str(e)
+
+
+@st.cache_data(ttl=120)
+def buscar_historico_dores(aluno_id):
+    try:
+        res = (
+            supabase.table("anamnese_dores")
+            .select("*")
+            .eq("aluno_id", str(aluno_id))
+            .order("data_avaliacao", desc=True)
+            .execute()
+        )
+        return res.data or []
+    except Exception:
+        return []
+
+
+def excluir_anamnese_dores(registro_id):
+    try:
+        supabase.table("anamnese_dores").delete().eq("id", str(registro_id)).execute()
+        st.cache_data.clear()
+        return True, "Excluído com sucesso."
+    except Exception as e:
+        return False, str(e)
+
+
+# ==============================================================================
 # 🛠️ AUDITORIA: REPARAÇÃO DE TURMAS
 # ==============================================================================
 def ferramenta_reparacao_turmas():
