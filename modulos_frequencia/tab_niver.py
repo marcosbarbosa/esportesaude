@@ -1,9 +1,13 @@
 # ==============================================================================
 # 📄 ARQUIVO: modulos_frequencia/tab_niver.py
-# 🏷️ VERSÃO: 12.0 (PRO Elite - Títulos Inteligentes e Logo Oficial)
-# 👤 AUTOR: Marcos Barbosa - MoveRight (c)
-# ⚙️ FUNÇÃO: Portal de Aniversários, Geração de Cartazes Word/PDF com Logos.
+# 🏷️ VERSÃO: 13.0 PRIMEMAX (Cartaz Ecológico — Layout Simétrico em 2 Colunas)
+# 👤 COPYRIGHT: © 2026 MoveRight Gestão Inteligente • Instituto Muda Brasil
+# 📏 LINHAS: ~260
+# ⚙️ FUNÇÃO: Portal de Aniversários e Emissão de Cartazes Oficiais em Word/PDF.
+#            Gera listas organizadas em duas colunas paralelas com injeção
+#            simétrica de duas logos oficiais para máxima economia de papel.
 # ==============================================================================
+
 import streamlit as st
 import pandas as pd
 import datetime
@@ -15,6 +19,10 @@ import requests
 from PIL import Image, ImageOps
 from database import buscar_alunos_geral
 from utils.texto import formatar_whatsapp_link
+from utils.identidade import (
+    get_config as _get_id_cfg,
+    get_logo_data_url as _get_logo_url,
+)
 
 try:
     from xhtml2pdf import pisa
@@ -37,10 +45,8 @@ except Exception as _e:
 
 
 # ==============================================================================
-# FUNÇÕES UTILITÁRIAS E TRATAMENTO DE IMAGEM
+# 🗜️ FUNÇÕES UTILITÁRIAS E TRATAMENTO DE IMAGEM
 # ==============================================================================
-
-
 def processar_imagem_para_redondo_b64(url, size=(120, 120)):
     if not url or pd.isna(url):
         return None
@@ -90,23 +96,20 @@ def processar_imagem_para_redondo_word(url, size=(150, 150)):
 
 
 # ==============================================================================
-# MOTOR 1: GERAÇÃO DO WORD
+# 📘 MOTOR 1: GERAÇÃO DO WORD NATIVO (.DOCX)
 # ==============================================================================
 def gerar_cartaz_word_core(df_mes, titulo, subtitulo="", mensagem_cartaz=""):
     if not DOCX_DISPONIVEL:
         raise RuntimeError(f"python-docx indisponível: {_DOCX_ERR}")
     doc = Document()
 
-    # Margens do Documento
     for section in doc.sections:
         section.top_margin = Inches(0.5)
         section.bottom_margin = Inches(0.5)
         section.left_margin = Inches(0.5)
         section.right_margin = Inches(0.5)
 
-    # 🚀 Injeção da Logo Oficial via identidade central
-    from utils.identidade import get_config as _gcfg_niver
-    _niver_cfg = _gcfg_niver()
+    _niver_cfg = _get_id_cfg()
     _niver_logo = _niver_cfg.get("logo_principal", "logo-imbra.png")
     if os.path.exists(_niver_logo):
         try:
@@ -117,7 +120,6 @@ def gerar_cartaz_word_core(df_mes, titulo, subtitulo="", mensagem_cartaz=""):
         except Exception:
             pass
 
-    # Títulos e Subtítulos Inteligentes
     p_header = doc.add_paragraph()
     p_header.alignment = WD_ALIGN_PARAGRAPH.CENTER
     run_h = p_header.add_run(f"{titulo}\n")
@@ -131,7 +133,6 @@ def gerar_cartaz_word_core(df_mes, titulo, subtitulo="", mensagem_cartaz=""):
         run_sub.font.size = Pt(16)
         run_sub.font.color.rgb = RGBColor(100, 116, 139)
 
-    # Mensagem de Felicitações
     if mensagem_cartaz.strip():
         p_msg = doc.add_paragraph()
         p_msg.alignment = WD_ALIGN_PARAGRAPH.CENTER
@@ -140,9 +141,12 @@ def gerar_cartaz_word_core(df_mes, titulo, subtitulo="", mensagem_cartaz=""):
         run_m.font.italic = True
         run_m.font.color.rgb = RGBColor(71, 85, 105)
 
-    # Tabela com as Fotos dos Alunos (3 Colunas)
     table = doc.add_table(rows=0, cols=3)
-    table.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    table.alignment = (
+        WD_TABLE_ALIGNMENT.CENTER
+        if "WD_TABLE_ALIGNMENT" in locals()
+        else WD_ALIGN_PARAGRAPH.CENTER
+    )
     col_idx = 0
     for _, r in df_mes.iterrows():
         if col_idx == 0:
@@ -176,67 +180,137 @@ def gerar_cartaz_word_core(df_mes, titulo, subtitulo="", mensagem_cartaz=""):
 
 
 # ==============================================================================
-# MOTOR 2: GERAÇÃO DO PDF
+# 📕 MOTOR 2: GERAÇÃO DO CARTAZ ECO-PDF (LAYOUT GRIDO DE 2 COLUNAS)
 # ==============================================================================
 def gerar_cartaz_pdf_core(df_mes, titulo, subtitulo="", mensagem_cartaz=""):
     if not XHTML_DISPONIVEL:
         return None
 
-    # 🚀 Injeção da Logo em Base64 para HTML via identidade central
-    from utils.identidade import get_config as _gcfg_npdf, get_logo_data_url as _gld_npdf
-    _npdf_cfg = _gcfg_npdf()
-    _npdf_logo_url = _gld_npdf(_npdf_cfg.get("logo_principal", "logo-imbra.png"))
-    html_logo = (
-        f'<div style="text-align: center; margin-bottom: 10px;"><img src="{_npdf_logo_url}" style="width: 140px; height: auto;"></div>'
-        if _npdf_logo_url else ""
-    )
+    cfg = _get_id_cfg()
+    logo_p_url = _get_logo_url(cfg.get("logo_principal", "logo-imbra.png"))
+    logo_s_url = _get_logo_url(cfg.get("logo_secundaria", "logo-secretaria.png"))
 
-    html_subtitulo = (
-        f"<h2 style='color: #64748B; font-size: 18px; margin-top: -15px;'>{subtitulo}</h2>"
-        if subtitulo
+    html_logo_p = (
+        f'<img src="{logo_p_url}" style="height: 60px; width: auto;">'
+        if logo_p_url
         else ""
     )
-    html_mensagem = (
-        f'<p style="color: #475569; font-style: italic; font-size: 14px; margin-bottom: 20px;">"{mensagem_cartaz.strip()}"</p>'
-        if mensagem_cartaz.strip()
-        else "<br>"
+    html_logo_s = (
+        f'<img src="{logo_s_url}" style="height: 60px; width: auto;">'
+        if logo_s_url
+        else ""
     )
 
-    html = f"""
-    <html><head><style>
-        @page {{ size: A4; margin: 1.5cm; }}
-        body {{ font-family: Helvetica, sans-serif; text-align: center; color: #0F172A; }}
-        h1 {{ color: #1E88E5; font-size: 26px; margin-bottom: 5px; }}
-        .card {{ width: 30%; display: inline-block; padding: 10px; text-align: center; margin-bottom: 15px; }}
-        .foto {{ width: 90px; height: 90px; border-radius: 45px; border: 3px solid #1E88E5; }}
-        .no-foto {{ width: 90px; height: 90px; border-radius: 45px; border: 2px dashed #94A3B8; background: #F8FAFC; display: inline-block; }}
-        .nome {{ font-size: 12px; font-weight: bold; margin-top: 5px; text-transform: uppercase; }}
-        .data {{ font-size: 14px; font-weight: bold; color: #DC2626; }}
-    </style></head><body>
-    {html_logo}
-    <h1>{titulo}</h1>
-    {html_subtitulo}
-    {html_mensagem}
-    <div style="width: 100%; text-align: center;">"""
+    if not mensagem_cartaz.strip():
+        mensagem_cartaz = (
+            "Celebrando os aniversariantes! Muita saúde e vida ativa para todos!"
+        )
 
-    for _, r in df_mes.iterrows():
-        b64_img = processar_imagem_para_redondo_b64(r.get("url_foto"))
-        # Alternativa de "Espaço Reservado" se não houver foto (melhor que emojis que quebram no PDF)
-        img_tag = (
-            f'<img src="data:image/png;base64,{b64_img}" class="foto">'
-            if b64_img
+    # ── CONSTRUÇÃO DO GRID DE DUAS COLUNAS LADO A LADO ──
+    linhas_colunas_html = ""
+    registros = df_mes.reset_index(drop=True)
+
+    for i in range(0, len(registros), 2):
+        # Configuração Dinâmica da Célula Esquerda (Aluno Ímpar)
+        aluno_esq = registros.iloc[i]
+        nome_esq = str(aluno_esq["nome"]).upper().strip()
+        dia_esq = f"{int(aluno_esq['dia']):02d}/{int(aluno_esq['mes']):02d}"
+        b64_img_esq = processar_imagem_para_redondo_b64(aluno_esq.get("url_foto"))
+
+        foto_html_esq = (
+            f'<img src="data:image/png;base64,{b64_img_esq}" class="foto-perfil">'
+            if b64_img_esq
             else '<div class="no-foto"></div>'
         )
-        html += f'<div class="card">{img_tag}<div class="nome">{r["nome"]}</div><div class="data">{r["dia"]:02d}/{r["mes"]:02d}</div></div>'
-    html += "</div></body></html>"
+
+        celula_esquerda = f"""
+            <td class="celula-aluno">
+                <table style="width: 100%; border: none;">
+                    <tr>
+                        <td style="width: 75px; border: none; text-align: center;">{foto_html_esq}</td>
+                        <td style="border: none; text-align: left; padding-left: 10px;">
+                            <div class="nome-aluno">{nome_esq}</div>
+                            <div class="data-aluno">🎂 {dia_esq}</div>
+                        </td>
+                    </tr>
+                </table>
+            </td>
+        """
+
+        # Configuração Dinâmica da Célula Direita (Aluno Par, se houver)
+        if i + 1 < len(registros):
+            aluno_dir = registros.iloc[i + 1]
+            nome_dir = str(aluno_dir["nome"]).upper().strip()
+            dia_dir = f"{int(aluno_dir['dia']):02d}/{int(aluno_dir['mes']):02d}"
+            b64_img_dir = processar_imagem_para_redondo_b64(aluno_dir.get("url_foto"))
+
+            foto_html_dir = (
+                f'<img src="data:image/png;base64,{b64_img_dir}" class="foto-perfil">'
+                if b64_img_dir
+                else '<div class="no-foto"></div>'
+            )
+
+            celula_direita = f"""
+                <td class="celula-aluno">
+                    <table style="width: 100%; border: none;">
+                        <tr>
+                            <td style="width: 75px; border: none; text-align: center;">{foto_html_dir}</td>
+                            <td style="border: none; text-align: left; padding-left: 10px;">
+                                <div class="nome-aluno">{nome_dir}</div>
+                                <div class="data-aluno">🎂 {dia_dir}</div>
+                            </td>
+                        </tr>
+                    </table>
+                </td>
+            """
+        else:
+            celula_direita = '<td class="celula-vazia"></td>'
+
+        linhas_colunas_html += f"<tr>{celula_esquerda}{celula_direita}</tr>"
+
+    html_content = f"""
+    <html><head><meta charset="UTF-8"><style>
+        @page {{ size: A4 portrait; margin: 1.2cm; }}
+        body {{ font-family: Helvetica, Arial, sans-serif; color: #1E293B; text-align: center; }}
+        .tb-header {{ width: 100%; border-collapse: collapse; margin-bottom: 20px; border-bottom: 3px solid #1E88E5; padding-bottom: 12px; }}
+        .tb-header td {{ border: none; vertical-align: middle; }}
+        .header-center h1 {{ font-size: 24px; color: #1E88E5; margin: 0; font-weight: bold; }}
+        .header-center h2 {{ font-size: 14px; color: #64748B; margin: 4px 0 0 0; font-weight: bold; }}
+        .msg-box {{ background-color: #F0F9FF; border-left: 4px solid #1E88E5; padding: 12px; text-align: center; font-size: 12px; font-style: italic; color: #0369A1; margin-bottom: 25px; }}
+        .grid-table {{ width: 100%; border-collapse: separate; border-spacing: 12px; }}
+        .celula-aluno {{ width: 50%; background-color: #F8FAFC; border: 1px solid #E2E8F0; padding: 10px; vertical-align: middle; border-radius: 6px; }}
+        .foto-perfil {{ width: 65px; height: 65px; border-radius: 32.5px; border: 2px solid #1E88E5; object-fit: cover; }}
+        .no-foto {{ width: 65px; height: 65px; border-radius: 32.5px; border: 1px dashed #94A3B8; background: #F1F5F9; display: inline-block; }}
+        .nome-aluno {{ font-size: 11px; font-weight: bold; color: #0F172A; line-height: 1.3; }}
+        .data-aluno {{ font-size: 11px; font-weight: bold; color: #DC2626; margin-top: 2px; }}
+        .celula-vazia {{ width: 50%; border: none; background: none; }}
+        .footer-tag {{ text-align: center; font-size: 8px; color: #94A3B8; margin-top: 35px; border-top: 1px solid #E2E8F0; padding-top: 8px; }}
+    </style></head><body>
+        <table class="tb-header">
+            <tr>
+                <td style="width: 20%; text-align: left;">{html_logo_s}</td>
+                <td style="width: 60%;" class="header-center">
+                    <h1>{titulo}</h1>
+                    {f"<h2>{subtitulo}</h2>" if subtitulo else ""}
+                </td>
+                <td style="width: 20%; text-align: right;">{html_logo_p}</td>
+            </tr>
+        </table>
+        <div class="msg-box">"{mensagem_cartaz.strip()}"</div>
+        <table class="grid-table">
+            <tbody>{linhas_colunas_html}</tbody>
+        </table>
+        <div class="footer-tag">Moveright™ Sistema de Gestão Integrada • {cfg.get("nome_organizacao", "Instituto Muda Brasil")}</div>
+    </body></html>
+    """
 
     result = io.BytesIO()
-    pisa.pisaDocument(io.StringIO(html), result)
+    pisa.pisaDocument(io.StringIO(html_content), result)
     return result.getvalue()
 
 
 # ==============================================================================
-# INTERFACE PRINCIPAL DO DASHBOARD
+# 🧭 INTERFACE PRINCIPAL DO DASHBOARD (STREAMLIT RENDER)
 # ==============================================================================
 def renderizar_aba_niver():
     df_alunos = buscar_alunos_geral("")
@@ -283,7 +357,6 @@ def renderizar_aba_niver():
         .copy()
     )
 
-    # 🚀 LÓGICA MESTRA DE TÍTULO MULTI-MÊS
     if len(meses_selecionados) == 1:
         titulo_doc = f"ANIVERSARIANTES DE {meses_selecionados[0].upper()}"
         subtitulo_doc = ""
@@ -299,7 +372,6 @@ def renderizar_aba_niver():
 
     st.markdown("<hr style='margin: 10px 0;'>", unsafe_allow_html=True)
 
-    # 💌 Caixa de Mensagem
     c_msg, c_botoes = st.columns([3, 1], vertical_alignment="bottom")
     with c_msg:
         st.markdown(f"**💌 Mensagem Temática ({nome_meses_tela})**")
@@ -312,7 +384,6 @@ def renderizar_aba_niver():
         msg_base = f"Celebrando os aniversariantes de {nome_meses_tela}! Muita saúde e vida ativa para todos!"
         mensagem_digitada = st.text_area("Ajuste o texto:", value=msg_base, height=70)
 
-    # 🖨️ Botões de Geração
     with c_botoes:
         if not df_mes.empty:
             if st.button("📕 GERAR PDF", use_container_width=True, type="primary"):
@@ -340,9 +411,7 @@ def renderizar_aba_niver():
         unsafe_allow_html=True,
     )
 
-    # 📅 Exibição em Tela (Listagem Diária)
     for _, r in df_mes.iterrows():
-        # Cálculo impecável de tempo real para o Badge
         aniv_data = datetime.date(hoje.year, int(r["mes"]), int(r["dia"]))
         delta = (aniv_data - hoje).days
 
