@@ -327,7 +327,10 @@ def render_bi_dashboard():
     if df_pres.empty:
         st.info("Nenhuma presença registada no período selecionado.")
     else:
-        df_pres["data_aula"] = pd.to_datetime(df_pres["data_aula"])
+        # Normaliza para "YYYY-MM-DD" string pura antes de qualquer parsing.
+        # Supabase retorna date como "2026-05-21" e timestamp como "2026-05-21T00:00:00+00:00".
+        # pd.to_datetime em série mista converte tz-aware para NaT — usar str[:10] é seguro.
+        df_pres["data_aula"] = df_pres["data_aula"].astype(str).str[:10]
         df_diario = df_pres.groupby("data_aula").size().reset_index(name="presencas")
 
         total_pres  = int(df_diario["presencas"].sum())

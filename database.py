@@ -704,22 +704,17 @@ def listar_datas_aulas_registradas() -> pd.DataFrame:
         df_d = pd.DataFrame(r_diario.data or [])
 
         # Normaliza ambas as colunas para "YYYY-MM-DD" string pura.
-        # CRÍTICO: frequencia.data_aula é tipo date  → "2025-05-21"
-        #          diario_aulas.data_aula pode ser timestamp → "2025-05-21T00:00:00+00:00"
-        # Sem normalização, o set fica com strings diferentes e a comparação
-        # retorna 0 mesmo havendo registros na tabela.
+        # CRÍTICO: frequencia.data_aula pode ser date  → "2026-05-21"
+        #          diario_aulas.data_aula pode ser timestamp → "2026-05-21T00:00:00+00:00"
+        # pd.to_datetime com series mista (naive + tz-aware) converte tz-aware para NaT
+        # mesmo com errors='coerce' — por isso usamos str[:10] (sempre YYYY-MM-DD).
+        _RE_DATA = r"^\d{4}-\d{2}-\d{2}$"
         if not df_f.empty:
-            df_f["data_aula"] = (
-                pd.to_datetime(df_f["data_aula"], errors="coerce")
-                .dt.strftime("%Y-%m-%d")
-            )
-            df_f = df_f.dropna(subset=["data_aula"])
+            df_f["data_aula"] = df_f["data_aula"].astype(str).str[:10]
+            df_f = df_f[df_f["data_aula"].str.match(_RE_DATA, na=False)]
         if not df_d.empty:
-            df_d["data_aula"] = (
-                pd.to_datetime(df_d["data_aula"], errors="coerce")
-                .dt.strftime("%Y-%m-%d")
-            )
-            df_d = df_d.dropna(subset=["data_aula"])
+            df_d["data_aula"] = df_d["data_aula"].astype(str).str[:10]
+            df_d = df_d[df_d["data_aula"].str.match(_RE_DATA, na=False)]
 
         datas = set()
         if not df_f.empty:
