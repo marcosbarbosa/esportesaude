@@ -179,15 +179,21 @@ def gerar_excel_planilha_frequencia(
             "A11:E11", f"Total de Alunos no Período: {total_alunos}", f_dst
         )
 
+        def _safe(v):
+            """Converte NaN/Inf para string vazia — xlsxwriter não aceita float inválido."""
+            if isinstance(v, float) and (v != v or v == float("inf") or v == float("-inf")):
+                return ""
+            return v
+
         for col_num, value in enumerate(df_grid.columns.values):
             fmt = f_cab_e if value in ["Aluno", "Turma"] else f_cab_c
             worksheet.write(12, col_num, value, fmt)
-            val_topo = df_grid.iloc[0, col_num]
+            val_topo = _safe(df_grid.iloc[0, col_num])
             fmt_t = f_tot_e if value in ["Aluno", "Turma"] else f_tot_c
             worksheet.write(13, col_num, val_topo, fmt_t)
 
             for row_num in range(1, len(df_grid)):
-                val = df_grid.iloc[row_num, col_num]
+                val = _safe(df_grid.iloc[row_num, col_num])
                 if value in ["Aluno", "Turma"]:
                     worksheet.write(13 + row_num, col_num, val)
                 else:
