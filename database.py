@@ -1188,7 +1188,7 @@ def bi_resumo_studio():
         ativos = inativos = risco_v = risco_a = 0
         ids_ativos = set()
     try:
-        r_f = supabase.from_("frequencia").select("status").gte("data_aula", c30).execute()
+        r_f = supabase.from_("frequencia").select("status").gte("data_aula", c30).limit(10000).execute()
         df_f = pd.DataFrame(r_f.data or [])
         t_reg = len(df_f)
         pres  = int((df_f["status"] == "PRESENTE").sum()) if not df_f.empty else 0
@@ -1197,7 +1197,7 @@ def bi_resumo_studio():
         taxa = 0.0
     try:
         r_f15 = (supabase.from_("frequencia").select("aluno_id")
-                 .gte("data_aula", c15).eq("status", "PRESENTE").execute())
+                 .gte("data_aula", c15).eq("status", "PRESENTE").limit(5000).execute())
         ids_com_pres = {r["aluno_id"] for r in (r_f15.data or [])}
         sem_pres_15  = len(ids_ativos - ids_com_pres)
     except Exception:
@@ -1237,7 +1237,7 @@ def bi_frequencia_turmas(dias=30):
     try:
         corte = (datetime.date.today() - datetime.timedelta(days=dias)).isoformat()
         r_f = (supabase.from_("frequencia").select("aluno_id, status")
-               .gte("data_aula", corte).execute())
+               .gte("data_aula", corte).limit(20000).execute())
         df_f = pd.DataFrame(r_f.data or [])
         if df_f.empty:
             return pd.DataFrame()
@@ -1296,7 +1296,7 @@ def bi_alunos_risco_abandono(dias=30):
         if df_al.empty:
             return pd.DataFrame()
         r_f = (supabase.from_("frequencia").select("aluno_id, data_aula")
-               .gte("data_aula", corte).eq("status", "PRESENTE").execute())
+               .gte("data_aula", corte).eq("status", "PRESENTE").limit(10000).execute())
         df_f = pd.DataFrame(r_f.data or [])
         pres_ids = set(df_f["aluno_id"].tolist()) if not df_f.empty else set()
         ausentes = df_al[~df_al["id"].isin(pres_ids)].copy()
@@ -1305,7 +1305,7 @@ def bi_alunos_risco_abandono(dias=30):
         # Última presença de todos os tempos
         r_ult = (supabase.from_("frequencia").select("aluno_id, data_aula")
                  .in_("aluno_id", ausentes["id"].tolist())
-                 .eq("status", "PRESENTE").execute())
+                 .eq("status", "PRESENTE").limit(10000).execute())
         df_ult = pd.DataFrame(r_ult.data or [])
         if not df_ult.empty:
             ult_pres = (df_ult.groupby("aluno_id")["data_aula"].max()

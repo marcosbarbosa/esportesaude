@@ -70,7 +70,7 @@ def carregar_dados_crm_avaliacoes_senior():
         )
         df_av = pd.DataFrame(res_av.data)
 
-        res_freq = supabase.from_("frequencia").select("aluno_id, status").execute()
+        res_freq = supabase.from_("frequencia").select("aluno_id, status").limit(50000).execute()
         df_f_bruto = pd.DataFrame(res_freq.data)
 
         if not df_av.empty:
