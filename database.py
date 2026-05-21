@@ -162,7 +162,7 @@ def recuperar_senha_usuario(email):
     return False, "Função de recuperação em manutenção."
 
 
-@st.cache_data(ttl=60)
+@st.cache_data(ttl=180)
 def get_agendamentos_pendentes(limite=8):
     """Retorna os agendamentos pendentes para a dashboard do main.py"""
     try:
@@ -203,7 +203,7 @@ def get_todas_turmas(ativas_apenas=False):
         return pd.DataFrame()
 
 
-@st.cache_data(ttl=60)
+@st.cache_data(ttl=300)
 def get_ocupacao_turmas(limite_padrao=40):
     try:
         res = (
@@ -306,7 +306,7 @@ def excluir_turma(turma_id):
 # ==============================================================================
 # 🚀 PIPELINE DE INSCRIÇÕES (CADASTRO FULL 28 CAMPOS)
 # ==============================================================================
-@st.cache_data(ttl=60)
+@st.cache_data(ttl=180)
 def get_pre_cadastros_pendentes():
     try:
         res = (
@@ -396,7 +396,7 @@ def rejeitar_inscricao_aluno(pre_cadastro_id):
 # ==============================================================================
 # 👨‍🎓 GESTÃO DE ALUNOS E DIÁRIOS
 # ==============================================================================
-@st.cache_data(ttl=60)
+@st.cache_data(ttl=300)
 def buscar_alunos_geral(termo="", incluir_inativos=False):
     try:
         query = supabase.from_("alunos").select("*")
@@ -679,7 +679,7 @@ def get_alunos_por_turma(turma_nome):
         return pd.DataFrame()
 
 
-@st.cache_data(ttl=60)
+@st.cache_data(ttl=300)
 def listar_datas_aulas_registradas() -> pd.DataFrame:
     """
     Retorna DataFrame com todas as datas que têm registros em frequencia ou diario_aulas.

@@ -81,14 +81,28 @@ def verificar_dia_letivo(data):
     return True, "Dia Letivo Válido"
 
 
-@st.cache_data(ttl=60)
+@st.cache_data(ttl=300)
 def obter_todos_alunos_cache():
     return buscar_alunos_geral("")
 
 
-@st.cache_data(ttl=60)
+@st.cache_data(ttl=300)
 def obter_todos_alunos_com_inativos_cache():
     return buscar_alunos_geral("", incluir_inativos=True)
+
+
+@st.cache_data(ttl=300)
+def verificar_aniversariante_hoje_cache() -> bool:
+    """Retorna True se há algum aluno aniversariando hoje. Cache de 5 min."""
+    try:
+        hoje = datetime.date.today()
+        df = buscar_alunos_geral("")
+        if df.empty:
+            return False
+        dts = pd.to_datetime(df["data_nascimento"], errors="coerce").dropna()
+        return bool(((dts.dt.day == hoje.day) & (dts.dt.month == hoje.month)).any())
+    except Exception:
+        return False
 
 
 def obter_alunos_por_selecao(selecao, mostrar_todos=False):
@@ -131,18 +145,7 @@ def carregar_css_global():
 def tela_frequencia():
     carregar_css_global()
 
-    df_niver_check = obter_todos_alunos_cache()
-    hoje_check = datetime.date.today()
-    tem_aniversariante_hoje = False
-    for _, r in df_niver_check.iterrows():
-        try:
-            if pd.notna(r.get("data_nascimento")):
-                dt = pd.to_datetime(r.get("data_nascimento")).date()
-                if dt.day == hoje_check.day and dt.month == hoje_check.month:
-                    tem_aniversariante_hoje = True
-                    break
-        except:
-            continue
+    tem_aniversariante_hoje = verificar_aniversariante_hoje_cache()
 
     label_niver = (
         "🎂 Niver 🍰 HOJE TEM BOLO!!!" if tem_aniversariante_hoje else "🎂 Niver"
