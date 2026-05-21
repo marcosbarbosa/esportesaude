@@ -102,6 +102,38 @@ def _calcular_media_semana(df_pres, data_ini, data_fim):
     return df_sem
 
 
+def _html_barras_bi(dados, titulo, cor="#0056b3", unidade="", max_val=None):
+    """
+    Gráfico de barras horizontais em HTML puro — compatível com xhtml2pdf.
+    dados: list of (label, value)
+    """
+    if not dados:
+        return ""
+    _max = max_val if max_val else max((float(v) for _, v in dados if str(v).replace(".", "").isdigit()), default=1) or 1
+    linhas = ""
+    for label, val in dados:
+        try:
+            v = float(val)
+        except Exception:
+            v = 0
+        pct = int(v / _max * 82) if _max > 0 else 0
+        cor_barra = _COR_VERDE if v >= _max * 0.75 else (_COR_AMAR if v >= _max * 0.5 else cor)
+        linhas += (
+            "<tr>"
+            f"<td style='width:20%;font-size:7.5pt;text-align:right;padding:2px 5px 2px 0;"
+            f"white-space:nowrap;color:#475569;'>{label}</td>"
+            f"<td style='width:68%;padding:3px 0;vertical-align:middle;'>"
+            f"<div style='background:{cor_barra};height:12px;width:{pct}%;'></div></td>"
+            f"<td style='width:12%;font-size:8pt;font-weight:700;color:#0A2540;padding-left:4px;'>"
+            f"{val}{unidade}</td>"
+            "</tr>"
+        )
+    return (
+        f"<p style='margin:10px 0 3px;font-size:9pt;font-weight:700;color:#0056b3;'>{titulo}</p>"
+        f"<table style='width:100%;border-collapse:collapse;margin-bottom:8px;'>{linhas}</table>"
+    )
+
+
 def _gerar_pdf_frequencia(data_ini, data_fim, total, dias_aula, media_dia,
                            pico_val, pico_data, df_diario, df_semana):
     """
@@ -136,28 +168,41 @@ def _gerar_pdf_frequencia(data_ini, data_fim, total, dias_aula, media_dia,
             if logo_s else ""
         )
 
-        # Tabela diaria
-        linhas_diario = ""
+        # ── Dados para gráficos e tabelas ─────────────────────────────
+        grafico_diario = []
+        linhas_diario  = ""
         for _, row in df_diario.sort_values("data_aula").iterrows():
-            dt = pd.to_datetime(row["data_aula"])
+            dt       = pd.to_datetime(row["data_aula"])
             dia_nome = _DIAS_PT.get(dt.strftime("%A"), dt.strftime("%A"))
+            pres     = int(row["presencas"])
+            grafico_diario.append((f"{dt.strftime('%d/%m')} {dia_nome[:3]}", pres))
             linhas_diario += (
                 f"<tr>"
                 f"<td>{dt.strftime('%d/%m/%Y')}</td>"
                 f"<td>{dia_nome}</td>"
-                f"<td style='text-align:center;font-weight:700;'>{int(row['presencas'])}</td>"
+                f"<td style='text-align:center;font-weight:700;'>{pres}</td>"
                 f"</tr>"
             )
 
-        # Tabela por dia da semana
-        linhas_semana = ""
+        grafico_semana = []
+        linhas_semana  = ""
         for _, row in df_semana.iterrows():
+            m = float(row["media"])
+            if m > 0:
+                grafico_semana.append((row["dia"], f"{m:.1f}"))
             linhas_semana += (
                 f"<tr>"
                 f"<td>{row['dia']}</td>"
-                f"<td style='text-align:center;font-weight:700;'>{row['media']:.1f}</td>"
+                f"<td style='text-align:center;font-weight:700;'>{m:.1f}</td>"
                 f"</tr>"
             )
+
+        chart_diario = _html_barras_bi(grafico_diario, "Presencas por Dia de Aula", cor=_COR_AZUL)
+        max_sem = max((float(v) for _, v in grafico_semana), default=1) if grafico_semana else 1
+        chart_semana = _html_barras_bi(
+            grafico_semana, "Media de Presencas por Dia da Semana",
+            cor=_COR_AZUL, max_val=max_sem,
+        )
 
         rodape_partes = [p for p in [
             nome_org,
@@ -171,26 +216,26 @@ def _gerar_pdf_frequencia(data_ini, data_fim, total, dias_aula, media_dia,
 <meta charset="UTF-8"/>
 <style>
   body {{ font-family: Arial, sans-serif; font-size: 10pt; color: #1e293b; margin: 20px 30px; }}
-  table {{ width: 100%; border-collapse: collapse; margin-bottom: 14px; }}
-  th {{ background: #0056b3; color: #fff; padding: 6px 10px; text-align: left; font-size: 9pt; }}
-  td {{ padding: 5px 10px; border-bottom: 1px solid #E2E8F0; font-size: 9pt; vertical-align: top; }}
+  table {{ width: 100%; border-collapse: collapse; margin-bottom: 12px; }}
+  th {{ background: #0056b3; color: #fff; padding: 5px 8px; text-align: left; font-size: 8.5pt; }}
+  td {{ padding: 4px 8px; border-bottom: 1px solid #E2E8F0; font-size: 8.5pt; vertical-align: top; }}
   tr:nth-child(even) {{ background: #F8FAFC; }}
-  .kpi-val {{ font-size: 18pt; font-weight: 900; color: #0056b3; }}
-  .kpi-lbl {{ font-size: 8pt; color: #475569; font-weight: 700; text-transform: uppercase; }}
-  h2 {{ color: #0056b3; font-size: 11pt; border-bottom: 2px solid #0056b3;
-        padding-bottom: 3px; margin-top: 16px; margin-bottom: 6px; }}
-  .rodape {{ margin-top: 30px; text-align: center; font-size: 8pt; color: #94A3B8;
-             border-top: 1px solid #E2E8F0; padding-top: 8px; }}
+  .kpi-val {{ font-size: 17pt; font-weight: 900; color: #0056b3; }}
+  .kpi-lbl {{ font-size: 7.5pt; color: #475569; font-weight: 700; text-transform: uppercase; }}
+  h2 {{ color: #0056b3; font-size: 10.5pt; border-bottom: 2px solid #0056b3;
+        padding-bottom: 3px; margin-top: 14px; margin-bottom: 5px; }}
+  .rodape {{ margin-top: 24px; text-align: center; font-size: 7.5pt; color: #94A3B8;
+             border-top: 1px solid #E2E8F0; padding-top: 6px; }}
 </style>
 </head><body>
 
-<table style="border-bottom:3px solid #0056b3;margin-bottom:16px;">
+<table style="border-bottom:3px solid #0056b3;margin-bottom:14px;">
   <tr>
     <td style="width:22%;text-align:left;border-bottom:0;">{img_s}</td>
     <td style="width:56%;text-align:center;border-bottom:0;">
       <p style="margin:0;font-size:10pt;font-weight:900;color:#0A2540;">{titulo}</p>
       <p style="margin:2px 0 0;font-size:9pt;color:#475569;">{subtitulo}</p>
-      <p style="margin:4px 0 0;font-size:9pt;color:#64748B;">Periodo: {ini_str} a {fim_str}</p>
+      <p style="margin:4px 0 0;font-size:8.5pt;color:#64748B;">Periodo: {ini_str} a {fim_str}</p>
     </td>
     <td style="width:22%;text-align:right;border-bottom:0;">{img_p}</td>
   </tr>
@@ -198,31 +243,35 @@ def _gerar_pdf_frequencia(data_ini, data_fim, total, dias_aula, media_dia,
 
 <h2>Relatorio de Frequencia Diaria</h2>
 
-<table>
+<table style="margin-bottom:14px;">
   <tr>
-    <td style="width:25%;text-align:center;background:#EFF6FF;border:1px solid #BFDBFE;padding:8px;">
+    <td style="width:25%;text-align:center;background:#EFF6FF;border:1px solid #BFDBFE;padding:7px;">
       <div class="kpi-val">{total}</div>
       <div class="kpi-lbl">Total de Presencas</div>
     </td>
-    <td style="width:25%;text-align:center;background:#EFF6FF;border:1px solid #BFDBFE;padding:8px;">
+    <td style="width:25%;text-align:center;background:#EFF6FF;border:1px solid #BFDBFE;padding:7px;">
       <div class="kpi-val">{dias_aula}</div>
       <div class="kpi-lbl">Dias com Aula</div>
     </td>
-    <td style="width:25%;text-align:center;background:#EFF6FF;border:1px solid #BFDBFE;padding:8px;">
+    <td style="width:25%;text-align:center;background:#EFF6FF;border:1px solid #BFDBFE;padding:7px;">
       <div class="kpi-val">{media_dia:.1f}</div>
       <div class="kpi-lbl">Media por Dia</div>
     </td>
-    <td style="width:25%;text-align:center;background:#EFF6FF;border:1px solid #BFDBFE;padding:8px;">
+    <td style="width:25%;text-align:center;background:#EFF6FF;border:1px solid #BFDBFE;padding:7px;">
       <div class="kpi-val">{pico_val}</div>
       <div class="kpi-lbl">Pico ({pico_data})</div>
     </td>
   </tr>
 </table>
 
+{chart_diario}
+
+{chart_semana}
+
 <table>
   <tr>
-    <td style="width:55%;vertical-align:top;padding-right:12px;border-bottom:0;">
-      <h2>Presencas por Data</h2>
+    <td style="width:55%;vertical-align:top;padding-right:10px;border-bottom:0;">
+      <h2>Presencas por Data (Detalhado)</h2>
       <table>
         <tr><th>Data</th><th>Dia</th><th>Presencas</th></tr>
         {linhas_diario}
@@ -232,8 +281,8 @@ def _gerar_pdf_frequencia(data_ini, data_fim, total, dias_aula, media_dia,
         </tr>
       </table>
     </td>
-    <td style="width:45%;vertical-align:top;padding-left:12px;border-bottom:0;">
-      <h2>Media por Dia da Semana</h2>
+    <td style="width:45%;vertical-align:top;padding-left:10px;border-bottom:0;">
+      <h2>Resumo por Dia da Semana</h2>
       <table>
         <tr><th>Dia da Semana</th><th>Media</th></tr>
         {linhas_semana}
