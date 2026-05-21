@@ -8,6 +8,9 @@ import datetime
 from database import (
     listar_datas_aulas_registradas,
     excluir_dia_aula_completo,
+    bi_presencas_periodo,
+    bi_frequencia_turmas,
+    bi_resumo_studio,
     ADMIN_MASTER,
 )
 
@@ -153,7 +156,15 @@ def renderizar_aba_admin():
                         f"✅ Data **{data_fmt}** excluída com sucesso! "
                         f"({n_f} registros de frequência e {n_d} diários removidos)"
                     )
-                    # Limpar confirmação e forçar recarregamento da lista
+                    # Flush direto dos caches de BI e do listing
+                    for fn in (bi_presencas_periodo, bi_frequencia_turmas,
+                                bi_resumo_studio, listar_datas_aulas_registradas):
+                        try:
+                            fn.clear()
+                        except Exception:
+                            pass
+                    # Sinaliza para a aba BI que houve exclusão
+                    st.session_state["bi_cache_dirty"] = True
                     if "admin_confirma_data" in st.session_state:
                         del st.session_state["admin_confirma_data"]
                     st.rerun()

@@ -17,6 +17,7 @@ from database import (
     bi_dores_studio,
     buscar_alunos_geral,
     bi_presencas_periodo,
+    get_presencas_dia,
 )
 from utils.identidade import (
     get_config,
@@ -103,6 +104,10 @@ def _calcular_media_semana(df_pres, data_ini, data_fim):
 
 def _gerar_pdf_frequencia(data_ini, data_fim, total, dias_aula, media_dia,
                            pico_val, pico_data, df_diario, df_semana):
+    """
+    Gera PDF de frequência com xhtml2pdf.
+    IMPORTANTE: sem emojis e sem display:table-cell — ambos quebram o pisa.
+    """
     try:
         from xhtml2pdf import pisa
 
@@ -110,12 +115,28 @@ def _gerar_pdf_frequencia(data_ini, data_fim, total, dias_aula, media_dia,
         ini_str = data_ini.strftime("%d/%m/%Y")
         fim_str = data_fim.strftime("%d/%m/%Y")
 
-        cabecalho = render_cabecalho_html(
-            cfg, extra=f"Período: {ini_str} a {fim_str}"
-        )
-        rodape = render_rodape_html(cfg)
+        titulo    = cfg.get("titulo_projeto", "")
+        subtitulo = cfg.get("subtitulo_projeto", "")
+        nome_org  = cfg.get("nome_organizacao", "")
+        cnpj      = cfg.get("cnpj", "")
+        site      = cfg.get("site", "")
+        insta     = cfg.get("instagram", "")
+        endereco  = cfg.get("endereco", "")
 
-        # Tabela diária
+        logo_p = get_logo_b64(cfg.get("logo_principal", ""))
+        logo_s = get_logo_b64(cfg.get("logo_secundaria", ""))
+        img_p = (
+            f'<img src="data:image/png;base64,{logo_p}" '
+            f'style="max-width:100px;max-height:70px;" />'
+            if logo_p else f'<b>{nome_org}</b>'
+        )
+        img_s = (
+            f'<img src="data:image/png;base64,{logo_s}" '
+            f'style="max-width:120px;max-height:70px;" />'
+            if logo_s else ""
+        )
+
+        # Tabela diaria
         linhas_diario = ""
         for _, row in df_diario.sort_values("data_aula").iterrows():
             dt = pd.to_datetime(row["data_aula"])
@@ -138,84 +159,101 @@ def _gerar_pdf_frequencia(data_ini, data_fim, total, dias_aula, media_dia,
                 f"</tr>"
             )
 
+        rodape_partes = [p for p in [
+            nome_org,
+            f"CNPJ: {cnpj}" if cnpj else "",
+            site, insta, endereco,
+        ] if p]
+        rodape_linha = " | ".join(rodape_partes)
+
         html = f"""<!DOCTYPE html>
 <html><head>
 <meta charset="UTF-8"/>
 <style>
-  body {{ font-family: Arial, sans-serif; font-size: 10pt; color: #1e293b;
-          margin: 20px 30px; }}
-  table {{ width: 100%; border-collapse: collapse; margin-bottom: 20px; }}
-  th {{ background: #0056b3; color: #fff; padding: 6px 10px;
-        text-align: left; font-size: 9pt; }}
-  td {{ padding: 5px 10px; border-bottom: 1px solid #E2E8F0; font-size: 9pt; }}
+  body {{ font-family: Arial, sans-serif; font-size: 10pt; color: #1e293b; margin: 20px 30px; }}
+  table {{ width: 100%; border-collapse: collapse; margin-bottom: 14px; }}
+  th {{ background: #0056b3; color: #fff; padding: 6px 10px; text-align: left; font-size: 9pt; }}
+  td {{ padding: 5px 10px; border-bottom: 1px solid #E2E8F0; font-size: 9pt; vertical-align: top; }}
   tr:nth-child(even) {{ background: #F8FAFC; }}
-  .kpi-row {{ display: table; width: 100%; margin-bottom: 16px; }}
-  .kpi {{ display: table-cell; width: 25%; text-align: center;
-          background: #EFF6FF; border-radius: 8px; padding: 10px 6px;
-          border: 1px solid #BFDBFE; }}
-  .kpi-val {{ font-size: 20pt; font-weight: 900; color: #0056b3; }}
-  .kpi-lbl {{ font-size: 8pt; color: #475569; font-weight: 700;
-              text-transform: uppercase; }}
-  h2 {{ color: #0056b3; font-size: 12pt; border-bottom: 2px solid #0056b3;
-        padding-bottom: 4px; margin-top: 20px; }}
-  .two-col {{ display: table; width: 100%; }}
-  .col-half {{ display: table-cell; width: 50%; vertical-align: top;
-               padding-right: 10px; }}
+  .kpi-val {{ font-size: 18pt; font-weight: 900; color: #0056b3; }}
+  .kpi-lbl {{ font-size: 8pt; color: #475569; font-weight: 700; text-transform: uppercase; }}
+  h2 {{ color: #0056b3; font-size: 11pt; border-bottom: 2px solid #0056b3;
+        padding-bottom: 3px; margin-top: 16px; margin-bottom: 6px; }}
+  .rodape {{ margin-top: 30px; text-align: center; font-size: 8pt; color: #94A3B8;
+             border-top: 1px solid #E2E8F0; padding-top: 8px; }}
 </style>
 </head><body>
-{cabecalho}
 
-<h2>📊 Relatório de Frequência Diária — Presenças</h2>
+<table style="border-bottom:3px solid #0056b3;margin-bottom:16px;">
+  <tr>
+    <td style="width:22%;text-align:left;border-bottom:0;">{img_s}</td>
+    <td style="width:56%;text-align:center;border-bottom:0;">
+      <p style="margin:0;font-size:10pt;font-weight:900;color:#0A2540;">{titulo}</p>
+      <p style="margin:2px 0 0;font-size:9pt;color:#475569;">{subtitulo}</p>
+      <p style="margin:4px 0 0;font-size:9pt;color:#64748B;">Periodo: {ini_str} a {fim_str}</p>
+    </td>
+    <td style="width:22%;text-align:right;border-bottom:0;">{img_p}</td>
+  </tr>
+</table>
 
-<div class="kpi-row">
-  <div class="kpi">
-    <div class="kpi-val">{total}</div>
-    <div class="kpi-lbl">Total de Presenças</div>
-  </div>
-  &nbsp;
-  <div class="kpi">
-    <div class="kpi-val">{dias_aula}</div>
-    <div class="kpi-lbl">Dias com Aula</div>
-  </div>
-  &nbsp;
-  <div class="kpi">
-    <div class="kpi-val">{media_dia:.1f}</div>
-    <div class="kpi-lbl">Média por Dia</div>
-  </div>
-  &nbsp;
-  <div class="kpi">
-    <div class="kpi-val">{pico_val}</div>
-    <div class="kpi-lbl">Pico ({pico_data})</div>
-  </div>
-</div>
+<h2>Relatorio de Frequencia Diaria</h2>
 
-<div class="two-col">
-  <div class="col-half">
-    <h2>📅 Presenças por Data</h2>
-    <table>
-      <tr><th>Data</th><th>Dia</th><th>Presenças</th></tr>
-      {linhas_diario}
-      <tr style="background:#EFF6FF;font-weight:700;">
-        <td colspan="2">TOTAL / MÉDIA</td>
-        <td style="text-align:center;">{total} / {media_dia:.1f}</td>
-      </tr>
-    </table>
-  </div>
-  <div class="col-half" style="padding-left:10px;padding-right:0;">
-    <h2>📊 Média por Dia da Semana</h2>
-    <table>
-      <tr><th>Dia da Semana</th><th>Média de Pessoas</th></tr>
-      {linhas_semana}
-    </table>
-  </div>
-</div>
+<table>
+  <tr>
+    <td style="width:25%;text-align:center;background:#EFF6FF;border:1px solid #BFDBFE;padding:8px;">
+      <div class="kpi-val">{total}</div>
+      <div class="kpi-lbl">Total de Presencas</div>
+    </td>
+    <td style="width:25%;text-align:center;background:#EFF6FF;border:1px solid #BFDBFE;padding:8px;">
+      <div class="kpi-val">{dias_aula}</div>
+      <div class="kpi-lbl">Dias com Aula</div>
+    </td>
+    <td style="width:25%;text-align:center;background:#EFF6FF;border:1px solid #BFDBFE;padding:8px;">
+      <div class="kpi-val">{media_dia:.1f}</div>
+      <div class="kpi-lbl">Media por Dia</div>
+    </td>
+    <td style="width:25%;text-align:center;background:#EFF6FF;border:1px solid #BFDBFE;padding:8px;">
+      <div class="kpi-val">{pico_val}</div>
+      <div class="kpi-lbl">Pico ({pico_data})</div>
+    </td>
+  </tr>
+</table>
 
-{rodape}
+<table>
+  <tr>
+    <td style="width:55%;vertical-align:top;padding-right:12px;border-bottom:0;">
+      <h2>Presencas por Data</h2>
+      <table>
+        <tr><th>Data</th><th>Dia</th><th>Presencas</th></tr>
+        {linhas_diario}
+        <tr style="background:#EFF6FF;font-weight:700;">
+          <td colspan="2">TOTAL / MEDIA</td>
+          <td style="text-align:center;">{total} / {media_dia:.1f}</td>
+        </tr>
+      </table>
+    </td>
+    <td style="width:45%;vertical-align:top;padding-left:12px;border-bottom:0;">
+      <h2>Media por Dia da Semana</h2>
+      <table>
+        <tr><th>Dia da Semana</th><th>Media</th></tr>
+        {linhas_semana}
+      </table>
+    </td>
+  </tr>
+</table>
+
+<div class="rodape">{rodape_linha}</div>
+
 </body></html>"""
 
         buf = io.BytesIO()
-        pisa.CreatePDF(html.encode("utf-8"), dest=buf)
-        return buf.getvalue()
+        result = pisa.CreatePDF(html.encode("utf-8"), dest=buf)
+        if result.err:
+            st.error(f"Erro ao renderizar PDF (código {result.err}). "
+                     "Tente novamente ou contacte o suporte.")
+            return None
+        pdf_bytes = buf.getvalue()
+        return pdf_bytes if pdf_bytes else None
     except Exception as e:
         st.error(f"Erro ao gerar PDF: {e}")
         return None
@@ -224,9 +262,23 @@ def _gerar_pdf_frequencia(data_ini, data_fim, total, dias_aula, media_dia,
 # ──────────────────────────────────────────────────────────────────────────────
 # PONTO DE ENTRADA
 # ──────────────────────────────────────────────────────────────────────────────
+def _flush_bi_frequencia():
+    """Limpa apenas os caches relacionados a frequência/presenças."""
+    for fn in (bi_presencas_periodo, bi_frequencia_turmas,
+               bi_resumo_studio, get_presencas_dia):
+        try:
+            fn.clear()
+        except Exception:
+            pass
+
+
 def render_bi_dashboard():
     st.markdown("## 📊 BI Prime — Dashboard do Estúdio")
     st.caption("Indicadores em tempo real para tomada de decisão estratégica e operacional.")
+
+    # Se o admin excluiu um dia de aula, garantir flush antes de renderizar
+    if st.session_state.pop("bi_cache_dirty", False):
+        _flush_bi_frequencia()
 
     # ═══════════════════════════════════════════════════════════════════════
     # SEÇÃO 1 — FREQUÊNCIA DIÁRIA (QUANTITATIVO DE PRESENÇAS)
@@ -259,7 +311,7 @@ def render_bi_dashboard():
         atualizar = st.button("🔄", use_container_width=True, key="bi_freq_reload",
                               help="Atualizar dados do período")
         if atualizar:
-            st.cache_data.clear()
+            _flush_bi_frequencia()
             st.rerun()
     with col_pdf:
         st.markdown("<div style='height:26px'></div>", unsafe_allow_html=True)
@@ -391,7 +443,13 @@ def render_bi_dashboard():
         )
     with col_refresh:
         if st.button("🔄 Atualizar dados", use_container_width=True):
-            st.cache_data.clear()
+            for fn in (bi_resumo_studio, bi_evolucao_cadastros, bi_frequencia_turmas,
+                       bi_alunos_risco_abandono, bi_distribuicao_risco,
+                       bi_dores_studio, buscar_alunos_geral, bi_presencas_periodo):
+                try:
+                    fn.clear()
+                except Exception:
+                    pass
             st.rerun()
 
     st.markdown("---")
