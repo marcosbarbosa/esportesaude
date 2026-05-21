@@ -686,19 +686,40 @@ def listar_datas_aulas_registradas() -> pd.DataFrame:
     Colunas: data_aula (date), total_presencas (int), turmas_diario (list[str])
     """
     try:
+        # limit=50000 evita o corte silencioso de 1000 linhas do PostgREST
         r_freq = (
             supabase.from_("frequencia")
             .select("data_aula, status")
+            .limit(50000)
             .execute()
         )
         r_diario = (
             supabase.from_("diario_aulas")
             .select("data_aula, turma")
+            .limit(10000)
             .execute()
         )
 
         df_f = pd.DataFrame(r_freq.data or [])
         df_d = pd.DataFrame(r_diario.data or [])
+
+        # Normaliza ambas as colunas para "YYYY-MM-DD" string pura.
+        # CRÍTICO: frequencia.data_aula é tipo date  → "2025-05-21"
+        #          diario_aulas.data_aula pode ser timestamp → "2025-05-21T00:00:00+00:00"
+        # Sem normalização, o set fica com strings diferentes e a comparação
+        # retorna 0 mesmo havendo registros na tabela.
+        if not df_f.empty:
+            df_f["data_aula"] = (
+                pd.to_datetime(df_f["data_aula"], errors="coerce")
+                .dt.strftime("%Y-%m-%d")
+            )
+            df_f = df_f.dropna(subset=["data_aula"])
+        if not df_d.empty:
+            df_d["data_aula"] = (
+                pd.to_datetime(df_d["data_aula"], errors="coerce")
+                .dt.strftime("%Y-%m-%d")
+            )
+            df_d = df_d.dropna(subset=["data_aula"])
 
         datas = set()
         if not df_f.empty:
@@ -709,11 +730,15 @@ def listar_datas_aulas_registradas() -> pd.DataFrame:
         if not datas:
             return pd.DataFrame(columns=["data_aula", "total_presencas", "turmas_diario"])
 
+        # Pré-calcula contagens usando value_counts (muito mais rápido que loop ==)
+        contagem_freq = (
+            df_f["data_aula"].value_counts() if not df_f.empty
+            else pd.Series(dtype=int)
+        )
+
         rows = []
         for d in sorted(datas, reverse=True):
-            presencas = 0
-            if not df_f.empty:
-                presencas = int((df_f["data_aula"] == d).sum())
+            presencas = int(contagem_freq.get(d, 0))
             turmas = []
             if not df_d.empty:
                 turmas = df_d[df_d["data_aula"] == d]["turma"].dropna().tolist()
@@ -1307,6 +1332,7 @@ def bi_presencas_periodo(data_inicio: str, data_fim: str) -> pd.DataFrame:
             .eq("status", "PRESENTE")
             .gte("data_aula", str(data_inicio))
             .lte("data_aula", str(data_fim))
+            .limit(20000)
             .execute()
         )
         return pd.DataFrame(r.data or [])
