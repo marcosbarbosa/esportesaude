@@ -4,6 +4,7 @@
 import streamlit as st
 import pandas as pd
 import datetime
+from dateutil.easter import easter
 
 from database import (
     listar_datas_aulas_registradas,
@@ -19,6 +20,59 @@ _DIAS_PT = {
     "Thursday": "Quinta-feira", "Friday": "Sexta-feira",
     "Saturday": "Sábado", "Sunday": "Domingo",
 }
+
+
+def _feriados_sp(anos) -> dict:
+    """
+    Retorna {date: nome_feriado} com feriados nacionais + SP estado + SP cidade
+    para os anos solicitados.
+    """
+    feriados = {}
+    for ano in anos:
+        # ── Pascoa base para feriados moveis ──────────────────────────────
+        p = easter(ano)
+        td = datetime.timedelta
+
+        # Nacionais fixos
+        fixos = [
+            (1,  1,  "Ano Novo"),
+            (4,  21, "Tiradentes"),
+            (5,  1,  "Dia do Trabalho"),
+            (9,  7,  "Independência do Brasil"),
+            (10, 12, "Nossa Senhora Aparecida"),
+            (11, 2,  "Finados"),
+            (11, 15, "Proclamação da República"),
+            (11, 20, "Consciência Negra"),
+            (12, 25, "Natal"),
+        ]
+        for mes, dia, nome in fixos:
+            feriados[datetime.date(ano, mes, dia)] = nome
+
+        # Nacionais móveis
+        feriados[p - td(days=48)] = "Carnaval (2ª feira)"
+        feriados[p - td(days=47)] = "Carnaval (3ª feira)"
+        feriados[p - td(days=2)]  = "Sexta-feira Santa"
+        feriados[p]               = "Páscoa"
+        feriados[p + td(days=60)] = "Corpus Christi"
+
+        # SP Estado
+        feriados[datetime.date(ano, 7, 9)] = "Revolução Constitucionalista (SP)"
+
+        # SP Cidade
+        feriados[datetime.date(ano, 1, 25)] = "Aniversário de São Paulo"
+
+    return feriados
+
+
+def _classificar_anomalia(dt: datetime.date, feriados: dict) -> str:
+    """Retorna string de alerta ou '' para a data informada."""
+    alertas = []
+    if dt.weekday() >= 5:
+        alertas.append("Fim de semana")
+    nome_fer = feriados.get(dt)
+    if nome_fer:
+        alertas.append(f"Feriado: {nome_fer}")
+    return " + ".join(alertas) if alertas else ""
 
 
 def renderizar_aba_admin():
@@ -55,15 +109,20 @@ def renderizar_aba_admin():
     st.markdown("### 📋 Dias de Aula Registrados")
 
     df_display = df_datas.copy()
-    df_display["data_fmt"] = pd.to_datetime(df_display["data_aula"]).dt.strftime("%d/%m/%Y")
-    df_display["dia_semana"] = pd.to_datetime(df_display["data_aula"]).dt.day_name().map(_DIAS_PT)
+    dts_parsed = pd.to_datetime(df_display["data_aula"])
+    df_display["data_fmt"]  = dts_parsed.dt.strftime("%d/%m/%Y")
+    df_display["dia_semana"] = dts_parsed.dt.day_name().map(_DIAS_PT)
     df_display["turmas"] = df_display["turmas_diario"].apply(
         lambda t: ", ".join(t) if isinstance(t, list) and t else "—"
     )
 
-    # Identificar domingos/sábados (anomalias)
-    df_display["anomalia"] = pd.to_datetime(df_display["data_aula"]).dt.weekday.apply(
-        lambda d: "⚠️ Fim de semana" if d >= 5 else ""
+    # Construir dicionário de feriados para todos os anos presentes nos dados
+    anos_dados = set(dts_parsed.dt.year.dropna().astype(int).tolist())
+    feriados = _feriados_sp(anos_dados)
+
+    # Classificar cada data: fim de semana, feriado ou ambos
+    df_display["anomalia"] = dts_parsed.apply(
+        lambda dt: _classificar_anomalia(dt.date(), feriados) if pd.notna(dt) else ""
     )
 
     cols_show = ["data_fmt", "dia_semana", "total_presencas", "turmas", "anomalia"]
@@ -73,12 +132,17 @@ def renderizar_aba_admin():
         "anomalia": "Alerta",
     })
 
-    # Pré-selecionar domingos/sábados para facilitar
+    # Resumo dos alertas encontrados
     idx_anomalos = df_display[df_display["anomalia"] != ""].index.tolist()
     if idx_anomalos:
+        n_fds      = (df_display["anomalia"].str.contains("Fim de semana", na=False)).sum()
+        n_fer      = (df_display["anomalia"].str.contains("Feriado", na=False)).sum()
+        partes = []
+        if n_fds: partes.append(f"**{n_fds}** fim(ns) de semana")
+        if n_fer: partes.append(f"**{n_fer}** feriado(s)")
         st.warning(
-            f"⚠️ Encontrado(s) **{len(idx_anomalos)}** dia(s) de fim de semana com registros — "
-            "provavelmente lançamentos incorretos."
+            f"⚠️ Encontrado(s) {' e '.join(partes)} com registros de aula — "
+            "verifique se foram lançamentos incorretos."
         )
 
     st.dataframe(df_show, use_container_width=True, hide_index=True)
