@@ -6,6 +6,7 @@ import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 import datetime
+import io
 
 from database import (
     bi_resumo_studio,
@@ -15,14 +16,28 @@ from database import (
     bi_distribuicao_risco,
     bi_dores_studio,
     buscar_alunos_geral,
+    bi_presencas_periodo,
+)
+from utils.identidade import (
+    get_config,
+    render_cabecalho_html,
+    render_rodape_html,
+    get_logo_b64,
 )
 
-_COR_AZUL   = "#0056b3"
-_COR_VERDE  = "#10B981"
-_COR_AMAR   = "#F59E0B"
-_COR_VERM   = "#EF4444"
-_COR_CINZA  = "#94A3B8"
-_BG         = "#F8FAFC"
+_COR_AZUL  = "#0056b3"
+_COR_VERDE = "#10B981"
+_COR_AMAR  = "#F59E0B"
+_COR_VERM  = "#EF4444"
+_COR_CINZA = "#94A3B8"
+_BG        = "#F8FAFC"
+
+_DIAS_PT = {
+    "Monday": "Segunda", "Tuesday": "Terça", "Wednesday": "Quarta",
+    "Thursday": "Quinta", "Friday": "Sexta", "Saturday": "Sábado", "Sunday": "Domingo",
+}
+_ORDEM_SEMANA = ["Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado", "Domingo"]
+
 
 # ── helpers ──────────────────────────────────────────────────────────────────
 def _card_metrica(label, valor, delta=None, cor="#0056b3", icone=""):
@@ -30,7 +45,10 @@ def _card_metrica(label, valor, delta=None, cor="#0056b3", icone=""):
     if delta is not None:
         sinal = "▲" if delta >= 0 else "▼"
         dor   = _COR_VERDE if delta >= 0 else _COR_VERM
-        delta_html = f"<div style='font-size:11px;color:{dor};margin-top:2px;'>{sinal} {abs(delta)}</div>"
+        delta_html = (
+            f"<div style='font-size:11px;color:{dor};margin-top:2px;'>"
+            f"{sinal} {abs(delta)}</div>"
+        )
     st.markdown(
         f"""<div style='background:#fff;border-radius:12px;padding:16px 18px;
         border-left:4px solid {cor};box-shadow:0 2px 8px rgba(0,0,0,.07);'>
@@ -55,7 +73,7 @@ def _gauge_presenca(taxa):
             "steps": [
                 {"range": [0, 50],  "color": "#FEE2E2"},
                 {"range": [50, 75], "color": "#FEF9C3"},
-                {"range": [75, 100],"color": "#DCFCE7"},
+                {"range": [75, 100], "color": "#DCFCE7"},
             ],
             "threshold": {"line": {"color": cor, "width": 3}, "thickness": 0.75, "value": taxa},
         },
@@ -65,6 +83,144 @@ def _gauge_presenca(taxa):
     return fig
 
 
+def _calcular_media_semana(df_pres, data_ini, data_fim):
+    """Calcula média de presenças por dia da semana no período."""
+    todos_dias = pd.date_range(data_ini, data_fim)
+    contagem_dias = (
+        pd.Series(todos_dias.day_name())
+        .map(_DIAS_PT)
+        .value_counts()
+    )
+    df_pres["dia_semana"] = pd.to_datetime(df_pres["data_aula"]).dt.day_name().map(_DIAS_PT)
+    soma = df_pres.groupby("dia_semana").size()
+    media = (soma / contagem_dias).fillna(0).round(1)
+    df_sem = pd.DataFrame({
+        "dia": _ORDEM_SEMANA,
+        "media": [float(media.get(d, 0)) for d in _ORDEM_SEMANA],
+    })
+    return df_sem
+
+
+def _gerar_pdf_frequencia(data_ini, data_fim, total, dias_aula, media_dia,
+                           pico_val, pico_data, df_diario, df_semana):
+    try:
+        from xhtml2pdf import pisa
+
+        cfg = get_config()
+        ini_str = data_ini.strftime("%d/%m/%Y")
+        fim_str = data_fim.strftime("%d/%m/%Y")
+
+        cabecalho = render_cabecalho_html(
+            cfg, extra=f"Período: {ini_str} a {fim_str}"
+        )
+        rodape = render_rodape_html(cfg)
+
+        # Tabela diária
+        linhas_diario = ""
+        for _, row in df_diario.sort_values("data_aula").iterrows():
+            dt = pd.to_datetime(row["data_aula"])
+            dia_nome = _DIAS_PT.get(dt.strftime("%A"), dt.strftime("%A"))
+            linhas_diario += (
+                f"<tr>"
+                f"<td>{dt.strftime('%d/%m/%Y')}</td>"
+                f"<td>{dia_nome}</td>"
+                f"<td style='text-align:center;font-weight:700;'>{int(row['presencas'])}</td>"
+                f"</tr>"
+            )
+
+        # Tabela por dia da semana
+        linhas_semana = ""
+        for _, row in df_semana.iterrows():
+            linhas_semana += (
+                f"<tr>"
+                f"<td>{row['dia']}</td>"
+                f"<td style='text-align:center;font-weight:700;'>{row['media']:.1f}</td>"
+                f"</tr>"
+            )
+
+        html = f"""<!DOCTYPE html>
+<html><head>
+<meta charset="UTF-8"/>
+<style>
+  body {{ font-family: Arial, sans-serif; font-size: 10pt; color: #1e293b;
+          margin: 20px 30px; }}
+  table {{ width: 100%; border-collapse: collapse; margin-bottom: 20px; }}
+  th {{ background: #0056b3; color: #fff; padding: 6px 10px;
+        text-align: left; font-size: 9pt; }}
+  td {{ padding: 5px 10px; border-bottom: 1px solid #E2E8F0; font-size: 9pt; }}
+  tr:nth-child(even) {{ background: #F8FAFC; }}
+  .kpi-row {{ display: table; width: 100%; margin-bottom: 16px; }}
+  .kpi {{ display: table-cell; width: 25%; text-align: center;
+          background: #EFF6FF; border-radius: 8px; padding: 10px 6px;
+          border: 1px solid #BFDBFE; }}
+  .kpi-val {{ font-size: 20pt; font-weight: 900; color: #0056b3; }}
+  .kpi-lbl {{ font-size: 8pt; color: #475569; font-weight: 700;
+              text-transform: uppercase; }}
+  h2 {{ color: #0056b3; font-size: 12pt; border-bottom: 2px solid #0056b3;
+        padding-bottom: 4px; margin-top: 20px; }}
+  .two-col {{ display: table; width: 100%; }}
+  .col-half {{ display: table-cell; width: 50%; vertical-align: top;
+               padding-right: 10px; }}
+</style>
+</head><body>
+{cabecalho}
+
+<h2>📊 Relatório de Frequência Diária — Presenças</h2>
+
+<div class="kpi-row">
+  <div class="kpi">
+    <div class="kpi-val">{total}</div>
+    <div class="kpi-lbl">Total de Presenças</div>
+  </div>
+  &nbsp;
+  <div class="kpi">
+    <div class="kpi-val">{dias_aula}</div>
+    <div class="kpi-lbl">Dias com Aula</div>
+  </div>
+  &nbsp;
+  <div class="kpi">
+    <div class="kpi-val">{media_dia:.1f}</div>
+    <div class="kpi-lbl">Média por Dia</div>
+  </div>
+  &nbsp;
+  <div class="kpi">
+    <div class="kpi-val">{pico_val}</div>
+    <div class="kpi-lbl">Pico ({pico_data})</div>
+  </div>
+</div>
+
+<div class="two-col">
+  <div class="col-half">
+    <h2>📅 Presenças por Data</h2>
+    <table>
+      <tr><th>Data</th><th>Dia</th><th>Presenças</th></tr>
+      {linhas_diario}
+      <tr style="background:#EFF6FF;font-weight:700;">
+        <td colspan="2">TOTAL / MÉDIA</td>
+        <td style="text-align:center;">{total} / {media_dia:.1f}</td>
+      </tr>
+    </table>
+  </div>
+  <div class="col-half" style="padding-left:10px;padding-right:0;">
+    <h2>📊 Média por Dia da Semana</h2>
+    <table>
+      <tr><th>Dia da Semana</th><th>Média de Pessoas</th></tr>
+      {linhas_semana}
+    </table>
+  </div>
+</div>
+
+{rodape}
+</body></html>"""
+
+        buf = io.BytesIO()
+        pisa.CreatePDF(html.encode("utf-8"), dest=buf)
+        return buf.getvalue()
+    except Exception as e:
+        st.error(f"Erro ao gerar PDF: {e}")
+        return None
+
+
 # ──────────────────────────────────────────────────────────────────────────────
 # PONTO DE ENTRADA
 # ──────────────────────────────────────────────────────────────────────────────
@@ -72,7 +228,158 @@ def render_bi_dashboard():
     st.markdown("## 📊 BI Prime — Dashboard do Estúdio")
     st.caption("Indicadores em tempo real para tomada de decisão estratégica e operacional.")
 
-    # ── Filtros ──────────────────────────────────────────────────────────────
+    # ═══════════════════════════════════════════════════════════════════════
+    # SEÇÃO 1 — FREQUÊNCIA DIÁRIA (QUANTITATIVO DE PRESENÇAS)
+    # ═══════════════════════════════════════════════════════════════════════
+    st.markdown(
+        "<div style='background:#EFF6FF;border:1.5px solid #BFDBFE;border-radius:12px;"
+        "padding:14px 18px 6px;margin-bottom:16px;'>"
+        "<p style='margin:0;font-size:1.05rem;font-weight:800;color:#0056b3;'>"
+        "📅 Frequência Diária — Quantitativo de Presenças</p>"
+        "<p style='margin:2px 0 10px;font-size:12px;color:#475569;'>"
+        "Selecione o período e visualize quantas pessoas compareceram às aulas por dia."
+        "</p></div>",
+        unsafe_allow_html=True,
+    )
+
+    hoje = datetime.date.today()
+    col_di, col_df, col_at, col_pdf = st.columns([2, 2, 1, 1])
+    with col_di:
+        data_ini = st.date_input(
+            "Período inicial:", value=hoje - datetime.timedelta(days=30),
+            key="bi_freq_ini", format="DD/MM/YYYY",
+        )
+    with col_df:
+        data_fim = st.date_input(
+            "Período final:", value=hoje,
+            key="bi_freq_fim", format="DD/MM/YYYY",
+        )
+    with col_at:
+        st.markdown("<div style='height:26px'></div>", unsafe_allow_html=True)
+        atualizar = st.button("🔄", use_container_width=True, key="bi_freq_reload",
+                              help="Atualizar dados do período")
+        if atualizar:
+            st.cache_data.clear()
+            st.rerun()
+    with col_pdf:
+        st.markdown("<div style='height:26px'></div>", unsafe_allow_html=True)
+        gerar_pdf = st.button("📥 PDF", use_container_width=True, key="bi_freq_pdf",
+                              type="primary")
+
+    if data_ini > data_fim:
+        st.warning("A data inicial não pode ser maior que a final.")
+        st.stop()
+
+    df_pres = bi_presencas_periodo(str(data_ini), str(data_fim))
+
+    if df_pres.empty:
+        st.info("Nenhuma presença registada no período selecionado.")
+    else:
+        df_pres["data_aula"] = pd.to_datetime(df_pres["data_aula"])
+        df_diario = df_pres.groupby("data_aula").size().reset_index(name="presencas")
+
+        total_pres  = int(df_diario["presencas"].sum())
+        dias_aula   = len(df_diario)
+        media_dia   = total_pres / dias_aula if dias_aula > 0 else 0
+        pico_row    = df_diario.loc[df_diario["presencas"].idxmax()]
+        pico_val    = int(pico_row["presencas"])
+        pico_data   = pd.to_datetime(pico_row["data_aula"]).strftime("%d/%m/%Y")
+        df_semana   = _calcular_media_semana(df_pres.copy(), data_ini, data_fim)
+
+        # KPI cards
+        st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
+        k1, k2, k3, k4 = st.columns(4)
+        with k1:
+            _card_metrica("Total de Presenças", total_pres, icone="✅", cor=_COR_AZUL)
+        with k2:
+            _card_metrica("Dias com Aula", dias_aula, icone="📅", cor=_COR_VERDE)
+        with k3:
+            _card_metrica("Média por Dia", f"{media_dia:.1f}", icone="📊", cor=_COR_AZUL)
+        with k4:
+            _card_metrica(f"Pico  {pico_data}", pico_val, icone="🔝", cor=_COR_AMAR)
+
+        st.markdown("<div style='height:12px'></div>", unsafe_allow_html=True)
+
+        # Gráficos
+        col_line, col_bar = st.columns([3, 2], gap="large")
+
+        with col_line:
+            with st.container(border=True):
+                ini_s = data_ini.strftime("%d/%m/%Y")
+                fim_s = data_fim.strftime("%d/%m/%Y")
+                st.markdown(
+                    f"#### 📈 Presenças diárias  "
+                    f"<span style='font-size:12px;color:#94A3B8;'>{ini_s} → {fim_s}</span>",
+                    unsafe_allow_html=True,
+                )
+                fig_line = go.Figure()
+                fig_line.add_trace(go.Scatter(
+                    x=df_diario["data_aula"],
+                    y=df_diario["presencas"],
+                    mode="lines+markers",
+                    line=dict(color=_COR_AZUL, width=2),
+                    marker=dict(size=6, color=_COR_AZUL),
+                    fill="tozeroy",
+                    fillcolor="rgba(0,86,179,0.08)",
+                    name="Presenças",
+                ))
+                fig_line.add_hline(
+                    y=media_dia, line_dash="dash", line_color=_COR_VERDE,
+                    annotation_text=f"Média: {media_dia:.1f}",
+                    annotation_position="top left",
+                )
+                fig_line.update_layout(
+                    height=260, paper_bgcolor=_BG, plot_bgcolor=_BG,
+                    margin=dict(t=10, b=20, l=0, r=0),
+                    xaxis=dict(showgrid=False, tickformat="%d/%m"),
+                    yaxis=dict(showgrid=True, gridcolor="#E2E8F0", title="Pessoas"),
+                    showlegend=False,
+                )
+                st.plotly_chart(fig_line, use_container_width=True)
+
+        with col_bar:
+            with st.container(border=True):
+                st.markdown("#### 📊 Média por Dia da Semana")
+                fig_bar = px.bar(
+                    df_semana, x="dia", y="media",
+                    color_discrete_sequence=[_COR_AZUL],
+                    labels={"dia": "", "media": "Média"},
+                    text=df_semana["media"].apply(lambda x: f"{x:.1f}"),
+                )
+                fig_bar.update_traces(textposition="outside")
+                fig_bar.update_layout(
+                    height=260, paper_bgcolor=_BG, plot_bgcolor=_BG,
+                    margin=dict(t=10, b=10, l=0, r=0),
+                    xaxis=dict(showgrid=False),
+                    yaxis=dict(showgrid=True, gridcolor="#E2E8F0"),
+                    showlegend=False,
+                )
+                st.plotly_chart(fig_bar, use_container_width=True)
+
+        # PDF
+        if gerar_pdf:
+            with st.spinner("Gerando PDF..."):
+                pdf_bytes = _gerar_pdf_frequencia(
+                    data_ini, data_fim, total_pres, dias_aula, media_dia,
+                    pico_val, pico_data, df_diario, df_semana,
+                )
+            if pdf_bytes:
+                nome_arq = (
+                    f"Frequencia_{data_ini.strftime('%d%m%Y')}"
+                    f"_{data_fim.strftime('%d%m%Y')}.pdf"
+                )
+                st.download_button(
+                    "📥 Baixar PDF",
+                    pdf_bytes,
+                    nome_arq,
+                    "application/pdf",
+                    use_container_width=True,
+                    type="primary",
+                )
+
+    st.markdown("---")
+
+    # ── Filtros gerais do BI ────────────────────────────────────────────────
     col_fil, col_refresh = st.columns([4, 1])
     with col_fil:
         periodo = st.radio(
@@ -89,18 +396,18 @@ def render_bi_dashboard():
 
     st.markdown("---")
 
-    # ── Carrega dados ─────────────────────────────────────────────────────────
+    # ── Carrega dados gerais ───────────────────────────────────────────────
     with st.spinner("Carregando indicadores..."):
-        resumo     = bi_resumo_studio()
-        df_cad     = bi_evolucao_cadastros()
-        df_turmas  = bi_frequencia_turmas(dias=periodo)
-        df_risco   = bi_distribuicao_risco()
-        df_abandono= bi_alunos_risco_abandono(dias=periodo)
-        df_dores   = bi_dores_studio()
-        df_todos   = buscar_alunos_geral(incluir_inativos=False)
+        resumo      = bi_resumo_studio()
+        df_cad      = bi_evolucao_cadastros()
+        df_turmas   = bi_frequencia_turmas(dias=periodo)
+        df_risco    = bi_distribuicao_risco()
+        df_abandono = bi_alunos_risco_abandono(dias=periodo)
+        df_dores    = bi_dores_studio()
+        df_todos    = buscar_alunos_geral(incluir_inativos=False)
 
     # ═══════════════════════════════════════════════════════════════════════
-    # SEÇÃO 1 — KPI CARDS
+    # SEÇÃO 2 — KPI CARDS GERAIS
     # ═══════════════════════════════════════════════════════════════════════
     c1, c2, c3, c4, c5, c6 = st.columns(6)
     with c1:
@@ -124,7 +431,7 @@ def render_bi_dashboard():
     st.markdown("<div style='height:20px'></div>", unsafe_allow_html=True)
 
     # ═══════════════════════════════════════════════════════════════════════
-    # SEÇÃO 2 — CADASTROS + GAUGE PRESENÇA
+    # SEÇÃO 3 — CADASTROS + GAUGE PRESENÇA
     # ═══════════════════════════════════════════════════════════════════════
     col_cad, col_gauge = st.columns([3, 1], gap="large")
 
@@ -154,17 +461,16 @@ def render_bi_dashboard():
         with st.container(border=True):
             st.plotly_chart(_gauge_presenca(resumo.get("taxa_presenca_30", 0.0)),
                             use_container_width=True)
-            n_ativos = resumo.get("total_ativos", 0)
-            taxa = resumo.get("taxa_presenca_30", 0.0)
-            if taxa >= 75:
-                st.success(f"✅ Excelente engajamento")
-            elif taxa >= 50:
-                st.warning(f"⚠️ Presença moderada")
+            taxa_g = resumo.get("taxa_presenca_30", 0.0)
+            if taxa_g >= 75:
+                st.success("✅ Excelente engajamento")
+            elif taxa_g >= 50:
+                st.warning("⚠️ Presença moderada")
             else:
-                st.error(f"🔴 Presença baixa")
+                st.error("🔴 Presença baixa")
 
     # ═══════════════════════════════════════════════════════════════════════
-    # SEÇÃO 3 — PRESENÇA POR TURMA + DISTRIBUIÇÃO DE RISCO
+    # SEÇÃO 4 — PRESENÇA POR TURMA + DISTRIBUIÇÃO DE RISCO
     # ═══════════════════════════════════════════════════════════════════════
     col_pt, col_risco = st.columns([3, 2], gap="large")
 
@@ -204,17 +510,10 @@ def render_bi_dashboard():
         with st.container(border=True):
             st.markdown("#### 🚦 Distribuição de Risco dos Alunos")
             if not df_risco.empty:
-                mapa_cor = {
-                    "🟢": _COR_VERDE,
-                    "🟡": _COR_AMAR,
-                    "🔴": _COR_VERM,
-                    "⚪": _COR_CINZA,
-                }
+                mapa_cor = {"🟢": _COR_VERDE, "🟡": _COR_AMAR, "🔴": _COR_VERM, "⚪": _COR_CINZA}
                 mapa_label = {
-                    "🟢": "🟢 Baixo risco",
-                    "🟡": "🟡 Atenção",
-                    "🔴": "🔴 Alto risco",
-                    "⚪": "⚪ Sem avaliação",
+                    "🟢": "🟢 Baixo risco", "🟡": "🟡 Atenção",
+                    "🔴": "🔴 Alto risco",  "⚪": "⚪ Sem avaliação",
                 }
                 df_risco["label_cor"] = df_risco["cor_alerta_atual"].map(
                     lambda x: mapa_label.get(str(x).strip(), str(x))
@@ -231,8 +530,7 @@ def render_bi_dashboard():
                 )
                 fig_r.update_traces(textinfo="percent+label", textfont_size=11)
                 fig_r.update_layout(
-                    height=280,
-                    paper_bgcolor=_BG,
+                    height=280, paper_bgcolor=_BG,
                     margin=dict(t=10, b=10, l=0, r=0),
                     showlegend=False,
                 )
@@ -241,7 +539,7 @@ def render_bi_dashboard():
                 st.info("Nenhuma avaliação de risco registada.")
 
     # ═══════════════════════════════════════════════════════════════════════
-    # SEÇÃO 4 — FAIXA ETÁRIA + DORES MAIS COMUNS
+    # SEÇÃO 5 — FAIXA ETÁRIA + DORES MAIS COMUNS
     # ═══════════════════════════════════════════════════════════════════════
     col_idade, col_dores = st.columns([1, 1], gap="large")
 
@@ -249,12 +547,12 @@ def render_bi_dashboard():
         with st.container(border=True):
             st.markdown("#### 🎂 Distribuição por Faixa Etária")
             if not df_todos.empty and "data_nascimento" in df_todos.columns:
-                hoje = datetime.date.today()
+                hoje2 = datetime.date.today()
                 df_i = df_todos.copy()
                 df_i["dn"] = pd.to_datetime(df_i["data_nascimento"], errors="coerce")
                 df_i = df_i.dropna(subset=["dn"])
                 df_i["idade"] = df_i["dn"].apply(
-                    lambda d: (hoje - d.date()).days // 365 if pd.notna(d) else None
+                    lambda d: (hoje2 - d.date()).days // 365 if pd.notna(d) else None
                 )
                 df_i = df_i.dropna(subset=["idade"])
                 bins   = [0, 40, 50, 60, 70, 80, 120]
@@ -262,7 +560,6 @@ def render_bi_dashboard():
                 df_i["faixa"] = pd.cut(df_i["idade"], bins=bins, labels=labels, right=False)
                 contagem = df_i["faixa"].value_counts().reindex(labels, fill_value=0).reset_index()
                 contagem.columns = ["faixa", "total"]
-
                 fig_id = px.bar(
                     contagem, x="faixa", y="total",
                     color_discrete_sequence=[_COR_AZUL],
@@ -305,7 +602,7 @@ def render_bi_dashboard():
                 st.info("Nenhum mapa de dores registado ainda.")
 
     # ═══════════════════════════════════════════════════════════════════════
-    # SEÇÃO 5 — PERFIL SOCIAL (RENDA + INSTRUÇÃO)
+    # SEÇÃO 6 — PERFIL SOCIAL (RENDA + INSTRUÇÃO)
     # ═══════════════════════════════════════════════════════════════════════
     col_renda, col_instr = st.columns([1, 1], gap="large")
 
@@ -336,16 +633,20 @@ def render_bi_dashboard():
                 df_gi = df_gi[df_gi.str.strip() != ""].value_counts().reset_index()
                 df_gi.columns = ["grau", "total"]
                 if not df_gi.empty:
-                    fig_gi = px.bar(df_gi.sort_values("total"), x="total", y="grau",
-                                     orientation="h",
-                                     color_discrete_sequence=[_COR_AZUL],
-                                     text="total",
-                                     labels={"total": "Alunos", "grau": ""})
+                    fig_gi = px.bar(
+                        df_gi.sort_values("total"), x="total", y="grau",
+                        orientation="h",
+                        color_discrete_sequence=[_COR_AZUL],
+                        text="total",
+                        labels={"total": "Alunos", "grau": ""},
+                    )
                     fig_gi.update_traces(textposition="outside")
-                    fig_gi.update_layout(height=240, paper_bgcolor=_BG, plot_bgcolor=_BG,
-                                          margin=dict(t=5, b=5, l=0, r=40),
-                                          xaxis=dict(showgrid=True, gridcolor="#E2E8F0"),
-                                          yaxis=dict(showgrid=False), showlegend=False)
+                    fig_gi.update_layout(
+                        height=240, paper_bgcolor=_BG, plot_bgcolor=_BG,
+                        margin=dict(t=5, b=5, l=0, r=40),
+                        xaxis=dict(showgrid=True, gridcolor="#E2E8F0"),
+                        yaxis=dict(showgrid=False), showlegend=False,
+                    )
                     st.plotly_chart(fig_gi, use_container_width=True)
                 else:
                     st.info("Sem dados de instrução preenchidos.")
@@ -353,7 +654,7 @@ def render_bi_dashboard():
                 st.info("Sem dados de instrução preenchidos.")
 
     # ═══════════════════════════════════════════════════════════════════════
-    # SEÇÃO 6 — ALUNOS EM RISCO DE ABANDONO
+    # SEÇÃO 7 — ALUNOS EM RISCO DE ABANDONO
     # ═══════════════════════════════════════════════════════════════════════
     st.markdown("---")
     n_ab = len(df_abandono) if not df_abandono.empty else 0
@@ -372,10 +673,9 @@ def render_bi_dashboard():
                 dias_aus = row.get("dias_ausente", 0)
                 ult = row.get("ultima_presenca")
                 try:
-                    import pandas as _pd
                     ult_str = (
                         datetime.date.fromisoformat(str(ult)).strftime("%d/%m/%Y")
-                        if ult and not _pd.isna(ult) else "Nunca apareceu"
+                        if ult and not pd.isna(ult) else "Nunca apareceu"
                     )
                 except Exception:
                     ult_str = "Nunca apareceu"
@@ -396,6 +696,4 @@ def render_bi_dashboard():
                     )
                     c4.markdown(f"{badge_risco} {ult_str}")
 
-    st.markdown(
-        "<div style='height:80px'></div>", unsafe_allow_html=True
-    )
+    st.markdown("<div style='height:80px'></div>", unsafe_allow_html=True)

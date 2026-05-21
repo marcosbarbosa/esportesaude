@@ -1169,6 +1169,23 @@ def bi_alunos_risco_abandono(dias=30):
 
 
 @st.cache_data(ttl=120)
+def bi_presencas_periodo(data_inicio: str, data_fim: str) -> pd.DataFrame:
+    """Retorna todos os registos PRESENTE no intervalo, para análise de frequência diária."""
+    try:
+        r = (
+            supabase.from_("frequencia")
+            .select("data_aula, aluno_id")
+            .eq("status", "PRESENTE")
+            .gte("data_aula", str(data_inicio))
+            .lte("data_aula", str(data_fim))
+            .execute()
+        )
+        return pd.DataFrame(r.data or [])
+    except Exception:
+        return pd.DataFrame()
+
+
+@st.cache_data(ttl=120)
 def bi_dados_individuais(aluno_id):
     """
     Retorna dict com DataFrames e listas para o relatório BI individual do aluno.
