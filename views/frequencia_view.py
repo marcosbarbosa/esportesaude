@@ -145,6 +145,7 @@ def carregar_css_global():
 def tela_frequencia():
     carregar_css_global()
 
+    hoje_check = datetime.date.today()
     tem_aniversariante_hoje = verificar_aniversariante_hoje_cache()
 
     label_niver = (
