@@ -425,6 +425,44 @@ def buscar_aluno_por_id(aluno_id):
         return None
 
 
+# ── Invalidação cirúrgica de cache ────────────────────────────────────────────
+# Cada helper limpa APENAS as funções afetadas, preservando todos os demais.
+# Nunca use st.cache_data.clear() — isso apaga tudo e causa "Running" global.
+
+def _inv_alunos():
+    """Caches de lista/perfil de alunos, prontuários e BI de risco."""
+    for fn in (
+        buscar_alunos_geral, buscar_aluno_por_id, get_alunos_por_turma,
+        get_avaliacoes_aluno, get_atestados_temporarios,
+        get_estatisticas_frequencia_aluno, get_historico_aulas_aluno,
+        bi_resumo_studio, bi_distribuicao_risco, bi_alunos_risco_abandono,
+        bi_evolucao_cadastros, bi_dados_individuais, get_pre_cadastros_pendentes,
+    ):
+        try:
+            fn.clear()
+        except Exception:
+            pass
+
+
+def _inv_agendamentos():
+    """Cache de agendamentos pendentes."""
+    try:
+        get_agendamentos_pendentes.clear()
+    except Exception:
+        pass
+
+
+def _inv_dores():
+    """Caches de anamnese de dores (histórico individual e agregado BI)."""
+    for fn in (buscar_historico_dores, bi_dores_studio):
+        try:
+            fn.clear()
+        except Exception:
+            pass
+
+
+# ── Mutações de aluno ─────────────────────────────────────────────────────────
+
 def atualizar_dados_sociais_aluno(aluno_id, dados_atualizados):
     try:
         dados_limpos = {
@@ -433,7 +471,7 @@ def atualizar_dados_sociais_aluno(aluno_id, dados_atualizados):
             if v is not None and str(v).strip() not in ("", "nan", "None")
         }
         supabase.from_("alunos").update(dados_limpos).eq("id", str(aluno_id)).execute()
-        st.cache_data.clear()
+        _inv_alunos()
         return True, "Perfil atualizado!"
     except Exception as e:
         return False, str(e)
@@ -444,7 +482,7 @@ def alterar_status_aluno(aluno_id, novo_status):
         supabase.from_("alunos").update({"status": novo_status}).eq(
             "id", str(aluno_id)
         ).execute()
-        st.cache_data.clear()
+        _inv_alunos()
         return True, "Status alterado."
     except Exception as e:
         return False, str(e)
@@ -461,7 +499,7 @@ def excluir_aluno_completo(aluno_id, solicitante_email):
         supabase.from_("atestados_temporarios").delete().eq("aluno_id", aid).execute()
         supabase.from_("anamnese_dores").delete().eq("aluno_id", aid).execute()
         supabase.from_("alunos").delete().eq("id", aid).execute()
-        st.cache_data.clear()
+        _inv_alunos()
         return True, "Excluído."
     except Exception as e:
         return False, str(e)
@@ -471,7 +509,7 @@ def excluir_aluno(aluno_id):
     """Remove o aluno da tabela alunos (sem cascade). Retorna (bool, msg)."""
     try:
         supabase.from_("alunos").delete().eq("id", str(aluno_id)).execute()
-        st.cache_data.clear()
+        _inv_alunos()
         return True, "Aluno removido."
     except Exception as e:
         return False, str(e)
@@ -484,7 +522,7 @@ def cadastrar_novo_aluno(nome, turma, **kwargs):
                    "status": "Ativo"}
         payload.update({k: v for k, v in kwargs.items() if v is not None})
         supabase.from_("alunos").insert(payload).execute()
-        st.cache_data.clear()
+        _inv_alunos()
         return True
     except Exception:
         return False
@@ -505,7 +543,7 @@ def atualizar_perfil_aluno(aluno_id, nome, data_nascimento, peso, altura,
             dados["observacoes"] = str(obs).strip()
         dados_limpos = {k: v for k, v in dados.items() if v is not None}
         supabase.from_("alunos").update(dados_limpos).eq("id", str(aluno_id)).execute()
-        st.cache_data.clear()
+        _inv_alunos()
         return True, "Perfil atualizado!"
     except Exception as e:
         return False, str(e)
@@ -519,7 +557,7 @@ def atualizar_perfil_aluno_dict(aluno_id, payload: dict):
         if not dados_limpos:
             return False, "Nenhum campo para atualizar."
         supabase.from_("alunos").update(dados_limpos).eq("id", str(aluno_id)).execute()
-        st.cache_data.clear()
+        _inv_alunos()
         return True, "Dados atualizados."
     except Exception as e:
         return False, str(e)
@@ -531,7 +569,7 @@ def atualizar_aluno_completo(aluno_id, dados: dict):
         dados_limpos = {k: v for k, v in dados.items()
                         if v is not None and str(v).strip() not in ("", "nan", "None")}
         supabase.from_("alunos").update(dados_limpos).eq("id", str(aluno_id)).execute()
-        st.cache_data.clear()
+        _inv_alunos()
         return True, "Aluno atualizado."
     except Exception as e:
         return False, str(e)
@@ -543,7 +581,7 @@ def atualizar_data_nascimento(aluno_id, data_nascimento):
         supabase.from_("alunos").update(
             {"data_nascimento": str(data_nascimento)}
         ).eq("id", str(aluno_id)).execute()
-        st.cache_data.clear()
+        _inv_alunos()
         return True, "Data de nascimento atualizada."
     except Exception as e:
         return False, str(e)
@@ -559,7 +597,7 @@ def criar_agendamento(aluno_id, data, hora, tipo="Avaliação"):
             "tipo": str(tipo),
             "status": "Pendente",
         }).execute()
-        st.cache_data.clear()
+        _inv_agendamentos()
         return True, "Agendamento criado."
     except Exception as e:
         return False, str(e)
@@ -571,7 +609,7 @@ def concluir_ou_cancelar_agendamento(agendamento_id, status):
         supabase.from_("agendamentos").update(
             {"status": str(status)}
         ).eq("id", str(agendamento_id)).execute()
-        st.cache_data.clear()
+        _inv_agendamentos()
         return True, "Agendamento atualizado."
     except Exception as e:
         return False, str(e)
@@ -973,6 +1011,11 @@ def salvar_avaliacao_prontuario(
             ).execute()
         else:
             supabase.from_("prontuario_avaliacoes").insert(dados).execute()
+        try:
+            get_avaliacoes_aluno.clear()
+            bi_dados_individuais.clear()
+        except Exception:
+            pass
         return True, "Salvo!"
     except Exception as e:
         return False, str(e)
@@ -1344,7 +1387,7 @@ def salvar_anamnese_dores(aluno_id, data_avaliacao, regioes, intensidade, observ
             "criado_por": str(criado_por or "").strip(),
         }
         supabase.table("anamnese_dores").insert(payload).execute()
-        st.cache_data.clear()
+        _inv_dores()
         return True, "Salvo com sucesso."
     except Exception as e:
         return False, str(e)
@@ -1368,7 +1411,7 @@ def buscar_historico_dores(aluno_id):
 def excluir_anamnese_dores(registro_id):
     try:
         supabase.table("anamnese_dores").delete().eq("id", str(registro_id)).execute()
-        st.cache_data.clear()
+        _inv_dores()
         return True, "Excluído com sucesso."
     except Exception as e:
         return False, str(e)

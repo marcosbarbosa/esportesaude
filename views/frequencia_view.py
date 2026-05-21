@@ -285,7 +285,6 @@ def tela_frequencia():
                                 if is_inativo:
                                     alterar_status_aluno(aluno["id"], "Ativo")
                                 atualizar_turma_aluno(aluno["id"], turma_selecionada)
-                                st.cache_data.clear()
                                 st.toast(
                                     f"✅ {aluno['nome'].split()[0]} foi integrado(a) nesta turma com sucesso!"
                                 )

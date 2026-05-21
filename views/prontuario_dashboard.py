@@ -494,7 +494,6 @@ def renderizar_dashboard():
                                     st.session_state.pop(chave_excl, None)
                                     if ok:
                                         st.success(f"'{a['nome']}' excluído permanentemente.")
-                                        st.cache_data.clear()
                                         st.rerun()
                                     else:
                                         st.error(f"Erro: {msg}")
@@ -653,7 +652,6 @@ def renderizar_dashboard():
                                 sucesso = cadastrar_novo_aluno(nome=novo_nome, turma=nova_turma)
                                 if sucesso:
                                     st.success(f"🎉 {novo_nome} foi matriculado com sucesso na turma {nova_turma}!")
-                                    st.cache_data.clear()
                                     time.sleep(1.5)
                                     st.rerun()
                                 else:

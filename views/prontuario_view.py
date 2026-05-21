@@ -49,6 +49,12 @@ def alterar_status_aluno_local(aluno_id, novo_status):
 def atualizar_perfil_aluno_dict_seguro(aluno_id, dados_atualizados):
     try:
         supabase.from_("alunos").update(dados_atualizados).eq("id", str(aluno_id)).execute()
+        from database import buscar_aluno_por_id, buscar_alunos_geral, get_alunos_por_turma
+        for fn in (buscar_aluno_por_id, buscar_alunos_geral, get_alunos_por_turma):
+            try:
+                fn.clear()
+            except Exception:
+                pass
         return True, "Sucesso"
     except Exception as e:
         return False, str(e)
@@ -329,7 +335,6 @@ def render_formulario_medicao(aluno, edit=None):
             with st.spinner("Atualizando medição..."):
                 sucesso, msg = salvar_medicao_backend()
                 if sucesso:
-                    st.cache_data.clear()
                     st.success("✅ Alterações salvas com sucesso! 🏋️‍♂️")
                     time.sleep(1.5)
                     st.session_state.medicao_editar = None
@@ -352,7 +357,6 @@ def render_formulario_medicao(aluno, edit=None):
                 with st.spinner("A salvar os dados clínicos..."):
                     sucesso, msg = salvar_medicao_backend()
                     if sucesso:
-                        st.cache_data.clear()
                         st.toast("Medição salva com sucesso! 🫀", icon="🩺")
                         st.success("✅ Prontuário registrado com sucesso no banco de dados!")
                         time.sleep(1.5)
@@ -620,7 +624,6 @@ def renderizar_ficha():
 
                             if sucesso:
                                 if t_ed_salvar != turma_atual: atualizar_turma_aluno(aluno["id"], t_ed_salvar)
-                                st.cache_data.clear()
                                 st.toast("Ficha gravada com segurança na Base de Dados! 💪", icon="✅")
                                 st.session_state.aluno_prontuario.update(dados_salvar)
                                 time.sleep(1.5)
@@ -734,7 +737,6 @@ def renderizar_ficha():
                                 if docs_salvar:
                                     sucesso, msg_bd = atualizar_perfil_aluno_dict_seguro(aluno["id"], docs_salvar)
                                     if sucesso:
-                                        st.cache_data.clear()
                                         st.toast("Documentos legais guardados com sucesso!", icon="✅")
                                         st.session_state.aluno_prontuario.update(docs_salvar)
                                         time.sleep(1.5)

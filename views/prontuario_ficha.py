@@ -422,7 +422,6 @@ def render_formulario_medicao(aluno, edit=None):
             with st.spinner("A atualizar medição..."):
                 sucesso, msg = salvar_medicao_backend()
                 if sucesso:
-                    st.cache_data.clear()
                     st.success("✅ Alterações salvas com sucesso! 🏋️‍♂️")
                     time.sleep(1.5)
                     st.session_state.medicao_editar = None
@@ -455,7 +454,6 @@ def render_formulario_medicao(aluno, edit=None):
                 with st.spinner("A guardar..."):
                     sucesso, msg = salvar_medicao_backend()
                     if sucesso:
-                        st.cache_data.clear()
                         st.toast("Medição salva com sucesso!", icon="🩺")
                         time.sleep(1.5)
                         st.rerun()
