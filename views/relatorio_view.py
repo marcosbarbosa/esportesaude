@@ -658,7 +658,14 @@ def tela_relatorio():
                 # Colunas meta — excluindo "Total Aulas" que é metadado, não data
                 _META = {"Ordem", "Aluno", "Turma", "Total Aulas",
                          "Total P", "Total F", "Total J", "% Presença"}
-                cols_data_reais = [c for c in df_matriz.columns if c not in _META]
+                # Filtra APENAS datas com ao menos 1 registro real (P/F/J) —
+                # dias sem nenhuma aula registrada são excluídos de tudo:
+                # cálculos, gráficos, planilha e totais.
+                cols_data_reais = [
+                    c for c in df_matriz.columns
+                    if c not in _META
+                    and df_matriz[c].isin(["P", "F", "J"]).any()
+                ]
 
                 # Totais globais
                 tp_geral = int(df_matriz["Total P"].sum())
