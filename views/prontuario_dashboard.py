@@ -37,12 +37,12 @@ from utils.texto import remover_acentos
 # ==============================================================================
 
 
-@st.cache_data(ttl=60)
+@st.cache_data(ttl=300)
 def obter_todos_alunos_cache():
     return buscar_alunos_geral("")
 
 
-@st.cache_data(ttl=30)
+@st.cache_data(ttl=300)
 def carregar_dados_crm_avaliacoes_senior():
     """Motor de processamento em lote. Separa Ativos do Arquivo Morto."""
     try:
@@ -808,5 +808,6 @@ def renderizar_dashboard():
 
     st.markdown("<br>", unsafe_allow_html=True)
     if st.button("🔄 Sincronizar Base de Dados", use_container_width=True):
-        st.cache_data.clear()
+        obter_todos_alunos_cache.clear()
+        carregar_dados_crm_avaliacoes_senior.clear()
         st.rerun()
