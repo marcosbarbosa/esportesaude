@@ -452,6 +452,18 @@ def _inv_agendamentos():
         pass
 
 
+def _inv_frequencia():
+    """Caches de frequência/presenças (afetados ao excluir um dia de aula)."""
+    for fn in (
+        get_presencas_dia, bi_presencas_periodo, bi_frequencia_turmas,
+        bi_resumo_studio, get_diarios_periodo,
+    ):
+        try:
+            fn.clear()
+        except Exception:
+            pass
+
+
 def _inv_dores():
     """Caches de anamnese de dores (histórico individual e agregado BI)."""
     for fn in (buscar_historico_dores, bi_dores_studio):
@@ -665,6 +677,80 @@ def get_alunos_por_turma(turma_nome):
         return pd.DataFrame(res.data)
     except Exception:
         return pd.DataFrame()
+
+
+@st.cache_data(ttl=60)
+def listar_datas_aulas_registradas() -> pd.DataFrame:
+    """
+    Retorna DataFrame com todas as datas que têm registros em frequencia ou diario_aulas.
+    Colunas: data_aula (date), total_presencas (int), turmas_diario (list[str])
+    """
+    try:
+        r_freq = (
+            supabase.from_("frequencia")
+            .select("data_aula, status")
+            .execute()
+        )
+        r_diario = (
+            supabase.from_("diario_aulas")
+            .select("data_aula, turma")
+            .execute()
+        )
+
+        df_f = pd.DataFrame(r_freq.data or [])
+        df_d = pd.DataFrame(r_diario.data or [])
+
+        datas = set()
+        if not df_f.empty:
+            datas.update(df_f["data_aula"].dropna().tolist())
+        if not df_d.empty:
+            datas.update(df_d["data_aula"].dropna().tolist())
+
+        if not datas:
+            return pd.DataFrame(columns=["data_aula", "total_presencas", "turmas_diario"])
+
+        rows = []
+        for d in sorted(datas, reverse=True):
+            presencas = 0
+            if not df_f.empty:
+                presencas = int((df_f["data_aula"] == d).sum())
+            turmas = []
+            if not df_d.empty:
+                turmas = df_d[df_d["data_aula"] == d]["turma"].dropna().tolist()
+            rows.append({"data_aula": d, "total_presencas": presencas, "turmas_diario": turmas})
+
+        return pd.DataFrame(rows)
+    except Exception:
+        return pd.DataFrame(columns=["data_aula", "total_presencas", "turmas_diario"])
+
+
+def excluir_dia_aula_completo(data_str: str, solicitante_email: str):
+    """
+    Apaga TODOS os registros de frequencia e diario_aulas para a data informada.
+    Apenas ADMIN_MASTER pode executar. Retorna (bool, msg, n_freq, n_diario).
+    """
+    if solicitante_email != ADMIN_MASTER:
+        return False, "Acesso negado — apenas o Administrador Mestre pode excluir dias de aula.", 0, 0
+    try:
+        r_freq = (
+            supabase.from_("frequencia")
+            .delete()
+            .eq("data_aula", data_str)
+            .execute()
+        )
+        r_diario = (
+            supabase.from_("diario_aulas")
+            .delete()
+            .eq("data_aula", data_str)
+            .execute()
+        )
+        n_freq   = len(r_freq.data)   if r_freq.data   else 0
+        n_diario = len(r_diario.data) if r_diario.data else 0
+        _inv_frequencia()
+        listar_datas_aulas_registradas.clear()
+        return True, f"Data {data_str} excluída.", n_freq, n_diario
+    except Exception as e:
+        return False, str(e), 0, 0
 
 
 def get_diarios_periodo(data_inicio, data_fim, turma=""):

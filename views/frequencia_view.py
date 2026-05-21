@@ -32,6 +32,7 @@ from modulos_frequencia.tab_diario import renderizar_aba_diario
 from modulos_frequencia.tab_dossie import renderizar_aba_dossie
 from modulos_frequencia.tab_emergencia import renderizar_aba_emergencia
 from modulos_frequencia.tab_niver import renderizar_aba_niver
+from modulos_frequencia.tab_admin import renderizar_aba_admin
 from utils.texto import remover_acentos
 
 
@@ -330,23 +331,36 @@ def tela_frequencia():
         else {}
     )
 
-    tab_tablet, tab_d, tab_ds, tab_em, tab_niver = st.tabs(
-        ["📱 Chamada Tablet", "📝 Diário", "🖨️ Dossiê", "🚨 Emergência", label_niver]
+    email_atual = (
+        st.session_state.get("usuario_email")
+        or st.session_state.get("email_usuario")
+        or ""
     )
+    eh_admin = email_atual == ADMIN_MASTER
 
-    with tab_tablet:
+    nomes_abas = ["📱 Chamada Tablet", "📝 Diário", "🖨️ Dossiê", "🚨 Emergência", label_niver]
+    if eh_admin:
+        nomes_abas.append("🗑️ Admin")
+
+    abas = st.tabs(nomes_abas)
+
+    with abas[0]:
         renderizar_aba_terminal(
             df_alunos, data_aula, presencas_turma_geral, bloqueio_ativo
         )
 
-    with tab_d:
+    with abas[1]:
         renderizar_aba_diario(data_aula, turma_selecionada, chave_unica)
 
-    with tab_ds:
+    with abas[2]:
         renderizar_aba_dossie(df_alunos, data_aula, turma_selecionada, chave_unica)
 
-    with tab_em:
+    with abas[3]:
         renderizar_aba_emergencia(df_alunos, turma_selecionada)
 
-    with tab_niver:
+    with abas[4]:
         renderizar_aba_niver()
+
+    if eh_admin:
+        with abas[5]:
+            renderizar_aba_admin()
