@@ -744,25 +744,175 @@ def tela_relatorio():
                 )
 
                 # ══════════════════════════════════════════════════════════════
-                # DASHBOARD
+                # RELATÓRIO PRIME — DASHBOARD ANALÍTICO DE FREQUÊNCIA
+                # Foco: presença é o indicador. Falta aparece só como alerta.
                 # ══════════════════════════════════════════════════════════════
                 st.markdown("---")
-                st.markdown("### 📊 Dashboard de Frequência")
-
-                # — Métricas principais
-                mk1, mk2, mk3, mk4, mk5 = st.columns(5)
-                mk1.metric("Alunos", n_alunos)
-                mk2.metric("Aulas (máx.)", n_aulas)
-                mk3.metric("Total Presenças", tp_geral)
-                mk4.metric("Total Faltas", tf_geral)
-                mk5.metric(
-                    "Taxa Geral",
-                    f"{taxa_geral:.1f}%",
-                    delta=f"{taxa_geral - 75:.1f}pp vs meta 75%",
-                    delta_color="normal",
+                st.markdown(
+                    "<div style='background:linear-gradient(135deg,#EFF6FF,#DBEAFE);"
+                    "padding:14px 20px;border-radius:12px;border-left:6px solid #1D4ED8;"
+                    "margin-bottom:18px;'>"
+                    "<h3 style='margin:0;color:#1D4ED8;font-size:1.2rem;'>📊 Relatório Prime — Análise de Frequência</h3>"
+                    f"<p style='margin:4px 0 0;color:#475569;font-size:12px;'>"
+                    f"Período: {periodo_formatado} · {n_alunos} alunos · {n_aulas} aulas realizadas"
+                    f"</p></div>",
+                    unsafe_allow_html=True,
                 )
 
-                # — Resumo por turma (tabela + gráfico de barras)
+                # ── Métricas avançadas ────────────────────────────────────────
+                media_p_aluno_qtd = tp_geral / n_alunos if n_alunos > 0 else 0
+                # Taxa média individual: média das taxas por aluno (pesa todos igualmente)
+                taxa_media_ind = df_matriz["_taxa_num"].mean() if not df_matriz.empty else 0.0
+                n_risco        = len(df_risco)
+                n_excelentes   = int((df_matriz["_taxa_num"] >= 90).sum()) if not df_matriz.empty else 0
+                n_regulares    = int(((df_matriz["_taxa_num"] >= 75) & (df_matriz["_taxa_num"] < 90)).sum()) if not df_matriz.empty else 0
+                n_atencao      = int(((df_matriz["_taxa_num"] >= 50) & (df_matriz["_taxa_num"] < 75)).sum()) if not df_matriz.empty else 0
+                n_critico      = int((df_matriz["_taxa_num"] < 50).sum()) if not df_matriz.empty else 0
+
+                def _kpi(label, valor, sub="", cor="#1D4ED8"):
+                    st.markdown(
+                        f"<div style='background:#fff;border:1.5px solid #E2E8F0;"
+                        f"border-radius:10px;padding:13px 14px;text-align:center;"
+                        f"box-shadow:0 1px 4px rgba(0,0,0,0.06);'>"
+                        f"<div style='font-size:8.5pt;color:#64748B;font-weight:700;"
+                        f"text-transform:uppercase;letter-spacing:.5px;'>{label}</div>"
+                        f"<div style='font-size:24px;font-weight:900;color:{cor};"
+                        f"line-height:1.25;margin-top:4px;'>{valor}</div>"
+                        f"<div style='font-size:7.5pt;color:#94A3B8;margin-top:3px;'>{sub}</div>"
+                        f"</div>",
+                        unsafe_allow_html=True,
+                    )
+
+                ck1, ck2, ck3, ck4, ck5 = st.columns(5)
+                with ck1:
+                    _kpi("Alunos no Período", n_alunos, "participantes ativos")
+                with ck2:
+                    _kpi("Aulas Realizadas", n_aulas, "dias com atividade")
+                with ck3:
+                    _kpi(
+                        "Média Presenças / Aluno",
+                        f"{media_p_aluno_qtd:.1f}",
+                        f"de {n_aulas} aulas · {tp_geral} presenças totais",
+                    )
+                with ck4:
+                    cor_tx = "#10B981" if taxa_media_ind >= 75 else ("#F59E0B" if taxa_media_ind >= 50 else "#EF4444")
+                    _kpi(
+                        "Taxa Média Individual",
+                        f"{taxa_media_ind:.1f}%",
+                        f"meta 75% · cada aluno pesa igual",
+                        cor=cor_tx,
+                    )
+                with ck5:
+                    cor_ex = "#10B981" if n_excelentes > 0 else "#94A3B8"
+                    _kpi(
+                        "Excelente (≥ 90%)",
+                        n_excelentes,
+                        f"{n_regulares} regulares · {n_atencao} atenção · {n_critico} crítico",
+                        cor=cor_ex,
+                    )
+
+                # ── Linha do tempo + Padrão por Dia da Semana ────────────────
+                if cols_data_reais:
+                    _DIAS_PT_R = {
+                        "Monday": "Segunda", "Tuesday": "Terça", "Wednesday": "Quarta",
+                        "Thursday": "Quinta", "Friday": "Sexta",
+                        "Saturday": "Sábado", "Sunday": "Domingo",
+                    }
+                    _ORDEM_SEM = ["Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado", "Domingo"]
+
+                    def _parse_col_dt(s, ini, fim):
+                        for yr in sorted({ini.year, fim.year}):
+                            try:
+                                dt = datetime.datetime.strptime(f"{s}/{yr}", "%d/%m/%Y").date()
+                                if ini <= dt <= fim:
+                                    return dt
+                            except Exception:
+                                pass
+                        return None
+
+                    weekday_acc = {}  # dia → [soma_pres, n_dias]
+                    tl_rows = []
+                    for col in cols_data_reais:
+                        pres = int((df_matriz[col] == "P").sum())
+                        dt   = _parse_col_dt(col, d_i, d_f)
+                        wd   = _DIAS_PT_R.get(dt.strftime("%A"), "?") if dt else "?"
+                        tl_rows.append({"Data": col, "Presenças": pres, "Dia": wd})
+                        if wd != "?":
+                            acc = weekday_acc.setdefault(wd, [0, 0])
+                            acc[0] += pres
+                            acc[1] += 1
+
+                    df_tl    = pd.DataFrame(tl_rows)
+                    media_tl = df_tl["Presenças"].mean() if not df_tl.empty else 0
+
+                    df_sem_r = pd.DataFrame([
+                        {
+                            "Dia": d,
+                            "Media": round(weekday_acc[d][0] / weekday_acc[d][1], 1) if weekday_acc.get(d, [0, 0])[1] > 0 else 0,
+                            "Aulas": weekday_acc[d][1] if d in weekday_acc else 0,
+                        }
+                        for d in _ORDEM_SEM
+                        if d in weekday_acc
+                    ])
+
+                    ct1, ct2 = st.columns([3, 2], gap="large")
+                    with ct1:
+                        with st.container(border=True):
+                            st.markdown("##### 📈 Presença Diária no Período")
+                            fig_tl = px.bar(
+                                df_tl, x="Data", y="Presenças",
+                                color="Presenças",
+                                color_continuous_scale=["#93C5FD", "#1D4ED8"],
+                                text="Presenças",
+                                custom_data=["Dia"],
+                            )
+                            fig_tl.add_hline(
+                                y=media_tl, line_dash="dot", line_color="#10B981",
+                                annotation_text=f"Média {media_tl:.1f}",
+                                annotation_position="top left",
+                            )
+                            fig_tl.update_traces(
+                                textposition="outside",
+                                textfont_size=8,
+                                hovertemplate="<b>%{x}</b> (%{customdata[0]})<br>Presenças: %{y}<extra></extra>",
+                            )
+                            fig_tl.update_layout(
+                                height=290, coloraxis_showscale=False, showlegend=False,
+                                paper_bgcolor="white", plot_bgcolor="white",
+                                margin=dict(t=10, b=30, l=0, r=0),
+                                xaxis=dict(showgrid=False, tickfont=dict(size=8)),
+                                yaxis=dict(showgrid=True, gridcolor="#F1F5F9"),
+                            )
+                            st.plotly_chart(fig_tl, use_container_width=True)
+                    with ct2:
+                        with st.container(border=True):
+                            st.markdown("##### 📅 Padrão por Dia da Semana")
+                            if not df_sem_r.empty:
+                                fig_wd = px.bar(
+                                    df_sem_r, x="Dia", y="Media",
+                                    text=df_sem_r["Media"].apply(lambda v: f"{v:.0f}"),
+                                    color="Media",
+                                    color_continuous_scale=["#BFDBFE", "#1D4ED8"],
+                                    custom_data=["Aulas"],
+                                )
+                                fig_wd.update_traces(
+                                    textposition="outside",
+                                    hovertemplate="<b>%{x}</b><br>Média: %{y:.1f} presenças<br>%{customdata[0]} aula(s) no período<extra></extra>",
+                                )
+                                fig_wd.update_layout(
+                                    height=230, coloraxis_showscale=False, showlegend=False,
+                                    paper_bgcolor="white", plot_bgcolor="white",
+                                    margin=dict(t=10, b=30, l=0, r=0),
+                                    xaxis=dict(showgrid=False),
+                                    yaxis=dict(showgrid=True, gridcolor="#F1F5F9"),
+                                )
+                                st.plotly_chart(fig_wd, use_container_width=True)
+                                if len(df_sem_r) >= 2:
+                                    pico_d = df_sem_r.loc[df_sem_r["Media"].idxmax(), "Dia"]
+                                    low_d  = df_sem_r.loc[df_sem_r["Media"].idxmin(), "Dia"]
+                                    st.caption(f"Pico de comparecimento: **{pico_d}** · Menor fluxo: **{low_d}**")
+
+                # ── Resumo por Turma ──────────────────────────────────────────
                 if "Turma" in df_matriz.columns:
                     grp = (
                         df_matriz.groupby("Turma")
@@ -770,119 +920,119 @@ def tela_relatorio():
                             Alunos=("Aluno", "count"),
                             Aulas=("Total Aulas", "first"),
                             Presenças=("Total P", "sum"),
-                            Faltas=("Total F", "sum"),
-                            Justificadas=("Total J", "sum"),
                         )
                         .reset_index()
                     )
-                    grp["Total Esperado"] = grp["Alunos"] * grp["Aulas"]
-                    grp["Taxa %"] = (
-                        grp["Presenças"] / grp["Total Esperado"].replace(0, 1) * 100
-                    ).round(1)
-                    grp["Taxa % fmt"] = grp["Taxa %"].apply(lambda x: f"{x:.1f}%")
+                    grp["Esperado"]     = grp["Alunos"] * grp["Aulas"]
+                    grp["Taxa %"]       = (grp["Presenças"] / grp["Esperado"].replace(0, 1) * 100).round(1)
+                    grp["Media P/Aluno"]= (grp["Presenças"] / grp["Alunos"].replace(0, 1)).round(1)
+                    grp["Taxa fmt"]     = grp["Taxa %"].apply(lambda v: f"{v:.1f}%")
 
-                    cres1, cres2 = st.columns([1, 1])
-                    with cres1:
-                        st.markdown("#### Resumo por Turma")
-                        st.dataframe(
-                            grp[["Turma", "Alunos", "Aulas", "Presenças",
-                                 "Faltas", "Justificadas", "Taxa % fmt"]]
-                            .rename(columns={"Taxa % fmt": "Taxa %"}),
-                            use_container_width=True,
-                            hide_index=True,
+                    cr1, cr2 = st.columns([1, 1], gap="large")
+                    with cr1:
+                        with st.container(border=True):
+                            st.markdown("##### 🏫 Resumo por Turma")
+                            st.dataframe(
+                                grp[["Turma", "Alunos", "Aulas", "Presenças", "Media P/Aluno", "Taxa fmt"]]
+                                .rename(columns={"Taxa fmt": "Taxa Presença", "Media P/Aluno": "Média P/Aluno"}),
+                                use_container_width=True, hide_index=True,
+                            )
+                    with cr2:
+                        with st.container(border=True):
+                            st.markdown("##### 📊 Taxa de Presença por Turma")
+                            fig_turma = px.bar(
+                                grp, x="Turma", y="Taxa %",
+                                text="Taxa fmt",
+                                color="Taxa %",
+                                color_continuous_scale=["#FEE2E2", "#FEF3C7", "#DCFCE7"],
+                                range_color=[0, 100],
+                            )
+                            fig_turma.add_hline(
+                                y=75, line_dash="dash", line_color="#6366F1",
+                                annotation_text="Meta 75%", annotation_position="top left",
+                            )
+                            fig_turma.update_traces(textposition="outside")
+                            fig_turma.update_layout(
+                                coloraxis_showscale=False, showlegend=False, height=260,
+                                paper_bgcolor="white", plot_bgcolor="white",
+                                margin=dict(t=10, b=30, l=0, r=0),
+                            )
+                            st.plotly_chart(fig_turma, use_container_width=True)
+
+                # ── Distribuição de Assiduidade + Rankings ────────────────────
+                cd1, cd2 = st.columns([1, 1], gap="large")
+                with cd1:
+                    with st.container(border=True):
+                        st.markdown("##### 📊 Distribuição de Assiduidade")
+                        _bins   = [0, 50, 75, 90, 100.01]
+                        _labels = ["< 50% (crítico)", "50–75% (atenção)", "75–90% (regular)", "≥ 90% (excelente)"]
+                        _cores  = ["#EF4444", "#F59E0B", "#3B82F6", "#10B981"]
+                        df_dist = (
+                            pd.cut(df_matriz["_taxa_num"], bins=_bins, labels=_labels, right=False)
+                            .value_counts()
+                            .reindex(_labels)
+                            .fillna(0)
+                            .reset_index()
                         )
-                    with cres2:
-                        fig_bar = px.bar(
-                            grp,
-                            x="Turma",
-                            y="Taxa %",
-                            text="Taxa % fmt",
-                            color="Taxa %",
-                            color_continuous_scale=["#EF4444", "#F59E0B", "#10B981"],
-                            range_color=[0, 100],
-                            title="Taxa de Presença por Turma (%)",
+                        df_dist.columns = ["Faixa", "Alunos"]
+                        df_dist["Pct"] = (df_dist["Alunos"] / n_alunos * 100).round(1).apply(lambda v: f"{v:.0f}%")
+                        fig_dist = px.bar(
+                            df_dist, x="Faixa", y="Alunos",
+                            text=df_dist.apply(lambda r: f"{int(r['Alunos'])} ({r['Pct']})", axis=1),
+                            color="Faixa",
+                            color_discrete_map=dict(zip(_labels, _cores)),
                         )
-                        fig_bar.add_hline(
-                            y=75, line_dash="dash", line_color="#6366F1",
-                            annotation_text="Meta 75%", annotation_position="top left",
+                        fig_dist.update_traces(textposition="outside")
+                        fig_dist.update_layout(
+                            showlegend=False, height=280,
+                            paper_bgcolor="white", plot_bgcolor="white",
+                            margin=dict(t=10, b=30, l=0, r=0),
+                            xaxis=dict(showgrid=False, tickfont=dict(size=9)),
+                            yaxis=dict(showgrid=True, gridcolor="#F1F5F9"),
                         )
-                        fig_bar.update_traces(textposition="outside")
-                        fig_bar.update_layout(
-                            coloraxis_showscale=False, showlegend=False, height=320
+                        st.plotly_chart(fig_dist, use_container_width=True)
+                with cd2:
+                    with st.container(border=True):
+                        st.markdown("##### 🏆 Rankings de Presença")
+                        df_rank = (
+                            df_matriz[["Aluno", "Turma", "Total P", "_taxa_num", "Total Aulas"]]
+                            .copy()
+                            .rename(columns={"Total P": "Presenças", "_taxa_num": "Taxa %", "Total Aulas": "Aulas"})
                         )
-                        st.plotly_chart(fig_bar, use_container_width=True)
+                        df_rank["Taxa"] = df_rank["Taxa %"].apply(lambda v: f"{v:.1f}%")
+                        tab_top, tab_at = st.tabs(["⭐ Mais Assíduos", "⚠️ Precisa Atenção"])
+                        with tab_top:
+                            top_df = (
+                                df_rank.nlargest(10, "Taxa %")[["Aluno", "Turma", "Presenças", "Aulas", "Taxa"]]
+                                .reset_index(drop=True)
+                            )
+                            top_df.index += 1
+                            st.dataframe(top_df, use_container_width=True)
+                        with tab_at:
+                            if n_risco > 0:
+                                at_df = (
+                                    df_rank[df_rank["Taxa %"] < 75]
+                                    .nsmallest(len(df_rank), "Taxa %")[["Aluno", "Turma", "Presenças", "Aulas", "Taxa"]]
+                                    .reset_index(drop=True)
+                                )
+                                at_df.index += 1
+                                st.dataframe(at_df, use_container_width=True)
+                                st.caption(f"{n_risco} aluno(s) abaixo de 75% — presença é hábito, não obrigação: acolha, não puna.")
+                            else:
+                                st.success("Todos os alunos acima de 75% — turma saudável!")
 
-                # — Linha do tempo: presenças brutas por data
-                if cols_data_reais:
-                    presencas_dia = {}
-                    faltas_dia = {}
-                    for col in cols_data_reais:
-                        presencas_dia[col] = int((df_matriz[col] == "P").sum())
-                        faltas_dia[col]    = int((df_matriz[col] == "F").sum())
-
-                    df_timeline = pd.DataFrame({
-                        "Data":      list(presencas_dia.keys()),
-                        "Presenças": list(presencas_dia.values()),
-                        "Faltas":    list(faltas_dia.values()),
-                    })
-
-                    fig_line = px.bar(
-                        df_timeline,
-                        x="Data",
-                        y=["Presenças", "Faltas"],
-                        barmode="stack",
-                        title="Presenças e Faltas por Dia de Aula",
-                        color_discrete_map={"Presenças": "#10B981", "Faltas": "#EF4444"},
-                    )
-                    fig_line.update_layout(height=300, legend_title_text="")
-                    st.plotly_chart(fig_line, use_container_width=True)
-
-                # — Pizza global P/F/J
-                cg1, cg2 = st.columns(2)
-                cg1.plotly_chart(
-                    px.pie(
-                        names=["Presenças", "Faltas", "Justificadas"],
-                        values=[tp_geral, tf_geral, tj_geral],
-                        title="Distribuição Global P / F / J",
-                        color_discrete_sequence=["#10B981", "#EF4444", "#F59E0B"],
-                    ),
-                    use_container_width=True,
-                )
-
-                # — Pizza saúde: regular vs risco (<75%)
-                n_risco = len(df_risco)
-                cg2.plotly_chart(
-                    px.pie(
-                        names=["Regulares (≥75%)", "Em Risco (<75%)"],
-                        values=[n_alunos - n_risco, n_risco],
-                        title=f"Saúde da Turma — {n_risco} aluno(s) em risco",
-                        color_discrete_sequence=["#3B82F6", "#F59E0B"],
-                    ),
-                    use_container_width=True,
-                )
-
-                # — Tabela de alunos em risco
-                if n_risco > 0:
-                    st.markdown(
-                        f"<div style='background:#FEF3C7;border-left:4px solid #F59E0B;"
-                        f"padding:10px 14px;border-radius:6px;'>"
-                        f"⚠️ <b>{n_risco} aluno(s) com presença abaixo de 75%</b> — atenção recomendada.</div>",
-                        unsafe_allow_html=True,
-                    )
-                    cols_risco = ["Aluno", "Turma", "Total Aulas",
-                                  "Total P", "Total F", "Total J", "% Presença"]
-                    cols_risco_ok = [c for c in cols_risco if c in df_risco.columns]
-                    st.dataframe(
-                        df_risco.sort_values("_taxa_num")[cols_risco_ok],
-                        use_container_width=True,
-                        hide_index=True,
-                    )
-
-                # ══════════════════════════════════════════════════════════════
-                # PLANILHA DETALHADA
-                # ══════════════════════════════════════════════════════════════
+                # ── Planilha de Frequência Detalhada ─────────────────────────
                 st.markdown("---")
-                st.markdown("#### 📅 Planilha de Frequência Detalhada")
+                st.markdown("#### 📅 Planilha Detalhada — Frequência Individual")
+                st.caption("Colunas prioritárias: Taxa e Total de Presenças aparecem antes das datas.")
+
+                # Reordenação: % Presença e Total P logo após Ordem/Aluno/Turma
+                _priority_cols = [c for c in ["Ordem", "Aluno", "Turma", "% Presença", "Total P", "Total Aulas"] if c in df_final.columns]
+                _date_cols     = cols_data_reais
+                _extra_cols    = [c for c in df_final.columns if c not in _priority_cols and c not in _date_cols and c not in {"_taxa_num", "Total F", "Total J"}]
+                _col_order     = _priority_cols + _date_cols + _extra_cols
+                _col_order     = [c for c in _col_order if c in df_final.columns]
+                df_show        = df_final[_col_order]
 
                 def colorir_status(val):
                     if val == "P":
@@ -893,7 +1043,6 @@ def tela_relatorio():
                         return "color:#F59E0B;font-weight:bold;background-color:#FEF3C7;"
                     return ""
 
-                df_show = df_final.drop(columns=["_taxa_num"], errors="ignore")
                 df_st = df_show.style.map(colorir_status).set_properties(
                     subset=[c for c in df_show.columns if c not in ["Aluno", "Turma"]],
                     **{"text-align": "center"},
