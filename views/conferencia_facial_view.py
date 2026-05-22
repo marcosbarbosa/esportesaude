@@ -16,7 +16,7 @@ import numpy as np
 
 from database import supabase
 
-LOTE_SIZE = 3  # alunos processados por vez
+LOTE_SIZE_PADRAO = 3  # padrão inicial
 
 
 # ==============================================================================
@@ -298,6 +298,28 @@ def _modo_configuracao():
 
     st.markdown("---")
 
+    # ── Configuracoes do processamento ────────────────────────────────────
+    st.markdown("**Configuracoes do processamento**")
+    col_cfg1, col_cfg2 = st.columns([1, 2])
+    with col_cfg1:
+        lote_size = st.selectbox(
+            "Alunos por lote",
+            options=[2, 3, 5],
+            index=1,
+            help="Quantos alunos analisar de cada vez antes de mostrar o resultado",
+        )
+    with col_cfg2:
+        auto_modo = st.toggle(
+            "Modo automatico — analisar o proximo lote sem precisar clicar",
+            value=False,
+            help=(
+                "Ligado: apos confirmar um lote, o sistema ja inicia o proximo automaticamente. "
+                "Desligado: voce clica em 'Analisar proximo lote' para cada etapa."
+            ),
+        )
+
+    st.markdown("---")
+
     btn_iniciar = st.button(
         f"Iniciar Conferencia ({pendentes_count} alunos para processar)",
         type="primary",
@@ -323,6 +345,9 @@ def _modo_configuracao():
         st.session_state["facial_confirmados"] = []
         st.session_state["facial_lote_resultado"] = None
         st.session_state["facial_lote_editado"] = {}
+        st.session_state["facial_lote_size"] = lote_size
+        st.session_state["facial_auto_modo"] = auto_modo
+        st.session_state["facial_auto_processar"] = auto_modo  # dispara 1o lote automaticamente
         st.rerun()
 
 
@@ -350,12 +375,16 @@ def _modo_processamento():
     # ── Cabecalho da sessao ────────────────────────────────────────────────
     col_info, col_cancel = st.columns([5, 1])
     with col_info:
+        _lote_size = st.session_state.get("facial_lote_size", LOTE_SIZE_PADRAO)
+        _auto = st.session_state.get("facial_auto_modo", False)
+        _modo_txt = "Auto" if _auto else "Manual"
         st.markdown(
             f"<div style='background:#F0F9FF;border-left:4px solid #0056b3;"
             f"padding:10px 16px;border-radius:6px;font-size:13px;margin-bottom:8px;'>"
             f"<b>{turma_nome}</b> &nbsp;|&nbsp; {data_fmt} &nbsp;|&nbsp; "
             f"<b style='color:#16a34a;'>{n_confirmados} confirmados</b> &nbsp;|&nbsp; "
-            f"<b style='color:#92400e;'>{len(pendentes)} pendentes</b>"
+            f"<b style='color:#92400e;'>{len(pendentes)} pendentes</b> &nbsp;|&nbsp; "
+            f"Lote: {_lote_size} &nbsp;|&nbsp; Modo: <b>{_modo_txt}</b>"
             f"</div>",
             unsafe_allow_html=True,
         )
@@ -399,16 +428,27 @@ def _modo_processamento():
 
     # ── FASE B: Ha alunos pendentes — processar proximo lote ──────────────
     if pendentes:
-        proximo_lote = pendentes[:LOTE_SIZE]
+        lote_size = st.session_state.get("facial_lote_size", LOTE_SIZE_PADRAO)
+        auto_modo = st.session_state.get("facial_auto_modo", False)
+        auto_processar = st.session_state.get("facial_auto_processar", False)
+
+        proximo_lote = pendentes[:lote_size]
         nomes_lote = ", ".join(a["nome"].split()[0] for a in proximo_lote)
 
         st.markdown(
             f"<div style='background:#FFFBEB;border-left:4px solid #F59E0B;"
             f"padding:10px 16px;border-radius:6px;margin-bottom:12px;font-size:13px;'>"
-            f"<b>Proximo lote ({len(proximo_lote)} alunos):</b> {nomes_lote}"
+            f"<b>Proximo lote ({len(proximo_lote)} de {lote_size} alunos):</b> {nomes_lote}"
+            f"{'<br><span style=color:#92400e;>Modo automatico ativado — iniciando analise...</span>' if auto_processar else ''}"
             f"</div>",
             unsafe_allow_html=True,
         )
+
+        if auto_processar:
+            # Limpa a flag antes de processar para nao loop infinito
+            st.session_state["facial_auto_processar"] = False
+            _processar_lote(proximo_lote, grupo_path)
+            return
 
         col_btn_lote, col_btn_cancel_b = st.columns([3, 1])
         with col_btn_lote:
@@ -546,6 +586,9 @@ def _mostrar_revisao_lote(
             st.session_state["facial_confirmados"] = novos_confirmados
             st.session_state["facial_lote_resultado"] = None
             st.session_state["facial_lote_editado"] = {}
+            # Em modo automatico: disparar proximo lote sem clicar
+            if st.session_state.get("facial_auto_modo") and novos_pendentes:
+                st.session_state["facial_auto_processar"] = True
             st.rerun()
 
     with col_reanalisar:
