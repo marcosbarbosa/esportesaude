@@ -361,7 +361,12 @@ def _modo_processamento():
         )
 
     with col_cancel:
-        if st.button("Cancelar sessao", use_container_width=True):
+        if st.button(
+            "Cancelar conferencia",
+            use_container_width=True,
+            type="secondary",
+            help="Encerra a sessao. Os lotes ja confirmados ficam gravados no banco.",
+        ):
             _limpar_sessao()
             st.rerun()
 
@@ -405,12 +410,23 @@ def _modo_processamento():
             unsafe_allow_html=True,
         )
 
-        if st.button(
-            f"Analisar proximo lote ({len(proximo_lote)} alunos)",
-            type="primary",
-            use_container_width=True,
-        ):
-            _processar_lote(proximo_lote, grupo_path)
+        col_btn_lote, col_btn_cancel_b = st.columns([3, 1])
+        with col_btn_lote:
+            if st.button(
+                f"Analisar proximo lote ({len(proximo_lote)} alunos)",
+                type="primary",
+                use_container_width=True,
+            ):
+                _processar_lote(proximo_lote, grupo_path)
+        with col_btn_cancel_b:
+            if st.button(
+                "Cancelar conferencia",
+                use_container_width=True,
+                key="cancel_fase_b",
+                help="Encerra a sessao. Os lotes ja confirmados ficam gravados.",
+            ):
+                _limpar_sessao()
+                st.rerun()
         return
 
     # ── FASE C: Todos processados — resumo final ───────────────────────────
@@ -540,18 +556,31 @@ def _mostrar_revisao_lote(
             else:
                 alunos_mapa = st.session_state.get("facial_alunos_mapa", {})
                 ids_lote = {r["aluno_id"] for r in lote_resultado}
-                # Reconstruir dicts completos do lote usando o mapa original
                 alunos_lote = [
                     alunos_mapa[aid]
                     for aid in ids_lote
                     if aid in alunos_mapa
                 ]
-                # Colocar de volta na frente da fila
                 pendentes_sem_lote = [a for a in pendentes if a["id"] not in ids_lote]
                 st.session_state["facial_pendentes"] = alunos_lote + pendentes_sem_lote
                 st.session_state["facial_lote_resultado"] = None
                 st.session_state["facial_lote_editado"] = {}
                 st.rerun()
+
+    st.markdown("---")
+    st.markdown(
+        "<p style='color:#64748B;font-size:12px;margin-bottom:4px;'>"
+        "Quer interromper a conferencia agora? Os lotes ja confirmados continuam gravados.</p>",
+        unsafe_allow_html=True,
+    )
+    if st.button(
+        "Cancelar conferencia",
+        use_container_width=True,
+        key="cancel_revisao_lote",
+        help="Encerra a sessao. Os lotes ja confirmados ficam gravados no banco.",
+    ):
+        _limpar_sessao()
+        st.rerun()
 
 
 def _mostrar_resumo_final(confirmados: list, data_fmt: str):
