@@ -525,7 +525,8 @@ def tela_radar_acolhimento():
                                 aluno_completo = buscar_aluno_por_id(item["id"])
                                 if aluno_completo:
                                     st.session_state.aluno_prontuario = aluno_completo
-                                    st.session_state.origem_prontuario = "Radar de Evasão"  # Permite que o botão Voltar saiba para onde regressar
+                                    st.session_state.origem_prontuario = "Radar de Evasão"
+                                    st.session_state.menu_atual = "Portal do Aluno"
                                     st.rerun()
 
                         with cb_wa:
