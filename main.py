@@ -916,13 +916,13 @@ if st.session_state.menu_atual == "Principal":
 # 🚀 ROTEAMENTO DE VISTAS
 # ==============================================================================
 elif st.session_state.menu_atual == "Frequência":
-    _tab_freq, _tab_facial = st.tabs(["✅ Frequência", "📸 Conf. Facial"])
-    with _tab_freq:
-        from views.frequencia_view import tela_frequencia
-        tela_frequencia()
-    with _tab_facial:
-        from views.conferencia_facial_view import tela_conferencia_facial
-        tela_conferencia_facial()
+    _c_freq_titulo, _c_freq_btn = st.columns([6, 1], vertical_alignment="center")
+    with _c_freq_btn:
+        if st.button("📸 Conf. Facial", use_container_width=True, help="Conferência de Presença por Foto"):
+            st.session_state.menu_atual = "Conferência Facial"
+            st.rerun()
+    from views.frequencia_view import tela_frequencia
+    tela_frequencia()
 
 elif st.session_state.menu_atual == "Radar de Acolhimento":
     from views.radar_acolhimento_view import tela_radar_acolhimento
