@@ -1319,18 +1319,32 @@ def bi_alunos_risco_abandono(dias=30):
 
 @st.cache_data(ttl=120)
 def bi_presencas_periodo(data_inicio: str, data_fim: str) -> pd.DataFrame:
-    """Retorna todos os registos PRESENTE no intervalo, para análise de frequência diária."""
+    """
+    Retorna todos os registos PRESENTE no intervalo.
+    Usa paginação por .range() para contornar o limite de 1000 linhas
+    que o servidor Supabase impõe independentemente do .limit() do cliente.
+    """
     try:
-        r = (
-            supabase.from_("frequencia")
-            .select("data_aula, aluno_id")
-            .eq("status", "PRESENTE")
-            .gte("data_aula", str(data_inicio))
-            .lte("data_aula", str(data_fim))
-            .limit(20000)
-            .execute()
-        )
-        return pd.DataFrame(r.data or [])
+        PAGE  = 1000
+        todos = []
+        offset = 0
+        while True:
+            r = (
+                supabase.from_("frequencia")
+                .select("data_aula, aluno_id")
+                .eq("status", "PRESENTE")
+                .gte("data_aula", str(data_inicio))
+                .lte("data_aula", str(data_fim))
+                .order("data_aula")
+                .range(offset, offset + PAGE - 1)
+                .execute()
+            )
+            lote = r.data or []
+            todos.extend(lote)
+            if len(lote) < PAGE:
+                break          # última página: recebemos menos que o tamanho do lote
+            offset += PAGE
+        return pd.DataFrame(todos)
     except Exception:
         return pd.DataFrame()
 
