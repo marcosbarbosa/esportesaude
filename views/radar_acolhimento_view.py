@@ -37,6 +37,54 @@ def calcular_dias_uteis_ausente(ultima_data, data_final):
 # ==============================================================================
 # 🖨️ FUNÇÃO GERADORA DE PDF — xhtml2pdf com logos, timestamp e fotos
 # ==============================================================================
+import re as _re
+from urllib.parse import quote as _url_quote
+
+
+def _limpar_whats(raw) -> str | None:
+    """Devolve número somente dígitos com DDI 55 (ex: 5511999991234), ou None."""
+    if not raw or str(raw).strip() in ("-", "", "None", "nan"):
+        return None
+    digits = _re.sub(r"\D", "", str(raw))
+    if len(digits) < 8:
+        return None
+    if not digits.startswith("55"):
+        digits = "55" + digits
+    return digits
+
+
+def _link_whats(numero: str, nome: str, dias: int) -> str:
+    """
+    Retorna HTML <a href='wa.me/...'> com mensagem de acolhimento adequada.
+    - dias >= 30 → mensagem de preocupacao (ausencia longa)
+    - dias <  30 → mensagem de encorajamento (ausencia moderada)
+    """
+    primeiro = nome.split()[0].capitalize()
+    if dias != 9999 and dias >= 30:
+        msg = (
+            f"Ola {primeiro}! Aqui e a equipe do Instituto Muda Brasil. "
+            "Notamos que faz algum tempo que voce nao aparece nas aulas e "
+            "queremos saber como voce esta. "
+            "Estamos aqui para apoiar voce no que for preciso para retomar "
+            "sua jornada de saude e bem-estar. Podemos conversar?"
+        )
+    else:
+        msg = (
+            f"Ola {primeiro}! Aqui e a equipe do Instituto Muda Brasil. "
+            "Sentimos sua falta nas aulas! "
+            "Gostaríamos de saber como voce esta e se podemos ajudar de "
+            "alguma forma para que retome sua rotina conosco. "
+            "Estamos aqui para voce!"
+        )
+    url   = f"https://wa.me/{numero}?text={_url_quote(msg)}"
+    label = numero[2:]  # exibe sem o +55
+    return (
+        f'<a href="{url}" '
+        f'style="color:#25D366;font-weight:700;text-decoration:underline;">'
+        f'{label}</a>'
+    )
+
+
 def _fetch_foto_base64(url) -> str | None:
     """Tenta buscar a foto do aluno e devolvê-la como data URL base64.
     Retorna None em caso de falha (sem foto, URL inválida, timeout)."""
@@ -107,6 +155,13 @@ def gerar_pdf_atrasados(lista_alunos):
             if whats in ("None", "nan"):
                 whats = "-"
 
+            num_limpo  = _limpar_whats(whats)
+            whats_cell = (
+                _link_whats(num_limpo, nome, dias)
+                if num_limpo
+                else f'<span style="color:#94A3B8;">-</span>'
+            )
+
             data_url = _fetch_foto_base64(aluno.get("url_foto"))
             if data_url:
                 foto_html = (
@@ -131,7 +186,7 @@ def gerar_pdf_atrasados(lista_alunos):
     <td style="width:37%;vertical-align:middle;padding:4px 6px;font-size:9pt;">{nome}</td>
     <td style="width:28%;vertical-align:middle;padding:4px 6px;font-size:8.5pt;color:#475569;">{turma}</td>
     <td style="width:13%;text-align:center;vertical-align:middle;padding:4px;font-size:9pt;font-weight:700;color:{cor_dias};">{dias_str}</td>
-    <td style="width:13%;text-align:center;vertical-align:middle;padding:4px;font-size:8pt;color:#475569;">{whats}</td>
+    <td style="width:13%;text-align:center;vertical-align:middle;padding:4px;font-size:8pt;">{whats_cell}</td>
   </tr>"""
 
         html = f"""<!DOCTYPE html>
