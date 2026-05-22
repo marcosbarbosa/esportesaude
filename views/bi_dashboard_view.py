@@ -344,7 +344,7 @@ def render_bi_dashboard():
     )
 
     hoje = datetime.date.today()
-    col_di, col_df, col_at, col_pdf = st.columns([2, 2, 1, 1])
+    col_di, col_df, col_cons, col_at, col_pdf = st.columns([2, 2, 1.2, 0.8, 1])
     with col_di:
         data_ini = st.date_input(
             "Período inicial:", value=hoje - datetime.timedelta(days=30),
@@ -355,23 +355,40 @@ def render_bi_dashboard():
             "Período final:", value=hoje,
             key="bi_freq_fim", format="DD/MM/YYYY",
         )
+    with col_cons:
+        st.markdown("<div style='height:26px'></div>", unsafe_allow_html=True)
+        consultar = st.button("🔍 Consultar", use_container_width=True,
+                              key="bi_freq_consultar_btn", type="primary")
+        if consultar:
+            st.session_state["bi_freq_ok"] = True
+            st.session_state["bi_freq_periodo"] = (str(data_ini), str(data_fim))
     with col_at:
         st.markdown("<div style='height:26px'></div>", unsafe_allow_html=True)
         atualizar = st.button("🔄", use_container_width=True, key="bi_freq_reload",
-                              help="Atualizar dados do período")
+                              help="Limpar cache e recarregar")
         if atualizar:
             _flush_bi_frequencia()
+            st.session_state["bi_freq_ok"] = True
+            st.session_state["bi_freq_periodo"] = (str(data_ini), str(data_fim))
             st.rerun()
     with col_pdf:
         st.markdown("<div style='height:26px'></div>", unsafe_allow_html=True)
         gerar_pdf = st.button("📥 PDF", use_container_width=True, key="bi_freq_pdf",
-                              type="primary")
+                              type="secondary")
 
     if data_ini > data_fim:
         st.warning("A data inicial não pode ser maior que a final.")
         st.stop()
 
-    df_pres = bi_presencas_periodo(str(data_ini), str(data_fim))
+    # Só consulta o banco quando o utilizador clicar em "Consultar" ou "Atualizar".
+    # Isso evita que múltiplas chamadas HTTP paginadas bloqueiem a renderização.
+    if not st.session_state.get("bi_freq_ok"):
+        st.info("Selecione o período e clique em **🔍 Consultar** para carregar os dados.")
+        st.stop()
+
+    # Usa o período que foi submetido, não o valor atual dos date_inputs
+    _ini, _fim = st.session_state.get("bi_freq_periodo", (str(data_ini), str(data_fim)))
+    df_pres = bi_presencas_periodo(_ini, _fim)
 
     if df_pres.empty:
         st.info("Nenhuma presença registada no período selecionado.")

@@ -1325,10 +1325,11 @@ def bi_presencas_periodo(data_inicio: str, data_fim: str) -> pd.DataFrame:
     que o servidor Supabase impõe independentemente do .limit() do cliente.
     """
     try:
-        PAGE  = 1000
-        todos = []
-        offset = 0
-        while True:
+        PAGE       = 1000
+        MAX_PAGINAS = 30          # guarda: máximo 30.000 registros (evita loop infinito)
+        todos      = []
+        offset     = 0
+        for _ in range(MAX_PAGINAS):
             r = (
                 supabase.from_("frequencia")
                 .select("data_aula, aluno_id")
@@ -1342,7 +1343,7 @@ def bi_presencas_periodo(data_inicio: str, data_fim: str) -> pd.DataFrame:
             lote = r.data or []
             todos.extend(lote)
             if len(lote) < PAGE:
-                break          # última página: recebemos menos que o tamanho do lote
+                break          # última página: menos de PAGE itens → fim dos dados
             offset += PAGE
         return pd.DataFrame(todos)
     except Exception:
