@@ -1418,37 +1418,50 @@ def tela_relatorio():
             if st.button(
                 "🚀 INICIAR VERIFICAÇÃO DE INTEGRIDADE", use_container_width=True
             ):
+                # Nomes de coluna reais na tabela `alunos` do Supabase
                 checks = {
-                    "url_foto": "📸 Foto",
-                    "url_documento": "🪪 Documento Oficial",
-                    "cpf": "🆔 CPF",
-                    "rg": "📄 RG",
-                    "data_nascimento": "🎂 Nasc.",
-                    "url_atestado": "⚕️ Atestado Médico",
+                    "url_foto":            "📸 Foto",
+                    "url_rg":              "🪪 Documento Oficial",
+                    "cpf":                 "🆔 CPF",
+                    "rg":                  "📄 RG",
+                    "data_nascimento":     "🎂 Nasc.",
+                    "url_atestado_medico": "⚕️ Atestado Médico",
                 }
                 falhas = []
                 contagem_falhas = {label: 0 for label in checks.values()}
 
-                for _, r in df_aud.iterrows():
-                    missing = []
-                    for col, label in checks.items():
-                        if (
-                            pd.isna(r.get(col))
-                            or str(r.get(col)).strip() == ""
-                            or str(r.get(col)).strip().upper() == "NÃO INFORMADO"
-                        ):
-                            missing.append(label)
-                            contagem_falhas[label] += 1
-                    if missing:
-                        falhas.append(
-                            {
-                                "Aluno": r["nome"],
-                                "Turma": r["turma"],
-                                "Pendências": ", ".join(missing),
-                                "id_aluno": str(r.get("id", "")).split(".")[0],
-                                "dict_aluno": r.to_dict(),
-                            }
-                        )
+                # Strings que devem ser tratadas como vazio
+                _VAZIOS = {"", "none", "null", "undefined", "nan", "não informado",
+                           "nao informado", "n/a", "na", "-"}
+
+                def _ausente(val):
+                    """Retorna True se o valor indica campo não preenchido."""
+                    if val is None:
+                        return True
+                    try:
+                        if pd.isna(val):
+                            return True
+                    except Exception:
+                        pass
+                    return str(val).strip().lower() in _VAZIOS
+
+                with st.spinner("Verificando cadastros… aguarde."):
+                    for _, r in df_aud.iterrows():
+                        missing = []
+                        for col, label in checks.items():
+                            if _ausente(r.get(col)):
+                                missing.append(label)
+                                contagem_falhas[label] += 1
+                        if missing:
+                            falhas.append(
+                                {
+                                    "Aluno": r["nome"],
+                                    "Turma": r["turma"],
+                                    "Pendências": ", ".join(missing),
+                                    "id_aluno": str(r.get("id", "")).split(".")[0],
+                                    "dict_aluno": r.to_dict(),
+                                }
+                            )
 
                 if falhas:
                     st.error(
