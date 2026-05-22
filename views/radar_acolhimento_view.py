@@ -179,17 +179,36 @@ def tela_radar_acolhimento():
             st.info("Nenhum aluno ativo encontrado para análise.")
             return
 
-        res_freq = (
-            supabase.table("frequencia")
-            .select("aluno_id, data_aula")
-            .eq("status", "PRESENTE")
-            .execute()
-        )
-        df_freq = pd.DataFrame(res_freq.data)
+        # ── Busca paginada para superar o limite de 1000 linhas do Supabase ──
+        # Sem paginação, registros recentes (>1000º) não chegam e alunos que
+        # compareceram esta semana aparecem erroneamente como em evasão.
+        todos_freq: list = []
+        offset_freq = 0
+        PAGE_F = 1000
+        for _ in range(100):          # guarda: máximo 100.000 registros
+            lote_r = (
+                supabase.table("frequencia")
+                .select("aluno_id, data_aula")
+                .eq("status", "PRESENTE")
+                .order("data_aula")
+                .range(offset_freq, offset_freq + PAGE_F - 1)
+                .execute()
+            )
+            lote = lote_r.data or []
+            todos_freq.extend(lote)
+            if len(lote) < PAGE_F:
+                break
+            offset_freq += PAGE_F
+
+        df_freq = pd.DataFrame(todos_freq)
 
         mapa_ultimas_datas = {}
         if not df_freq.empty:
-            df_freq["data_aula"] = pd.to_datetime(df_freq["data_aula"]).dt.date
+            # Regra: nunca usar pd.to_datetime direto em data_aula —
+            # Supabase pode devolver "YYYY-MM-DDTHH:MM:SS+00:00"; str[:10] normaliza.
+            df_freq["data_aula"] = pd.to_datetime(
+                df_freq["data_aula"].astype(str).str[:10]
+            ).dt.date
             mapa_ultimas_datas = (
                 df_freq.groupby("aluno_id")["data_aula"].max().to_dict()
             )
