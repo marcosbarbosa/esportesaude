@@ -1,8 +1,8 @@
 # ==============================================================================
-# 📄 Arquivo: views/conferencia_facial_view.py
-# 🏷️ Módulo: Conferência de Presença por Reconhecimento Facial
-# 👤 AUTOR: Marcos Barbosa - MoveRight (c)
-# ⚙️ FUNÇÃO: Identifica alunos em foto de turma via DeepFace e lança presenças
+# Arquivo: views/conferencia_facial_view.py
+# Modulo: Conferencia de Presenca por Reconhecimento Facial
+# Autor: Marcos Barbosa - MoveRight (c)
+# Funcao: Processa alunos em lotes de 3, salva imediatamente apos confirmacao
 # ==============================================================================
 
 import streamlit as st
@@ -16,8 +16,12 @@ import numpy as np
 
 from database import supabase
 
+LOTE_SIZE = 3  # alunos processados por vez
 
-# ── Helpers de DB ─────────────────────────────────────────────────────────────
+
+# ==============================================================================
+# Helpers de banco de dados
+# ==============================================================================
 
 
 def _buscar_turmas():
@@ -41,21 +45,7 @@ def _buscar_alunos_turma(turma_id: str):
     return r.data or []
 
 
-def _buscar_diario_sem_frequencia(turma_id: str):
-    """Retorna aulas do diário que ainda não têm frequência lançada para a turma."""
-    r_diario = (
-        supabase.table("diario_aulas")
-        .select("id,data_aula,turma,turma_id,url_foto_grupo")
-        .eq("turma_id", turma_id)
-        .order("data_aula", desc=True)
-        .limit(60)
-        .execute()
-    )
-    return r_diario.data or []
-
-
 def _presencas_ja_lancadas(data_aula: str, aluno_ids: list) -> set:
-    """Retorna set de aluno_ids que já têm frequência nessa data."""
     if not aluno_ids:
         return set()
     r = (
@@ -68,24 +58,32 @@ def _presencas_ja_lancadas(data_aula: str, aluno_ids: list) -> set:
     return {row["aluno_id"] for row in (r.data or [])}
 
 
-def _gravar_frequencias(resultados: list, data_aula: str):
-    """
-    resultados: lista de dicts {aluno_id, nome, status: 'PRESENTE'|'FALTA'}
-    Usa upsert para não duplicar registros.
-    """
+def _gravar_lote(resultados: list, data_aula: str):
     rows = [
         {"aluno_id": item["aluno_id"], "data_aula": data_aula, "status": item["status"]}
         for item in resultados
     ]
-    supabase.table("frequencia").upsert(
-        rows, on_conflict="aluno_id,data_aula"
-    ).execute()
+    supabase.table("frequencia").upsert(rows, on_conflict="aluno_id,data_aula").execute()
 
 
-# ── Download de imagem para numpy array ───────────────────────────────────────
+def _buscar_diario_com_foto(turma_id: str):
+    r = (
+        supabase.table("diario_aulas")
+        .select("id,data_aula,turma,turma_id,url_foto_grupo")
+        .eq("turma_id", turma_id)
+        .order("data_aula", desc=True)
+        .limit(60)
+        .execute()
+    )
+    return [d for d in (r.data or []) if d.get("url_foto_grupo")]
 
 
-def _url_para_array(url: str) -> np.ndarray | None:
+# ==============================================================================
+# Helpers de imagem
+# ==============================================================================
+
+
+def _url_para_array(url: str):
     try:
         resp = requests.get(url, timeout=10)
         resp.raise_for_status()
@@ -95,7 +93,7 @@ def _url_para_array(url: str) -> np.ndarray | None:
         return None
 
 
-def _upload_para_array(uploaded_file) -> np.ndarray | None:
+def _upload_para_array(uploaded_file):
     try:
         img = Image.open(uploaded_file).convert("RGB")
         return np.array(img)
@@ -103,156 +101,115 @@ def _upload_para_array(uploaded_file) -> np.ndarray | None:
         return None
 
 
-# ── Motor de reconhecimento facial ────────────────────────────────────────────
+def _salvar_img_temp(arr: np.ndarray) -> str:
+    """Salva numpy array em arquivo temporario e retorna o path."""
+    tmp = tempfile.NamedTemporaryFile(suffix=".jpg", delete=False)
+    Image.fromarray(arr).save(tmp.name)
+    tmp.close()
+    return tmp.name
 
 
-def _reconhecer_presencas(img_grupo: np.ndarray, alunos: list) -> list:
-    """
-    Compara cada rosto da foto de grupo com as fotos individuais dos alunos.
-    Retorna lista de dicts:
-      {aluno_id, nome, status, confianca, tem_foto}
-    """
+# ==============================================================================
+# Motor de reconhecimento facial (um aluno por vez)
+# ==============================================================================
+
+
+def _reconhecer_aluno(grupo_path: str, aluno: dict) -> dict:
     from deepface import DeepFace
 
-    resultados = []
+    aluno_id = aluno["id"]
+    nome = aluno["nome"]
+    url_foto = aluno.get("url_foto") or ""
 
-    with tempfile.TemporaryDirectory() as tmpdir:
-        # Salvar foto do grupo
-        grupo_path = os.path.join(tmpdir, "grupo.jpg")
-        Image.fromarray(img_grupo).save(grupo_path)
+    if not url_foto:
+        return {
+            "aluno_id": aluno_id, "nome": nome,
+            "status": "FALTA", "confianca": 0,
+            "tem_foto": False, "motivo": "Sem foto cadastrada",
+        }
 
-        for aluno in alunos:
-            aluno_id = aluno["id"]
-            nome = aluno["nome"]
-            url_foto = aluno.get("url_foto") or ""
+    arr_individual = _url_para_array(url_foto)
+    if arr_individual is None:
+        return {
+            "aluno_id": aluno_id, "nome": nome,
+            "status": "FALTA", "confianca": 0,
+            "tem_foto": True, "motivo": "Erro ao carregar foto",
+        }
 
-            if not url_foto:
-                resultados.append(
-                    {
-                        "aluno_id": aluno_id,
-                        "nome": nome,
-                        "status": "FALTA",
-                        "confianca": 0,
-                        "tem_foto": False,
-                        "motivo": "Sem foto cadastrada",
-                    }
-                )
-                continue
+    with tempfile.NamedTemporaryFile(suffix=".jpg", delete=False) as f:
+        individual_path = f.name
+    Image.fromarray(arr_individual).save(individual_path)
 
-            # Download foto individual
-            arr_individual = _url_para_array(url_foto)
-            if arr_individual is None:
-                resultados.append(
-                    {
-                        "aluno_id": aluno_id,
-                        "nome": nome,
-                        "status": "FALTA",
-                        "confianca": 0,
-                        "tem_foto": True,
-                        "motivo": "Erro ao carregar foto",
-                    }
-                )
-                continue
-
-            individual_path = os.path.join(tmpdir, f"{aluno_id}.jpg")
-            Image.fromarray(arr_individual).save(individual_path)
-
-            try:
-                resultado_df = DeepFace.find(
-                    img_path=individual_path,
-                    db_path=tmpdir,
-                    model_name="Facenet",
-                    detector_backend="retinaface",  # "retinaface", opencv
-                    enforce_detection=False,
-                    silent=True,
-                )
-
-                encontrado = False
-                confianca = 0
-
-                # DeepFace.find retorna lista de DataFrames (um por rosto detectado)
-                for df in resultado_df:
-                    if df is not None and not df.empty:
-                        # Verifica se a foto do grupo está nos resultados (match com rosto da turma)
-                        # Usamos verify direto para maior controle
-                        break
-
-                # Abordagem mais direta: verify par-a-par contra a foto do grupo
-                try:
-                    verify = DeepFace.verify(
-                        img1_path=individual_path,
-                        img2_path=grupo_path,
-                        model_name="Facenet",
-                        detector_backend="retinaface",
-                        enforce_detection=False,
-                        silent=True,
-                    )
-                    encontrado = verify.get("verified", False)
-                    distancia = verify.get("distance", 1.0)
-                    limiar = verify.get("threshold", 0.4)
-                    # Confiança invertida: quanto menor a distância, maior a confiança
-                    confianca = max(
-                        0, int((1 - distancia / max(limiar * 2, 0.01)) * 100)
-                    )
-                    confianca = min(confianca, 99)
-                except Exception:
-                    encontrado = False
-                    confianca = 0
-
-                resultados.append(
-                    {
-                        "aluno_id": aluno_id,
-                        "nome": nome,
-                        "status": "PRESENTE" if encontrado else "FALTA",
-                        "confianca": confianca,
-                        "tem_foto": True,
-                        "motivo": "",
-                    }
-                )
-
-            except Exception as e:
-                resultados.append(
-                    {
-                        "aluno_id": aluno_id,
-                        "nome": nome,
-                        "status": "FALTA",
-                        "confianca": 0,
-                        "tem_foto": True,
-                        "motivo": f"Erro: {str(e)[:60]}",
-                    }
-                )
-
-    return resultados
+    try:
+        verify = DeepFace.verify(
+            img1_path=individual_path,
+            img2_path=grupo_path,
+            model_name="Facenet",
+            detector_backend="retinaface",
+            enforce_detection=False,
+            silent=True,
+        )
+        encontrado = verify.get("verified", False)
+        distancia = verify.get("distance", 1.0)
+        limiar = verify.get("threshold", 0.4)
+        confianca = max(0, int((1 - distancia / max(limiar * 2, 0.01)) * 100))
+        confianca = min(confianca, 99)
+        return {
+            "aluno_id": aluno_id, "nome": nome,
+            "status": "PRESENTE" if encontrado else "FALTA",
+            "confianca": confianca, "tem_foto": True, "motivo": "",
+        }
+    except Exception as e:
+        return {
+            "aluno_id": aluno_id, "nome": nome,
+            "status": "FALTA", "confianca": 0,
+            "tem_foto": True, "motivo": f"Erro: {str(e)[:60]}",
+        }
+    finally:
+        try:
+            os.unlink(individual_path)
+        except Exception:
+            pass
 
 
-# ── Tela principal ────────────────────────────────────────────────────────────
+# ==============================================================================
+# Tela principal — dispatcher
+# ==============================================================================
 
 
 def tela_conferencia_facial():
     st.markdown(
         "<h3 style='color:#0A2540;font-weight:800;margin-bottom:4px;'>"
-        "📸 Conferência de Presença por Foto</h3>"
-        "<p style='color:#64748B;margin-bottom:20px;'>"
-        "Faça upload da foto da turma e o sistema identifica automaticamente quem estava presente.</p>",
+        "Conferencia de Presenca por Foto</h3>"
+        "<p style='color:#64748B;margin-bottom:12px;'>"
+        "Processa em lotes de 3 alunos — salva cada lote imediatamente, "
+        "retoma de onde parou em caso de queda.</p>",
         unsafe_allow_html=True,
     )
 
-    # ── Aviso sobre limitações ─────────────────────────────────────────────
-    with st.expander("ℹ️ Como funciona e limitações importantes", expanded=False):
+    if st.session_state.get("facial_sessao_ativa"):
+        _modo_processamento()
+    else:
+        _modo_configuracao()
+
+
+# ==============================================================================
+# Modo 1: Configuracao inicial
+# ==============================================================================
+
+
+def _modo_configuracao():
+    with st.expander("Como funciona", expanded=False):
         st.markdown("""
-**Como funciona:**
-1. Selecione a turma e a data da aula
-2. Faça upload da foto tirada no fim da aula (ou use a foto do diário se já existir)
-3. O sistema compara cada aluno da turma com os rostos na foto
-4. Revise o resultado — confirme ou corrija antes de salvar
+**Fluxo modular por lotes:**
+1. Selecione turma, data e foto da turma
+2. Clique em "Iniciar Conferencia"
+3. O sistema analisa **3 alunos por vez** — revise e confirme cada lote
+4. Cada lote confirmado e **gravado imediatamente** no banco
+5. Se o sistema travar, basta reiniciar — quem ja foi confirmado nao sera reprocessado
+6. No final, um resumo completo da sessao
 
-**Limitações honestas:**
-- Fotos escuras, desfocadas ou com rostos de lado reduzem a precisão
-- Alunos sem foto cadastrada não são identificados automaticamente (ficam como FALTA)
-- O processo leva ~3–10 segundos por aluno — seja paciente
-- **Sempre confirme o resultado antes de gravar.** O sistema nunca salva sem sua aprovação.
-
-**Privacidade:** As fotos são processadas localmente no servidor, sem envio para serviços externos.
+**Privacidade:** as fotos sao processadas localmente, sem servicos externos.
         """)
 
     turmas = _buscar_turmas()
@@ -260,17 +217,16 @@ def tela_conferencia_facial():
         st.warning("Nenhuma turma ativa encontrada.")
         return
 
-    # ── Seleção de turma ───────────────────────────────────────────────────
     col_turma, col_data = st.columns([2, 1])
     with col_turma:
         opcoes_turma = {t["nome"]: t for t in turmas}
-        turma_nome = st.selectbox("🏫 Turma", list(opcoes_turma.keys()))
+        turma_nome = st.selectbox("Turma", list(opcoes_turma.keys()))
     turma_sel = opcoes_turma[turma_nome]
     turma_id = turma_sel["id"]
 
     with col_data:
         data_aula = st.date_input(
-            "📅 Data da Aula",
+            "Data da Aula",
             value=datetime.date.today(),
             max_value=datetime.date.today(),
         )
@@ -284,29 +240,31 @@ def tela_conferencia_facial():
     com_foto = sum(1 for a in alunos if a.get("url_foto"))
     sem_foto = total_alunos - com_foto
 
+    ja_lancadas = _presencas_ja_lancadas(str(data_aula), [a["id"] for a in alunos])
+    pendentes_count = total_alunos - len(ja_lancadas)
+
     st.markdown(
-        f"<div style='background:#F0F9FF;border-left:4px solid #0056b3;padding:10px 16px;"
-        f"border-radius:6px;margin-bottom:16px;font-size:13px;'>"
-        f"👥 <b>{total_alunos} alunos</b> nesta turma — "
-        f"<span style='color:#16a34a;'>✅ {com_foto} com foto</span> · "
-        f"<span style='color:#dc2626;'>⚠️ {sem_foto} sem foto</span> "
-        f"(serão marcados como FALTA automaticamente)</div>",
+        f"<div style='background:#F0F9FF;border-left:4px solid #0056b3;"
+        f"padding:10px 16px;border-radius:6px;margin-bottom:12px;font-size:13px;'>"
+        f"<b>{total_alunos} alunos</b> na turma &nbsp;|&nbsp; "
+        f"<span style='color:#16a34a;'>{com_foto} com foto</span> &nbsp;|&nbsp; "
+        f"<span style='color:#dc2626;'>{sem_foto} sem foto</span>"
+        f"{f'<br><b style=color:#92400e;>{len(ja_lancadas)} ja confirmados nesta data — serao pulados</b>' if ja_lancadas else ''}"
+        f"</div>",
         unsafe_allow_html=True,
     )
 
-    # ── Origem da foto do grupo ────────────────────────────────────────────
-    st.markdown("**📷 Foto da Turma (fonte)**")
+    st.markdown("**Foto da Turma**")
     origem = st.radio(
-        "Origem da foto",
-        ["Upload manual (novo arquivo)", "Usar foto já registrada no Diário"],
+        "Origem",
+        ["Upload manual", "Usar foto do Diario"],
         horizontal=True,
         label_visibility="collapsed",
     )
 
     img_grupo = None
-    url_grupo_usada = None
 
-    if origem == "Upload manual (novo arquivo)":
+    if origem == "Upload manual":
         uploaded = st.file_uploader(
             "Envie a foto da turma",
             type=["jpg", "jpeg", "png", "webp"],
@@ -314,238 +272,323 @@ def tela_conferencia_facial():
         )
         if uploaded:
             img_grupo = _upload_para_array(uploaded)
-            st.image(
-                uploaded, caption="Foto da turma carregada", use_container_width=True
-            )
-
+            st.image(uploaded, caption="Foto carregada", use_container_width=True)
     else:
-        # Buscar do diário
-        diario = _buscar_diario_sem_frequencia(turma_id)
-        entradas_com_foto = [d for d in diario if d.get("url_foto_grupo")]
-
-        if not entradas_com_foto:
-            st.info("Nenhuma entrada no Diário com foto de grupo para esta turma.")
+        diario = _buscar_diario_com_foto(turma_id)
+        if not diario:
+            st.info("Nenhuma entrada no Diario com foto para esta turma.")
         else:
-            opcoes_diario = {
-                f"{d['data_aula']} — {d['turma']}": d for d in entradas_com_foto
-            }
-            entrada_sel_key = st.selectbox(
-                "Selecione a aula", list(opcoes_diario.keys())
-            )
+            opcoes_diario = {f"{d['data_aula']} — {d['turma']}": d for d in diario}
+            entrada_sel_key = st.selectbox("Aula do diario", list(opcoes_diario.keys()))
             entrada_sel = opcoes_diario[entrada_sel_key]
-            url_grupo_usada = entrada_sel["url_foto_grupo"]
-
-            # Preencher data automaticamente
             try:
                 data_aula = datetime.date.fromisoformat(entrada_sel["data_aula"])
             except Exception:
                 pass
-
-            arr = _url_para_array(url_grupo_usada)
+            arr = _url_para_array(entrada_sel["url_foto_grupo"])
             if arr is not None:
                 img_grupo = arr
                 st.image(
-                    url_grupo_usada,
-                    caption=f"Foto do diário — {entrada_sel['data_aula']}",
+                    entrada_sel["url_foto_grupo"],
+                    caption=f"Diario — {entrada_sel['data_aula']}",
                     use_container_width=True,
                 )
             else:
-                st.error("Não foi possível carregar a foto do diário.")
+                st.error("Nao foi possivel carregar a foto do diario.")
 
-    # ── Botão de análise ───────────────────────────────────────────────────
     st.markdown("---")
 
-    ja_lancadas = _presencas_ja_lancadas(str(data_aula), [a["id"] for a in alunos])
-    if ja_lancadas:
-        st.warning(
-            f"⚠️ {len(ja_lancadas)} aluno(s) já têm frequência lançada para {data_aula.strftime('%d/%m/%Y')}. "
-            "A conferência irá sobrescrever apenas os registros confirmados."
-        )
-
-    btn_analisar = st.button(
-        "🔍 Iniciar Reconhecimento Facial",
+    btn_iniciar = st.button(
+        f"Iniciar Conferencia ({pendentes_count} alunos para processar)",
         type="primary",
         use_container_width=True,
-        disabled=(img_grupo is None),
+        disabled=(img_grupo is None or pendentes_count == 0),
     )
 
     if img_grupo is None:
-        st.caption("⬆️ Forneça a foto da turma para habilitar o reconhecimento.")
+        st.caption("Forneca a foto da turma para habilitar o reconhecimento.")
+    elif pendentes_count == 0:
+        st.success(f"Todos os {total_alunos} alunos ja tem frequencia lancada para esta data.")
 
-    if btn_analisar and img_grupo is not None:
-        # Limpar resultado anterior
-        st.session_state.pop("facial_resultado", None)
-        st.session_state.pop("facial_data", None)
-        st.session_state.pop("facial_alunos", None)
+    if btn_iniciar and img_grupo is not None and pendentes_count > 0:
+        grupo_path = _salvar_img_temp(img_grupo)
+        pendentes = [a for a in alunos if a["id"] not in ja_lancadas]
 
-        barra = st.progress(0, text="A preparar análise...")
-        status_box = st.empty()
-
-        resultados = []
-        total = len(alunos)
-
-        for i, aluno in enumerate(alunos):
-            pct = int((i / total) * 100)
-            barra.progress(
-                pct, text=f"Analisando {i + 1}/{total}: {aluno['nome'][:30]}…"
-            )
-            status_box.caption(f"🔎 Verificando {aluno['nome']}…")
-
-            # Processar um aluno de cada vez para feedback em tempo real
-            resultado_aluno = _reconhecer_presencas(img_grupo, [aluno])
-            resultados.extend(resultado_aluno)
-
-        barra.progress(100, text="✅ Análise concluída!")
-        status_box.empty()
-
-        st.session_state["facial_resultado"] = resultados
-        st.session_state["facial_data"] = str(data_aula)
-        st.session_state["facial_alunos"] = {a["id"]: a for a in alunos}
+        st.session_state["facial_sessao_ativa"] = True
+        st.session_state["facial_turma_nome"] = turma_nome
+        st.session_state["facial_data_str"] = str(data_aula)
+        st.session_state["facial_grupo_path"] = grupo_path
+        st.session_state["facial_pendentes"] = pendentes
+        st.session_state["facial_alunos_mapa"] = {a["id"]: a for a in alunos}
+        st.session_state["facial_confirmados"] = []
+        st.session_state["facial_lote_resultado"] = None
+        st.session_state["facial_lote_editado"] = {}
         st.rerun()
 
-    # ── Exibir resultado e confirmação ────────────────────────────────────
-    if "facial_resultado" in st.session_state:
-        resultados = st.session_state["facial_resultado"]
-        data_str = st.session_state["facial_data"]
-        try:
-            data_fmt = datetime.date.fromisoformat(data_str).strftime("%d/%m/%Y")
-        except Exception:
-            data_fmt = data_str
 
-        presentes = [r for r in resultados if r["status"] == "PRESENTE"]
-        faltas = [r for r in resultados if r["status"] == "FALTA"]
-        sem_foto_lst = [r for r in resultados if not r["tem_foto"]]
+# ==============================================================================
+# Modo 2: Processamento em lotes
+# ==============================================================================
 
-        st.markdown("---")
+
+def _modo_processamento():
+    data_str = st.session_state.get("facial_data_str", "")
+    turma_nome = st.session_state.get("facial_turma_nome", "")
+    grupo_path = st.session_state.get("facial_grupo_path", "")
+    pendentes: list = st.session_state.get("facial_pendentes", [])
+    confirmados: list = st.session_state.get("facial_confirmados", [])
+    lote_resultado: list | None = st.session_state.get("facial_lote_resultado")
+
+    try:
+        data_fmt = datetime.date.fromisoformat(data_str).strftime("%d/%m/%Y")
+    except Exception:
+        data_fmt = data_str
+
+    total_sessao = len(pendentes) + len(confirmados)
+    n_confirmados = len(confirmados)
+
+    # ── Cabecalho da sessao ────────────────────────────────────────────────
+    col_info, col_cancel = st.columns([5, 1])
+    with col_info:
         st.markdown(
-            f"<h4 style='color:#0A2540;margin-bottom:4px;'>"
-            f"📋 Resultado da Análise — {data_fmt}</h4>",
-            unsafe_allow_html=True,
-        )
-
-        # Métricas resumo
-        mc1, mc2, mc3, mc4 = st.columns(4)
-        mc1.metric("👥 Total analisados", len(resultados))
-        mc2.metric("✅ Identificados presentes", len(presentes))
-        mc3.metric("❌ Não identificados", len(faltas))
-        mc4.metric("📷 Sem foto cadastrada", len(sem_foto_lst))
-
-        st.markdown("**Revise e ajuste antes de confirmar:**")
-
-        # Estado editável dos resultados
-        if "facial_editado" not in st.session_state:
-            st.session_state["facial_editado"] = {
-                r["aluno_id"]: r["status"] for r in resultados
-            }
-
-        # Listar todos os alunos com controle de status
-        for r in sorted(
-            resultados, key=lambda x: (-1 if x["status"] == "PRESENTE" else 1)
-        ):
-            aluno_id = r["aluno_id"]
-            nome = r["nome"]
-            conf = r["confianca"]
-            tem_foto = r["tem_foto"]
-            motivo = r.get("motivo", "")
-            status_atual = st.session_state["facial_editado"].get(aluno_id, r["status"])
-
-            with st.container(border=True):
-                c_nome, c_conf, c_status = st.columns([3, 2, 2])
-
-                with c_nome:
-                    if status_atual == "PRESENTE":
-                        st.markdown(f"✅ **{nome}**")
-                    else:
-                        st.markdown(f"❌ {nome}")
-                    if not tem_foto:
-                        st.caption("📷 Sem foto cadastrada")
-                    elif motivo:
-                        st.caption(f"⚠️ {motivo}")
-
-                with c_conf:
-                    if tem_foto and not motivo:
-                        cor = "#16a34a" if conf >= 50 else "#dc2626"
-                        st.markdown(
-                            f"<span style='color:{cor};font-weight:700;font-size:13px;'>"
-                            f"Confiança: {conf}%</span>",
-                            unsafe_allow_html=True,
-                        )
-                        if conf >= 70:
-                            st.caption("🟢 Alta confiança")
-                        elif conf >= 40:
-                            st.caption("🟡 Confiança média")
-                        else:
-                            st.caption("🔴 Baixa confiança")
-                    else:
-                        st.caption("—")
-
-                with c_status:
-                    novo_status = st.selectbox(
-                        "Status",
-                        ["PRESENTE", "FALTA"],
-                        index=0 if status_atual == "PRESENTE" else 1,
-                        key=f"sel_{aluno_id}",
-                        label_visibility="collapsed",
-                    )
-                    st.session_state["facial_editado"][aluno_id] = novo_status
-
-        st.markdown("---")
-
-        # Resumo final antes de gravar
-        editado = st.session_state["facial_editado"]
-        total_presentes_final = sum(1 for v in editado.values() if v == "PRESENTE")
-        total_faltas_final = sum(1 for v in editado.values() if v == "FALTA")
-
-        st.markdown(
-            f"<div style='background:#F0FDF4;border:1px solid #86efac;border-radius:8px;"
-            f"padding:12px 16px;margin-bottom:16px;'>"
-            f"📊 <b>Resumo final:</b> "
-            f"<span style='color:#16a34a;font-weight:700;'>✅ {total_presentes_final} PRESENTE(S)</span> · "
-            f"<span style='color:#dc2626;font-weight:700;'>❌ {total_faltas_final} FALTA(S)</span>"
+            f"<div style='background:#F0F9FF;border-left:4px solid #0056b3;"
+            f"padding:10px 16px;border-radius:6px;font-size:13px;margin-bottom:8px;'>"
+            f"<b>{turma_nome}</b> &nbsp;|&nbsp; {data_fmt} &nbsp;|&nbsp; "
+            f"<b style='color:#16a34a;'>{n_confirmados} confirmados</b> &nbsp;|&nbsp; "
+            f"<b style='color:#92400e;'>{len(pendentes)} pendentes</b>"
             f"</div>",
             unsafe_allow_html=True,
         )
 
-        col_gravar, col_cancelar = st.columns([2, 1])
-        with col_gravar:
-            if st.button(
-                f"💾 Confirmar e Gravar Frequência ({data_fmt})",
-                type="primary",
-                use_container_width=True,
-            ):
-                lista_gravar = [
-                    {
-                        "aluno_id": aid,
-                        "nome": next(
-                            (r["nome"] for r in resultados if r["aluno_id"] == aid), ""
-                        ),
-                        "status": st,
-                    }
-                    for aid, st in editado.items()
-                ]
-                with st.spinner("A gravar frequências…"):
-                    _gravar_frequencias(lista_gravar, data_str)
-                st.success(
-                    f"✅ Frequência gravada com sucesso para {data_fmt}! "
-                    f"{total_presentes_final} presentes · {total_faltas_final} faltas."
+    with col_cancel:
+        if st.button("Cancelar sessao", use_container_width=True):
+            _limpar_sessao()
+            st.rerun()
+
+    # Barra de progresso geral
+    if total_sessao > 0:
+        pct_geral = int((n_confirmados / total_sessao) * 100)
+        st.progress(pct_geral, text=f"{n_confirmados}/{total_sessao} alunos conferidos")
+
+    # ── Exibir ja confirmados (resumo colapsavel) ──────────────────────────
+    if confirmados:
+        with st.expander(f"Ja confirmados nesta sessao ({len(confirmados)} alunos)", expanded=False):
+            for r in confirmados:
+                icone = "OK" if r["status"] == "PRESENTE" else "--"
+                st.markdown(f"**{icone} {r['nome']}** — {r['status']}")
+
+    st.markdown("---")
+
+    # ── Verificar se arquivo de grupo ainda existe ─────────────────────────
+    if not grupo_path or not os.path.exists(grupo_path):
+        st.error(
+            "A foto da turma foi perdida (o servidor pode ter reiniciado). "
+            "Cancele a sessao e inicie novamente — os alunos ja confirmados NAO precisam ser reprocessados."
+        )
+        return
+
+    # ── FASE A: Ha um lote aguardando revisao ─────────────────────────────
+    if lote_resultado:
+        _mostrar_revisao_lote(lote_resultado, data_str, data_fmt, pendentes, confirmados)
+        return
+
+    # ── FASE B: Ha alunos pendentes — processar proximo lote ──────────────
+    if pendentes:
+        proximo_lote = pendentes[:LOTE_SIZE]
+        nomes_lote = ", ".join(a["nome"].split()[0] for a in proximo_lote)
+
+        st.markdown(
+            f"<div style='background:#FFFBEB;border-left:4px solid #F59E0B;"
+            f"padding:10px 16px;border-radius:6px;margin-bottom:12px;font-size:13px;'>"
+            f"<b>Proximo lote ({len(proximo_lote)} alunos):</b> {nomes_lote}"
+            f"</div>",
+            unsafe_allow_html=True,
+        )
+
+        if st.button(
+            f"Analisar proximo lote ({len(proximo_lote)} alunos)",
+            type="primary",
+            use_container_width=True,
+        ):
+            _processar_lote(proximo_lote, grupo_path)
+        return
+
+    # ── FASE C: Todos processados — resumo final ───────────────────────────
+    _mostrar_resumo_final(confirmados, data_fmt)
+
+
+def _processar_lote(lote: list, grupo_path: str):
+    barra = st.progress(0, text="Preparando analise...")
+    resultados_lote = []
+    total = len(lote)
+
+    for i, aluno in enumerate(lote):
+        pct = int((i / total) * 100)
+        barra.progress(pct, text=f"Analisando {i + 1}/{total}: {aluno['nome'][:30]}...")
+        resultado = _reconhecer_aluno(grupo_path, aluno)
+        resultados_lote.append(resultado)
+
+    barra.progress(100, text="Lote analisado!")
+
+    st.session_state["facial_lote_resultado"] = resultados_lote
+    st.session_state["facial_lote_editado"] = {r["aluno_id"]: r["status"] for r in resultados_lote}
+    st.rerun()
+
+
+def _mostrar_revisao_lote(
+    lote_resultado: list, data_str: str, data_fmt: str,
+    pendentes: list, confirmados: list
+):
+    st.markdown(
+        f"<h4 style='color:#0A2540;margin-bottom:8px;'>"
+        f"Revise o lote ({len(lote_resultado)} alunos) — {data_fmt}</h4>",
+        unsafe_allow_html=True,
+    )
+
+    lote_editado: dict = st.session_state.get("facial_lote_editado", {})
+
+    for r in lote_resultado:
+        aluno_id = r["aluno_id"]
+        nome = r["nome"]
+        conf = r["confianca"]
+        tem_foto = r["tem_foto"]
+        motivo = r.get("motivo", "")
+        status_atual = lote_editado.get(aluno_id, r["status"])
+
+        with st.container(border=True):
+            c_nome, c_conf, c_status = st.columns([3, 2, 2])
+
+            with c_nome:
+                icone = "OK" if status_atual == "PRESENTE" else "--"
+                st.markdown(f"**{icone} {nome}**")
+                if not tem_foto:
+                    st.caption("Sem foto cadastrada")
+                elif motivo:
+                    st.caption(f"{motivo}")
+
+            with c_conf:
+                if tem_foto and not motivo:
+                    cor = "#16a34a" if conf >= 50 else "#dc2626"
+                    nivel = "Alta" if conf >= 70 else ("Media" if conf >= 40 else "Baixa")
+                    st.markdown(
+                        f"<span style='color:{cor};font-weight:700;font-size:13px;'>"
+                        f"Confianca: {conf}%</span><br>"
+                        f"<span style='font-size:11px;color:#64748B;'>{nivel}</span>",
+                        unsafe_allow_html=True,
+                    )
+                else:
+                    st.caption("—")
+
+            with c_status:
+                novo_status = st.selectbox(
+                    "Status",
+                    ["PRESENTE", "FALTA"],
+                    index=0 if status_atual == "PRESENTE" else 1,
+                    key=f"lote_sel_{aluno_id}",
+                    label_visibility="collapsed",
                 )
-                # Limpar estado
-                for k in [
-                    "facial_resultado",
-                    "facial_data",
-                    "facial_alunos",
-                    "facial_editado",
-                ]:
-                    st.session_state.pop(k, None)
+                lote_editado[aluno_id] = novo_status
+
+    st.session_state["facial_lote_editado"] = lote_editado
+
+    # Resumo do lote
+    n_presentes = sum(1 for v in lote_editado.values() if v == "PRESENTE")
+    n_faltas = sum(1 for v in lote_editado.values() if v == "FALTA")
+
+    st.markdown(
+        f"<div style='background:#F0FDF4;border:1px solid #86efac;border-radius:8px;"
+        f"padding:10px 16px;margin:8px 0;font-size:13px;'>"
+        f"Este lote: <b style='color:#16a34a;'>{n_presentes} PRESENTE(S)</b> &nbsp;|&nbsp; "
+        f"<b style='color:#dc2626;'>{n_faltas} FALTA(S)</b>"
+        f"</div>",
+        unsafe_allow_html=True,
+    )
+
+    col_confirmar, col_reanalisar = st.columns([2, 1])
+
+    with col_confirmar:
+        if st.button(
+            f"Confirmar e gravar este lote",
+            type="primary",
+            use_container_width=True,
+        ):
+            # Montar lista final com status editado
+            lista_gravar = [
+                {"aluno_id": r["aluno_id"], "nome": r["nome"], "status": lote_editado[r["aluno_id"]]}
+                for r in lote_resultado
+            ]
+
+            with st.spinner("Gravando lote no banco..."):
+                _gravar_lote(lista_gravar, data_str)
+
+            # Atualizar estado: mover do pendentes para confirmados
+            ids_lote = {r["aluno_id"] for r in lote_resultado}
+            novos_pendentes = [a for a in pendentes if a["id"] not in ids_lote]
+            novos_confirmados = confirmados + lista_gravar
+
+            st.session_state["facial_pendentes"] = novos_pendentes
+            st.session_state["facial_confirmados"] = novos_confirmados
+            st.session_state["facial_lote_resultado"] = None
+            st.session_state["facial_lote_editado"] = {}
+            st.rerun()
+
+    with col_reanalisar:
+        if st.button("Reanalisar este lote", use_container_width=True):
+            grupo_path = st.session_state.get("facial_grupo_path", "")
+            if not grupo_path or not os.path.exists(grupo_path):
+                st.error("Foto da turma perdida — cancele e reinicie.")
+            else:
+                alunos_mapa = st.session_state.get("facial_alunos_mapa", {})
+                ids_lote = {r["aluno_id"] for r in lote_resultado}
+                # Reconstruir dicts completos do lote usando o mapa original
+                alunos_lote = [
+                    alunos_mapa[aid]
+                    for aid in ids_lote
+                    if aid in alunos_mapa
+                ]
+                # Colocar de volta na frente da fila
+                pendentes_sem_lote = [a for a in pendentes if a["id"] not in ids_lote]
+                st.session_state["facial_pendentes"] = alunos_lote + pendentes_sem_lote
+                st.session_state["facial_lote_resultado"] = None
+                st.session_state["facial_lote_editado"] = {}
                 st.rerun()
 
-        with col_cancelar:
-            if st.button("🗑️ Descartar Resultado", use_container_width=True):
-                for k in [
-                    "facial_resultado",
-                    "facial_data",
-                    "facial_alunos",
-                    "facial_editado",
-                ]:
-                    st.session_state.pop(k, None)
-                st.rerun()
+
+def _mostrar_resumo_final(confirmados: list, data_fmt: str):
+    presentes_final = [r for r in confirmados if r["status"] == "PRESENTE"]
+    faltas_final = [r for r in confirmados if r["status"] == "FALTA"]
+
+    st.markdown(
+        f"<div style='background:#F0FDF4;border:2px solid #16a34a;border-radius:10px;"
+        f"padding:16px 20px;margin-bottom:16px;'>"
+        f"<h4 style='color:#15803d;margin:0 0 8px 0;'>Conferencia concluida — {data_fmt}</h4>"
+        f"<b style='color:#16a34a;font-size:18px;'>{len(presentes_final)} PRESENTES</b> &nbsp;|&nbsp; "
+        f"<b style='color:#dc2626;font-size:18px;'>{len(faltas_final)} FALTAS</b>"
+        f"</div>",
+        unsafe_allow_html=True,
+    )
+
+    with st.expander("Ver detalhes completos", expanded=False):
+        for r in sorted(confirmados, key=lambda x: (0 if x["status"] == "PRESENTE" else 1)):
+            icone = "PRESENTE" if r["status"] == "PRESENTE" else "FALTA"
+            st.markdown(f"**{icone}** — {r['nome']}")
+
+    if st.button("Nova conferencia", type="primary", use_container_width=True):
+        _limpar_sessao()
+        st.rerun()
+
+
+def _limpar_sessao():
+    grupo_path = st.session_state.get("facial_grupo_path", "")
+    if grupo_path:
+        try:
+            os.unlink(grupo_path)
+        except Exception:
+            pass
+
+    for k in [
+        "facial_sessao_ativa", "facial_turma_nome", "facial_data_str",
+        "facial_grupo_path", "facial_pendentes", "facial_pendentes_completo",
+        "facial_confirmados", "facial_lote_resultado", "facial_lote_editado",
+    ]:
+        st.session_state.pop(k, None)
