@@ -1419,21 +1419,22 @@ def tela_relatorio():
                 "🚀 INICIAR VERIFICAÇÃO DE INTEGRIDADE", use_container_width=True
             ):
                 # Nomes de coluna reais na tabela `alunos` do Supabase
+                # CPF e RG são verificados em conjunto: basta um dos dois estar preenchido
                 checks = {
                     "url_foto":            "📸 Foto",
                     "url_rg":              "🪪 Documento Oficial",
-                    "cpf":                 "🆔 CPF",
-                    "rg":                  "📄 RG",
                     "data_nascimento":     "🎂 Nasc.",
                     "whatsapp":            "📱 WhatsApp",
                     "url_atestado_medico": "⚕️ Atestado Médico",
                 }
+                LABEL_IDENTIFICACAO = "🆔 CPF / RG"
                 falhas = []
                 contagem_falhas = {label: 0 for label in checks.values()}
+                contagem_falhas[LABEL_IDENTIFICACAO] = 0
 
                 # Strings que devem ser tratadas como vazio
                 _VAZIOS = {"", "none", "null", "undefined", "nan", "não informado",
-                           "nao informado", "n/a", "na", "-"}
+                           "nao informado", "n/a", "na", "-", "0"}
 
                 def _ausente(val):
                     """Retorna True se o valor indica campo não preenchido."""
@@ -1453,6 +1454,10 @@ def tela_relatorio():
                             if _ausente(r.get(col)):
                                 missing.append(label)
                                 contagem_falhas[label] += 1
+                        # CPF e RG: só falha se ambos estiverem ausentes
+                        if _ausente(r.get("cpf")) and _ausente(r.get("rg")):
+                            missing.append(LABEL_IDENTIFICACAO)
+                            contagem_falhas[LABEL_IDENTIFICACAO] += 1
                         if missing:
                             falhas.append(
                                 {
