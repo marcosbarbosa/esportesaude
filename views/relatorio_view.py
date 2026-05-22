@@ -1425,6 +1425,7 @@ def tela_relatorio():
                     "cpf":                 "🆔 CPF",
                     "rg":                  "📄 RG",
                     "data_nascimento":     "🎂 Nasc.",
+                    "celular":             "📱 WhatsApp",
                     "url_atestado_medico": "⚕️ Atestado Médico",
                 }
                 falhas = []
