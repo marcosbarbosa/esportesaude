@@ -1411,6 +1411,42 @@ def get_estatisticas_frequencia_aluno(aluno_id):
         return {"total": 0, "presentes": 0, "faltas": 0, "percentual": 0.0}
 
 
+@st.cache_data(ttl=180)
+def get_ultima_presenca_batch(ids: tuple) -> dict:
+    """
+    Recebe uma tuple de aluno_ids e retorna {str(aluno_id): 'DD/MM/AA'}.
+    Faz uma única query ao banco para toda a lista — use em grids de busca.
+    TTL 3 min para não travar o cache nos grids interativos.
+    """
+    if not ids:
+        return {}
+    try:
+        res = (
+            supabase.from_("frequencia")
+            .select("aluno_id, data_aula")
+            .in_("aluno_id", [str(i) for i in ids])
+            .eq("status", "PRESENTE")
+            .order("data_aula", desc=True)
+            .limit(5000)
+            .execute()
+        )
+        if not res.data:
+            return {}
+        df = pd.DataFrame(res.data)
+        ult = df.groupby("aluno_id")["data_aula"].max()
+        resultado = {}
+        for aid, d in ult.items():
+            try:
+                resultado[str(aid)] = datetime.date.fromisoformat(
+                    str(d)[:10]
+                ).strftime("%d/%m/%y")
+            except Exception:
+                pass
+        return resultado
+    except Exception:
+        return {}
+
+
 def excluir_avaliacao_prontuario(aval_id):
     try:
         supabase.from_("prontuario_avaliacoes").delete().eq("id", aval_id).execute()

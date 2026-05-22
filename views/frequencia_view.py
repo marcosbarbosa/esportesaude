@@ -27,6 +27,7 @@ from database import (
     atualizar_turma_aluno,
     get_todas_turmas,
     alternar_presenca,
+    get_ultima_presenca_batch,
 )
 from modulos_frequencia.tab_tablet import renderizar_aba_terminal
 from modulos_frequencia.tab_diario import renderizar_aba_diario
@@ -248,6 +249,10 @@ def tela_frequencia():
                 df_valida["id"].tolist() if not df_valida.empty else []
             )
 
+            _ult_freq_map = get_ultima_presenca_batch(
+                tuple(str(i) for i in df_encontrados["id"].tolist())
+            )
+
             for _, aluno in df_encontrados.iterrows():
                 is_inativo   = aluno.get("status") == "Inativo"
                 is_outra_turma = aluno["id"] not in ids_validos_na_tela
@@ -287,7 +292,7 @@ def tela_frequencia():
                                     "padding:2px 8px;border-radius:5px;font-size:10px;"
                                     "font-weight:800;'>INATIVO</span>"
                                 )
-                                caption = "Aluno inativo — ative e transfira se necessário."
+                                caption = "Inativo — ative e transfira se necessário."
                             else:
                                 turma_tag = str(aluno.get("turma", "outra turma"))
                                 badge = (
@@ -295,13 +300,16 @@ def tela_frequencia():
                                     f"padding:2px 8px;border-radius:5px;font-size:10px;"
                                     f"font-weight:800;'>{turma_tag}</span>"
                                 )
-                                caption = "Visitante / Reposição — presença conta para a turma original."
+                                caption = "Visitante / Reposição — conta para turma original."
+
+                            ult_f   = _ult_freq_map.get(str(aluno["id"]))
+                            ult_txt = f"  ·  Freq: {ult_f}" if ult_f else "  ·  Freq: —"
 
                             st.markdown(
                                 f"**{aluno['nome']}** &nbsp;{badge}",
                                 unsafe_allow_html=True,
                             )
-                            st.caption(caption)
+                            st.caption(caption + ult_txt)
 
                         # ── Botões de ação ───────────────────────────────────────
                         with col_acoes:

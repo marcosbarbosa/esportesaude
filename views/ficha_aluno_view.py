@@ -9,7 +9,7 @@ import streamlit as st
 import datetime
 import base64
 import io
-from database import buscar_alunos_geral
+from database import buscar_alunos_geral, get_ultima_presenca_batch
 from utils.texto import normalizar_fonetica
 from utils.imagem import get_base64_image
 
@@ -687,6 +687,8 @@ def tela_impressao_ficha():
                 st.warning("⚠️ Nenhum aluno encontrado.")
             else:
                 st.markdown(f"**{len(df_view)} aluno(s) encontrado(s):**")
+                ids_busca = tuple(str(r) for r in df_view["id"].tolist())
+                ult_map   = get_ultima_presenca_batch(ids_busca)
                 for idx, row in df_view.iterrows():
                     with st.container(border=True):
                         c_foto, c_info, c_acao = st.columns(
@@ -712,8 +714,10 @@ def tela_impressao_ficha():
                             st.markdown(foto_html, unsafe_allow_html=True)
                         with c_info:
                             st.markdown(f"**{row['nome']}**")
+                            ult_f   = ult_map.get(str(row["id"]))
+                            ult_txt = f"  ·  Freq: {ult_f}" if ult_f else ""
                             st.caption(
-                                f"CPF: {row.get('cpf', 'N/A')} | Turma: {row.get('turma', 'N/A')}"
+                                f"CPF: {row.get('cpf', 'N/A')} | {row.get('turma', 'N/A')}{ult_txt}"
                             )
                         with c_acao:
                             if st.button(
