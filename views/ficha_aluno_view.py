@@ -689,9 +689,29 @@ def tela_impressao_ficha():
                 st.markdown(f"**{len(df_view)} aluno(s) encontrado(s):**")
                 for idx, row in df_view.iterrows():
                     with st.container(border=True):
-                        c_info, c_acao = st.columns([4, 1], vertical_alignment="center")
+                        c_foto, c_info, c_acao = st.columns(
+                            [0.55, 3.45, 1], vertical_alignment="center"
+                        )
+                        with c_foto:
+                            url_foto = str(row.get("url_foto") or "").strip()
+                            if url_foto.startswith("http"):
+                                foto_html = (
+                                    f'<img src="{url_foto}" '
+                                    f'style="width:52px;height:52px;border-radius:50%;'
+                                    f'object-fit:cover;display:block;margin:auto;'
+                                    f'border:2px solid #BFDBFE;" />'
+                                )
+                            else:
+                                inicial = str(row.get("nome", "?"))[0].upper()
+                                foto_html = (
+                                    f'<div style="width:52px;height:52px;border-radius:50%;'
+                                    f'background:#BFDBFE;text-align:center;line-height:52px;'
+                                    f'font-weight:900;font-size:22px;color:#1e3a5f;'
+                                    f'margin:auto;">{inicial}</div>'
+                                )
+                            st.markdown(foto_html, unsafe_allow_html=True)
                         with c_info:
-                            st.markdown(f"**👤 {row['nome']}**")
+                            st.markdown(f"**{row['nome']}**")
                             st.caption(
                                 f"CPF: {row.get('cpf', 'N/A')} | Turma: {row.get('turma', 'N/A')}"
                             )
