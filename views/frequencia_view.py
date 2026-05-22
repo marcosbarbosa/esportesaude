@@ -26,6 +26,7 @@ from database import (
     alterar_status_aluno,
     atualizar_turma_aluno,
     get_todas_turmas,
+    alternar_presenca,
 )
 from modulos_frequencia.tab_tablet import renderizar_aba_terminal
 from modulos_frequencia.tab_diario import renderizar_aba_diario
@@ -248,53 +249,149 @@ def tela_frequencia():
             )
 
             for _, aluno in df_encontrados.iterrows():
-                is_inativo = aluno.get("status") == "Inativo"
+                is_inativo   = aluno.get("status") == "Inativo"
                 is_outra_turma = aluno["id"] not in ids_validos_na_tela
 
                 if is_inativo or is_outra_turma:
                     with st.container(border=True):
-                        st_atual = (
-                            "INATIVO (Arquivo Morto)"
-                            if is_inativo
-                            else f"Ativo na turma: {aluno.get('turma')}"
-                        )
-                        st.warning(
-                            f"⚠️ Atenção! **{aluno['nome']}** foi encontrado, mas encontra-se **{st_atual}**."
+                        # ── layout: avatar | info | botões ──────────────────────
+                        col_av, col_info, col_acoes = st.columns(
+                            [0.55, 3.2, 3.5], vertical_alignment="center"
                         )
 
-                        c_btn1, c_btn2 = st.columns([1, 1])
-
-                        with c_btn1:
-                            if st.button(
-                                f"🩺 Abrir Ficha Digital",
-                                key=f"f_pr_{aluno['id']}",
-                                use_container_width=True,
-                            ):
-                                st.session_state.aluno_prontuario = aluno.to_dict()
-                                st.session_state.origem_prontuario = "Frequência"
-                                st.session_state.menu_atual = "Portal do Aluno"
-                                st.rerun()
-
-                        with c_btn2:
-                            lbl_botao = (
-                                "♻️ Ativar e Transferir p/ Turma Atual"
-                                if is_inativo
-                                else "🔄 Transferir p/ Turma Atual"
-                            )
-                            if st.button(
-                                lbl_botao,
-                                key=f"fix_{aluno['id']}",
-                                type="primary",
-                                use_container_width=True,
-                            ):
-                                if is_inativo:
-                                    alterar_status_aluno(aluno["id"], "Ativo")
-                                atualizar_turma_aluno(aluno["id"], turma_selecionada)
-                                st.toast(
-                                    f"✅ {aluno['nome'].split()[0]} foi integrado(a) nesta turma com sucesso!"
+                        # ── Avatar redondo ───────────────────────────────────────
+                        with col_av:
+                            foto = aluno.get("url_foto")
+                            if foto and not pd.isna(foto) and str(foto).strip():
+                                st.markdown(
+                                    f"<img src='{foto}' class='zoom-avatar' "
+                                    f"style='width:40px;height:40px;border-radius:50%;"
+                                    f"object-fit:cover;'>",
+                                    unsafe_allow_html=True,
                                 )
-                                time.sleep(1)
-                                st.rerun()
+                            else:
+                                inicial = str(aluno["nome"])[0].upper()
+                                st.markdown(
+                                    f"<div style='width:40px;height:40px;border-radius:50%;"
+                                    f"background:#E2E8F0;display:flex;align-items:center;"
+                                    f"justify-content:center;font-weight:900;font-size:17px;"
+                                    f"color:#475569;'>{inicial}</div>",
+                                    unsafe_allow_html=True,
+                                )
+
+                        # ── Nome + badge de status ───────────────────────────────
+                        with col_info:
+                            if is_inativo:
+                                badge = (
+                                    "<span style='background:#FEE2E2;color:#991B1B;"
+                                    "padding:2px 8px;border-radius:5px;font-size:10px;"
+                                    "font-weight:800;'>INATIVO</span>"
+                                )
+                                caption = "Aluno inativo — ative e transfira se necessário."
+                            else:
+                                turma_tag = str(aluno.get("turma", "outra turma"))
+                                badge = (
+                                    f"<span style='background:#DBEAFE;color:#1E40AF;"
+                                    f"padding:2px 8px;border-radius:5px;font-size:10px;"
+                                    f"font-weight:800;'>{turma_tag}</span>"
+                                )
+                                caption = "Visitante / Reposição — presença conta para a turma original."
+
+                            st.markdown(
+                                f"**{aluno['nome']}** &nbsp;{badge}",
+                                unsafe_allow_html=True,
+                            )
+                            st.caption(caption)
+
+                        # ── Botões de ação ───────────────────────────────────────
+                        with col_acoes:
+                            if is_inativo:
+                                # Inativo: só Ficha e Ativar+Transferir
+                                cb1, cb2 = st.columns(2, gap="small")
+                                with cb1:
+                                    if st.button(
+                                        "🩺 Ficha",
+                                        key=f"f_pr_{aluno['id']}",
+                                        use_container_width=True,
+                                        help="Abrir prontuário do aluno",
+                                    ):
+                                        st.session_state.aluno_prontuario = aluno.to_dict()
+                                        st.session_state.origem_prontuario = "Frequência"
+                                        st.session_state.menu_atual = "Portal do Aluno"
+                                        st.rerun()
+                                with cb2:
+                                    if st.button(
+                                        "♻️ Ativar+Transferir",
+                                        key=f"fix_{aluno['id']}",
+                                        type="primary",
+                                        use_container_width=True,
+                                        help="Reativar o aluno e movê-lo para esta turma",
+                                    ):
+                                        alterar_status_aluno(aluno["id"], "Ativo")
+                                        atualizar_turma_aluno(aluno["id"], turma_selecionada)
+                                        st.toast(
+                                            f"{aluno['nome'].split()[0]} reativado(a) e transferido(a)!",
+                                            icon="♻️",
+                                        )
+                                        time.sleep(0.8)
+                                        st.rerun()
+
+                            else:
+                                # Outra turma: Ficha | Visitante (novo) | Transferir
+                                cb1, cb2, cb3 = st.columns(3, gap="small")
+                                with cb1:
+                                    if st.button(
+                                        "🩺 Ficha",
+                                        key=f"f_pr_{aluno['id']}",
+                                        use_container_width=True,
+                                        help="Abrir prontuário do aluno",
+                                    ):
+                                        st.session_state.aluno_prontuario = aluno.to_dict()
+                                        st.session_state.origem_prontuario = "Frequência"
+                                        st.session_state.menu_atual = "Portal do Aluno"
+                                        st.rerun()
+
+                                with cb2:
+                                    if st.button(
+                                        "✅ Visitante",
+                                        key=f"vis_{aluno['id']}",
+                                        type="primary",
+                                        use_container_width=True,
+                                        help="Marca PRESENTE nesta data sem alterar a turma original",
+                                    ):
+                                        _email_log = (
+                                            st.session_state.get("usuario_email")
+                                            or st.session_state.get("email_usuario")
+                                            or ""
+                                        )
+                                        alternar_presenca(
+                                            aluno["id"], data_aula, True, _email_log
+                                        )
+                                        st.toast(
+                                            f"Presença de reposição registrada para "
+                                            f"{aluno['nome'].split()[0]}!",
+                                            icon="✅",
+                                        )
+                                        # Limpa o campo de busca para continuar o trabalho
+                                        st.session_state[f"bg_{chave_unica}"] = ""
+                                        time.sleep(0.8)
+                                        st.rerun()
+
+                                with cb3:
+                                    if st.button(
+                                        "🔄 Transferir",
+                                        key=f"fix_{aluno['id']}",
+                                        use_container_width=True,
+                                        help="Move o aluno permanentemente para esta turma",
+                                    ):
+                                        atualizar_turma_aluno(aluno["id"], turma_selecionada)
+                                        st.toast(
+                                            f"{aluno['nome'].split()[0]} transferido(a) "
+                                            f"para {turma_selecionada}!",
+                                            icon="🔄",
+                                        )
+                                        time.sleep(0.8)
+                                        st.rerun()
                 else:
                     alunos_prontos.append(aluno)
 
