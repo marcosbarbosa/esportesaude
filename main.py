@@ -225,6 +225,7 @@ st.markdown(
 <style>
 /* ── BASE ──────────────────────────────────────────────────────────────────── */
 #MainMenu, header, footer { visibility: hidden; }
+[data-testid="stStatusWidget"] { display: none !important; }
 .block-container {
     padding-top: 1rem !important;
     max-width: 1300px;
