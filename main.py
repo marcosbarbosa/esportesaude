@@ -224,17 +224,10 @@ st.markdown(
     """
 <style>
 /* ── BASE ──────────────────────────────────────────────────────────────────── */
-#MainMenu, header, footer { display: none !important; visibility: hidden !important; }
+#MainMenu, footer { visibility: hidden; }
 [data-testid="stStatusWidget"] { display: none !important; }
 [data-testid="stHeader"] { display: none !important; }
 [data-testid="stToolbar"] { display: none !important; }
-button[kind="header"] { display: none !important; }
-.stDeployButton { display: none !important; }
-iframe[title="streamlit_running"] { display: none !important; }
-/* Indicador Running (spinner canto superior direito) */
-div[class*="StatusWidget"] { display: none !important; }
-div[class*="status-widget"] { display: none !important; }
-[data-testid="stAppViewBlockContainer"] > div:first-child > div[class*="running"] { display: none !important; }
 .block-container {
     padding-top: 1rem !important;
     max-width: 1300px;
