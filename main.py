@@ -963,16 +963,24 @@ elif st.session_state.menu_atual == "Nova Matrícula":
     tela_inscricao_publica_move_right()
 
 elif st.session_state.menu_atual == "Portal do Aluno":
+    _col_portal, _col_ficha_portal = st.columns([6, 1], vertical_alignment="center")
+    with _col_ficha_portal:
+        if st.button("🖨️ Ficha", use_container_width=True, help="Central de impressão de fichas de matrícula"):
+            st.session_state.menu_atual = "Ficha de Matrícula"
+            st.rerun()
     if st.session_state.aluno_prontuario:
         from views.prontuario_ficha import renderizar_ficha
-
         renderizar_ficha()
     else:
         from views.prontuario_dashboard import renderizar_dashboard
-
         renderizar_dashboard()
 
 elif st.session_state.menu_atual in ("Relatórios & BI", "BI Prime", "Relatórios"):
+    _col_rel, _col_ficha_rel = st.columns([6, 1], vertical_alignment="center")
+    with _col_ficha_rel:
+        if st.button("🖨️ Ficha", use_container_width=True, key="ficha_btn_rel", help="Central de impressão de fichas de matrícula"):
+            st.session_state.menu_atual = "Ficha de Matrícula"
+            st.rerun()
     _aba_rel = st.tabs(["📋 Relatórios", "📊 BI Dashboard", "👤 BI Individual"])
     with _aba_rel[0]:
         from views.relatorio_view import tela_relatorio
