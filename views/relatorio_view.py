@@ -1474,7 +1474,7 @@ def tela_relatorio():
                         f"⚠️ Identificadas irregularidades em {len(falhas)} alunos da turma {turma_aud}."
                     )
                     st.markdown("#### 📊 Totalizadores de Pendências")
-                    cols_metric = st.columns(len(checks))
+                    cols_metric = st.columns(len(contagem_falhas))
                     for idx, (label, count) in enumerate(contagem_falhas.items()):
                         cols_metric[idx].metric(label.split(" ", 1)[-1], count)
 
