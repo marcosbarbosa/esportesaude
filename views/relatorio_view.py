@@ -669,6 +669,7 @@ def _gerar_pdf_relatorio_prime(
         img_s  = (f'<img src="data:image/png;base64,{logo_s}" style="max-width:110px;max-height:60px;" />'
                   if logo_s else "")
 
+        agora        = datetime.datetime.now().strftime("%d/%m/%Y as %H:%M")
         rodape_linha = " | ".join(p for p in [nome_org, f"CNPJ: {cnpj}" if cnpj else "",
                                                site, insta, endereco] if p)
 
@@ -823,6 +824,7 @@ def _gerar_pdf_relatorio_prime(
       <p style="margin:2px 0;font-size:8.5pt;color:#475569;">{subtit}</p>
       <p style="margin:0;font-size:9pt;font-weight:700;color:#0056b3;">Relatorio Prime — Frequencia</p>
       <p style="margin:2px 0 0;font-size:8pt;color:#64748B;">Periodo: {periodo_str} &nbsp;|&nbsp; Turma: {turma_str}</p>
+      <p style="margin:2px 0 0;font-size:7.5pt;color:#94A3B8;">Gerado em: {agora}</p>
     </td>
     <td style="width:22%;text-align:right;border-bottom:0;">{img_p}</td>
   </tr>

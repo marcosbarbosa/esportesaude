@@ -35,61 +35,192 @@ def calcular_dias_uteis_ausente(ultima_data, data_final):
 
 
 # ==============================================================================
-# 🖨️ FUNÇÃO GERADORA DE PDF (Blindada)
+# 🖨️ FUNÇÃO GERADORA DE PDF — xhtml2pdf com logos, timestamp e fotos
 # ==============================================================================
+def _fetch_foto_base64(url) -> str | None:
+    """Tenta buscar a foto do aluno e devolvê-la como data URL base64.
+    Retorna None em caso de falha (sem foto, URL inválida, timeout)."""
+    if not url or (isinstance(url, float) and pd.isna(url)):
+        return None
+    import urllib.request as _ur
+    import base64 as _b64
+    try:
+        req = _ur.Request(str(url).strip(), headers={"User-Agent": "Mozilla/5.0"})
+        with _ur.urlopen(req, timeout=4) as resp:
+            raw = resp.read()
+        ext = "jpeg" if any(x in str(url).lower() for x in ("jpg", "jpeg")) else "png"
+        return f"data:image/{ext};base64,{_b64.b64encode(raw).decode()}"
+    except Exception:
+        return None
+
+
 def gerar_pdf_atrasados(lista_alunos):
+    """
+    Gera PDF do Radar de Evasão com xhtml2pdf.
+    Inclui: cabeçalho institucional com logos, data/hora de impressão,
+    mini-foto de cada aluno (90 % da célula) e rodapé.
+    Regras xhtml2pdf: sem emojis no HTML, sem display:table-cell.
+    """
+    import io
+
+    try:
+        from xhtml2pdf import pisa
+        from utils.identidade import get_config, get_logo_b64
+
+        cfg      = get_config()
+        titulo   = cfg.get("titulo_projeto", "")
+        subtit   = cfg.get("subtitulo_projeto", "")
+        nome_org = cfg.get("nome_organizacao", "")
+        cnpj     = cfg.get("cnpj", "")
+        site     = cfg.get("site", "")
+        insta    = cfg.get("instagram", "")
+        endereco = cfg.get("endereco", "")
+
+        logo_p = get_logo_b64(cfg.get("logo_principal", ""))
+        logo_s = get_logo_b64(cfg.get("logo_secundaria", ""))
+        img_p  = (
+            f'<img src="data:image/png;base64,{logo_p}" '
+            f'style="max-width:100px;max-height:70px;" />'
+            if logo_p else f"<b>{nome_org}</b>"
+        )
+        img_s  = (
+            f'<img src="data:image/png;base64,{logo_s}" '
+            f'style="max-width:120px;max-height:70px;" />'
+            if logo_s else ""
+        )
+
+        agora      = datetime.datetime.now().strftime("%d/%m/%Y as %H:%M")
+        rodape_ln  = " | ".join(
+            p for p in [nome_org, f"CNPJ: {cnpj}" if cnpj else "",
+                        site, insta, endereco] if p
+        )
+
+        # ── Linhas da tabela ──────────────────────────────────────────────────
+        linhas = ""
+        bg_alt = False
+        for aluno in lista_alunos:
+            nome     = str(aluno.get("nome", ""))
+            turma    = str(aluno.get("turma", "N/A"))
+            dias     = aluno.get("dias", 0)
+            dias_str = "Sem registro" if dias == 9999 else f"{dias} dias"
+            whats    = str(aluno.get("whatsapp") or "-")
+            if whats in ("None", "nan"):
+                whats = "-"
+
+            data_url = _fetch_foto_base64(aluno.get("url_foto"))
+            if data_url:
+                foto_html = (
+                    f'<img src="{data_url}" '
+                    f'style="width:90%;height:auto;" />'
+                )
+            else:
+                inicial   = nome[0].upper() if nome else "?"
+                foto_html = (
+                    f'<div style="width:90%;padding:8px 0;background:#E2E8F0;'
+                    f'text-align:center;font-weight:900;font-size:12pt;">'
+                    f'{inicial}</div>'
+                )
+
+            bg       = "background:#F8FAFC;" if bg_alt else ""
+            bg_alt   = not bg_alt
+            cor_dias = "#DC2626" if dias != 9999 and dias >= 14 else "#F59E0B"
+
+            linhas += f"""
+  <tr style="{bg}">
+    <td style="width:9%;text-align:center;vertical-align:middle;padding:3px;">{foto_html}</td>
+    <td style="width:37%;vertical-align:middle;padding:4px 6px;font-size:9pt;">{nome}</td>
+    <td style="width:28%;vertical-align:middle;padding:4px 6px;font-size:8.5pt;color:#475569;">{turma}</td>
+    <td style="width:13%;text-align:center;vertical-align:middle;padding:4px;font-size:9pt;font-weight:700;color:{cor_dias};">{dias_str}</td>
+    <td style="width:13%;text-align:center;vertical-align:middle;padding:4px;font-size:8pt;color:#475569;">{whats}</td>
+  </tr>"""
+
+        html = f"""<!DOCTYPE html>
+<html><head>
+<meta charset="UTF-8"/>
+<style>
+  body  {{ font-family: Arial, sans-serif; font-size: 9.5pt; color: #1e293b; margin: 18px 28px; }}
+  table {{ width: 100%; border-collapse: collapse; margin-bottom: 10px; }}
+  th    {{ background: #0056b3; color: #fff; padding: 5px 8px;
+           text-align: left; font-size: 8.5pt; }}
+  td    {{ padding: 4px 7px; border-bottom: 1px solid #E2E8F0; vertical-align: middle; }}
+  h2    {{ color: #0056b3; font-size: 10pt; border-bottom: 2px solid #0056b3;
+           padding-bottom: 3px; margin-top: 14px; margin-bottom: 5px; }}
+  .rod  {{ margin-top: 24px; text-align: center; font-size: 7.5pt; color: #94A3B8;
+           border-top: 1px solid #E2E8F0; padding-top: 6px; }}
+</style>
+</head><body>
+
+<!-- Cabecalho institucional -->
+<table style="border-bottom:3px solid #0056b3;margin-bottom:14px;">
+  <tr>
+    <td style="width:22%;text-align:left;border-bottom:0;">{img_s}</td>
+    <td style="width:56%;text-align:center;border-bottom:0;">
+      <p style="margin:0;font-size:10pt;font-weight:900;color:#0A2540;">{titulo}</p>
+      <p style="margin:2px 0 0;font-size:8.5pt;color:#475569;">{subtit}</p>
+      <p style="margin:4px 0 0;font-size:9.5pt;font-weight:700;color:#0056b3;">
+        Radar de Acolhimento e Prevencao de Evasao
+      </p>
+      <p style="margin:3px 0 0;font-size:7.5pt;color:#94A3B8;">Gerado em: {agora}</p>
+    </td>
+    <td style="width:22%;text-align:right;border-bottom:0;">{img_p}</td>
+  </tr>
+</table>
+
+<!-- Tabela de alunos -->
+<table>
+  <thead>
+    <tr>
+      <th style="width:9%;">Foto</th>
+      <th style="width:37%;">Nome do Aluno</th>
+      <th style="width:28%;">Turma</th>
+      <th style="width:13%;text-align:center;">Ausencias</th>
+      <th style="width:13%;text-align:center;">WhatsApp</th>
+    </tr>
+  </thead>
+  <tbody>
+    {linhas}
+  </tbody>
+</table>
+
+<div class="rod">{rodape_ln}</div>
+
+</body></html>"""
+
+        buf    = io.BytesIO()
+        result = pisa.CreatePDF(html.encode("utf-8"), dest=buf)
+        if not result.err:
+            return buf.getvalue() or None
+
+    except Exception:
+        pass
+
+    # ── Fallback FPDF (sem fotos) se xhtml2pdf falhar ────────────────────────
     pdf = FPDF(orientation="P", unit="mm", format="A4")
     pdf.add_page()
-
-    pdf.set_font("Arial", size=16, style="B")
-    pdf.cell(
-        190,
-        10,
-        txt="Relatorio de Acolhimento e Prevensao de Evasao",
-        ln=True,
-        align="C",
-    )
-
-    pdf.set_font("Arial", size=10)
-    data_hoje = datetime.date.today().strftime("%d/%m/%Y")
-    pdf.cell(
-        190,
-        10,
-        txt=f"Instituto Muda Brasil - Gerado em: {data_hoje}",
-        ln=True,
-        align="C",
-    )
-    pdf.ln(5)
-
-    pdf.set_font("Arial", size=10, style="B")
-    pdf.cell(85, 10, "Nome do Aluno", border=1, align="C")
-    pdf.cell(45, 10, "Turma", border=1, align="C")
-    pdf.cell(25, 10, "Ausencias", border=1, align="C")
-    pdf.cell(35, 10, "WhatsApp", border=1, align="C")
-    pdf.ln()
-
+    pdf.set_font("Arial", size=14, style="B")
+    pdf.cell(190, 10, "Radar de Acolhimento e Prevencao de Evasao", ln=True, align="C")
     pdf.set_font("Arial", size=9)
+    pdf.cell(190, 8,
+             f"Gerado em: {datetime.datetime.now().strftime('%d/%m/%Y as %H:%M')}",
+             ln=True, align="C")
+    pdf.ln(4)
+    pdf.set_font("Arial", size=9, style="B")
+    pdf.cell(80, 8, "Nome do Aluno", border=1)
+    pdf.cell(45, 8, "Turma",         border=1)
+    pdf.cell(25, 8, "Ausencias",     border=1, align="C")
+    pdf.cell(40, 8, "WhatsApp",      border=1, align="C")
+    pdf.ln()
+    pdf.set_font("Arial", size=8)
     for aluno in lista_alunos:
-        nome = str(aluno.get("nome", ""))[:35]
-        turma = str(aluno.get("turma", "N/A"))[:20]
-
-        if aluno["dias"] == 9999:
-            dias_str = "S/ Registo"
-        else:
-            dias_str = f"{aluno['dias']} dias"
-
-        whats = str(aluno.get("whatsapp", "S/ Numero"))
-
-        pdf.cell(85, 10, nome, border=1)
-        pdf.cell(45, 10, turma, border=1)
-        pdf.cell(25, 10, dias_str, border=1, align="C")
-        pdf.cell(35, 10, whats, border=1, align="C")
+        dias_str = ("S/ Registo" if aluno["dias"] == 9999
+                    else f"{aluno['dias']} dias")
+        pdf.cell(80, 8, str(aluno.get("nome", ""))[:32],  border=1)
+        pdf.cell(45, 8, str(aluno.get("turma", ""))[:20], border=1)
+        pdf.cell(25, 8, dias_str, border=1, align="C")
+        pdf.cell(40, 8, str(aluno.get("whatsapp", "-")),  border=1, align="C")
         pdf.ln()
-
-    resultado_pdf = pdf.output(dest="S")
-    if isinstance(resultado_pdf, str):
-        return resultado_pdf.encode("latin1")
-    return bytes(resultado_pdf)
+    resultado = pdf.output(dest="S")
+    return resultado.encode("latin1") if isinstance(resultado, str) else bytes(resultado)
 
 
 # ==============================================================================

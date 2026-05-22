@@ -146,6 +146,7 @@ def _gerar_pdf_frequencia(data_ini, data_fim, total, dias_aula, media_dia,
         cfg = get_config()
         ini_str = data_ini.strftime("%d/%m/%Y")
         fim_str = data_fim.strftime("%d/%m/%Y")
+        agora   = datetime.datetime.now().strftime("%d/%m/%Y as %H:%M")
 
         titulo    = cfg.get("titulo_projeto", "")
         subtitulo = cfg.get("subtitulo_projeto", "")
@@ -236,6 +237,7 @@ def _gerar_pdf_frequencia(data_ini, data_fim, total, dias_aula, media_dia,
       <p style="margin:0;font-size:10pt;font-weight:900;color:#0A2540;">{titulo}</p>
       <p style="margin:2px 0 0;font-size:9pt;color:#475569;">{subtitulo}</p>
       <p style="margin:4px 0 0;font-size:8.5pt;color:#64748B;">Periodo: {ini_str} a {fim_str}</p>
+      <p style="margin:2px 0 0;font-size:7.5pt;color:#94A3B8;">Gerado em: {agora}</p>
     </td>
     <td style="width:22%;text-align:right;border-bottom:0;">{img_p}</td>
   </tr>
