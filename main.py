@@ -591,18 +591,14 @@ menu = [
     "Principal",
     "Frequência",
     "Portal do Aluno",
+    "Ficha de Matrícula",
     "Nova Matrícula",
     "Radar de Acolhimento",
-    "BI Prime",
-    "Relatórios",
+    "Relatórios & BI",
     "Satisfação",
-    "Ficha de Matrícula",
-    "Conferência Facial",
 ]
 if st.session_state.perfil == "SuperAdmin":
-    menu.extend(
-        ["Turmas", "Mensagens", "Mesclar Fichas", "Identidade Visual", "Backup"]
-    )
+    menu.extend(["Config"])
 menu.append("Sair")
 
 
@@ -611,18 +607,12 @@ def format_nav(opt):
         "Principal": "🏠 Início",
         "Frequência": "✅ Frequência",
         "Portal do Aluno": "🩺 Portal do Aluno",
+        "Ficha de Matrícula": "🖨️ Ficha",
         "Nova Matrícula": "📝 Nova Matrícula",
         "Radar de Acolhimento": "💙 Radar",
-        "BI Prime": "📊 BI Prime",
-        "Relatórios": "📋 Relatórios",
+        "Relatórios & BI": "📊 Relatórios & BI",
         "Satisfação": "⭐ Satisfação",
-        "Ficha de Matrícula": "🖨️ Ficha",
-        "Conferência Facial": "📸 Conf. Facial",
-        "Turmas": "🏫 Turmas",
-        "Mensagens": "💬 Mensagens",
-        "Mesclar Fichas": "🔀 Mesclar",
-        "Identidade Visual": "🎨 Identidade",
-        "Backup": "🛠️ Admin",
+        "Config": "⚙️ Config",
         "Sair": "🔓 Sair",
     }
     return mapa.get(opt, opt)
@@ -702,9 +692,9 @@ if st.session_state.menu_atual == "Principal":
             st.rerun()
     with qa3:
         if st.button(
-            "📊  BI & Análises", use_container_width=True, help="Dashboard analítico"
+            "📊  Relatórios & BI", use_container_width=True, help="Dashboard analítico"
         ):
-            st.session_state.menu_atual = "BI Prime"
+            st.session_state.menu_atual = "Relatórios & BI"
             st.rerun()
     with qa4:
         if st.button(
@@ -926,9 +916,13 @@ if st.session_state.menu_atual == "Principal":
 # 🚀 ROTEAMENTO DE VISTAS
 # ==============================================================================
 elif st.session_state.menu_atual == "Frequência":
-    from views.frequencia_view import tela_frequencia
-
-    tela_frequencia()
+    _tab_freq, _tab_facial = st.tabs(["✅ Frequência", "📸 Conf. Facial"])
+    with _tab_freq:
+        from views.frequencia_view import tela_frequencia
+        tela_frequencia()
+    with _tab_facial:
+        from views.conferencia_facial_view import tela_conferencia_facial
+        tela_conferencia_facial()
 
 elif st.session_state.menu_atual == "Radar de Acolhimento":
     from views.radar_acolhimento_view import tela_radar_acolhimento
@@ -941,6 +935,21 @@ elif st.session_state.menu_atual == "Nova Matrícula":
     from views.inscricao_publica_view import tela_inscricao_publica_move_right
 
     st.markdown("### 📝 Cadastro Oficial de Novo Aluno")
+
+    try:
+        _host_nm = st.context.headers.get("host", "")
+        _link_inscricao = f"https://{_host_nm}/?rota=inscricao"
+    except Exception:
+        _link_inscricao = "/?rota=inscricao"
+
+    with st.container(border=True):
+        _c_lnk, _c_info = st.columns([3, 2], vertical_alignment="center")
+        with _c_lnk:
+            st.markdown("**🔗 Link de Auto-Inscrição do Aluno**")
+            st.caption("Envie ao novo aluno para que ele preencha o formulário por conta própria.")
+        with _c_info:
+            st.code(_link_inscricao, language=None)
+
     st.info(
         "Preencha os dados da ficha com calma. Ao concluir, o aluno estará imediatamente disponível no sistema para marcação de presença."
     )
@@ -956,21 +965,17 @@ elif st.session_state.menu_atual == "Portal do Aluno":
 
         renderizar_dashboard()
 
-elif st.session_state.menu_atual == "BI Prime":
-    aba_bi = st.tabs(["📊 Dashboard Geral", "👤 Relatório Individual"])
-    with aba_bi[0]:
+elif st.session_state.menu_atual in ("Relatórios & BI", "BI Prime", "Relatórios"):
+    _aba_rel = st.tabs(["📋 Relatórios", "📊 BI Dashboard", "👤 BI Individual"])
+    with _aba_rel[0]:
+        from views.relatorio_view import tela_relatorio
+        tela_relatorio()
+    with _aba_rel[1]:
         from views.bi_dashboard_view import render_bi_dashboard
-
         render_bi_dashboard()
-    with aba_bi[1]:
+    with _aba_rel[2]:
         from views.bi_individual_view import render_bi_individual
-
         render_bi_individual()
-
-elif st.session_state.menu_atual == "Relatórios":
-    from views.relatorio_view import tela_relatorio
-
-    tela_relatorio()
 
 elif st.session_state.menu_atual == "Satisfação":
     from views.relatorio_satisfacao_view import tela_relatorio_prime_satisfacao
@@ -985,38 +990,43 @@ elif st.session_state.menu_atual == "Ficha de Matrícula":
     except:
         st.error("⚠️ Crie o ficheiro `ficha_aluno_view.py` na pasta `views`.")
 
-elif st.session_state.menu_atual == "Conferência Facial":
-    from views.conferencia_facial_view import tela_conferencia_facial
+elif st.session_state.menu_atual in (
+    "Config", "Conferência Facial",
+    "Turmas", "Mensagens", "Identidade Visual", "Backup", "Mesclar Fichas",
+):
+    if st.session_state.menu_atual == "Conferência Facial":
+        _idx_cfg = None
+    else:
+        _idx_cfg = {
+            "Config": 0, "Turmas": 0, "Mensagens": 1,
+            "Identidade Visual": 2, "Backup": 3, "Mesclar Fichas": 4,
+        }.get(st.session_state.menu_atual, 0)
 
-    tela_conferencia_facial()
-
-elif st.session_state.menu_atual == "Mesclar Fichas":
-    from views.merge_alunos_view import tela_merge_alunos
-
-    tela_merge_alunos()
-
-elif st.session_state.menu_atual == "Identidade Visual":
-    from views.identidade_view import tela_identidade_visual
-
-    tela_identidade_visual()
-
-elif st.session_state.menu_atual == "Turmas":
-    from views.turmas_view import tela_gestao_turmas
-
-    tela_gestao_turmas()
-
-elif st.session_state.menu_atual == "Mensagens":
-    from views.templates_view import tela_gestao_templates
-
-    tela_gestao_templates()
-
-elif st.session_state.menu_atual == "Backup":
-    from views.backup_view import tela_backup
-    from database import ferramenta_reparacao_turmas
-
-    tela_backup()
-    st.markdown("---")
-    ferramenta_reparacao_turmas()
+    if st.session_state.menu_atual == "Conferência Facial":
+        from views.conferencia_facial_view import tela_conferencia_facial
+        tela_conferencia_facial()
+    else:
+        _aba_cfg = st.tabs(
+            ["🏫 Turmas", "💬 Mensagens", "🎨 Identidade Visual", "🛠️ Admin", "🔀 Mesclar Fichas"]
+        )
+        with _aba_cfg[0]:
+            from views.turmas_view import tela_gestao_turmas
+            tela_gestao_turmas()
+        with _aba_cfg[1]:
+            from views.templates_view import tela_gestao_templates
+            tela_gestao_templates()
+        with _aba_cfg[2]:
+            from views.identidade_view import tela_identidade_visual
+            tela_identidade_visual()
+        with _aba_cfg[3]:
+            from views.backup_view import tela_backup
+            from database import ferramenta_reparacao_turmas
+            tela_backup()
+            st.markdown("---")
+            ferramenta_reparacao_turmas()
+        with _aba_cfg[4]:
+            from views.merge_alunos_view import tela_merge_alunos
+            tela_merge_alunos()
 
 # ── Rodapé Fixo ─────────────────────────────────────────────────────────────
 from utils.identidade import get_config as _gcfg_rodape
