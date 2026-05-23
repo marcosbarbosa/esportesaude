@@ -369,35 +369,29 @@ def gerar_pdf_auditoria_core(falhas, contagem_falhas, turma_aud):
             if v > 0
         ]
     )
-    # Converte foto de cada aluno para base64 para garantir exibição no PDF
-    import urllib.request, base64 as _b64
-    def _foto_b64(url):
-        try:
-            if not url or not str(url).startswith("http"):
-                return None
-            req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
-            with urllib.request.urlopen(req, timeout=4) as resp:
-                mime = resp.headers.get_content_type() or "image/jpeg"
-                data = _b64.b64encode(resp.read()).decode()
-                return f"data:{mime};base64,{data}"
-        except Exception:
-            return None
-
+    # Foto: indicador textual (Pillow/reportlab podem estar indisponíveis no servidor)
+    # Última Presença: ASCII puro para garantir renderização em qualquer fonte PDF
     html_linhas_parts = []
     for f in falhas:
-        b64 = _foto_b64(f.get("url_foto", ""))
-        if b64:
-            cel_foto = f'<img src="{b64}" style="width:52px;height:52px;object-fit:cover;border-radius:4px;">'
-        else:
-            cel_foto = '<span style="font-size:22px;">👤</span>'
-        ult = f.get("Última Presença", "—")
+        url_foto = str(f.get("url_foto") or "").strip()
+        tem_foto = url_foto.startswith("http")
+        cel_foto_bg  = "#DCFCE7" if tem_foto else "#FEE2E2"
+        cel_foto_cor = "#166534" if tem_foto else "#991B1B"
+        cel_foto_txt = "Sim" if tem_foto else "Nao"
+
+        ult_raw = f.get("Ultima Presenca") or f.get("Última Presença") or ""
+        ult = str(ult_raw).strip() if ult_raw and str(ult_raw).strip() not in ("", "None", "-", "\u2014") else "Sem registro"
+
         html_linhas_parts.append(
             f"<tr>"
-            f"<td style='text-align:center;vertical-align:middle;padding:4px;'>{cel_foto}</td>"
-            f"<td style='vertical-align:middle;'>{f['Aluno']}</td>"
-            f"<td style='vertical-align:middle;'>{f['Turma']}</td>"
-            f"<td style='vertical-align:middle;text-align:center;'>{ult}</td>"
-            f"<td style='vertical-align:middle;'>{f['Pendências']}</td>"
+            f"<td style='text-align:center;vertical-align:middle;padding:5px;"
+            f"background:{cel_foto_bg};color:{cel_foto_cor};font-weight:bold;font-size:9px;'>"
+            f"{cel_foto_txt}</td>"
+            f"<td style='vertical-align:middle;padding:5px;'>{f['Aluno']}</td>"
+            f"<td style='vertical-align:middle;padding:5px;'>{f['Turma']}</td>"
+            f"<td style='vertical-align:middle;text-align:center;padding:5px;"
+            f"font-weight:bold;'>{ult}</td>"
+            f"<td style='vertical-align:middle;padding:5px;'>{f['Pendências']}</td>"
             f"</tr>"
         )
     html_linhas = "".join(html_linhas_parts)
