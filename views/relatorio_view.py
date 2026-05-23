@@ -353,7 +353,7 @@ def gerar_pdf_auditoria_core(falhas, contagem_falhas, turma_aud):
     # helper: limpa acentos que fpdf core não renderiza com Helvetica
     def _a(txt):
         import unicodedata
-        return unicodedata.normalize("NFKD", str(txt or "")).encode("latin-1", "replace").decode("latin-1")
+        return unicodedata.normalize("NFC", str(txt or "")).encode("latin-1", "replace").decode("latin-1")
 
     def _ult(f):
         raw = f.get("Ultima Presenca") or f.get("\u00daltima Presen\u00e7a") or ""
