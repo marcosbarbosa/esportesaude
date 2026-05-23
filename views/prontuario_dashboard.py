@@ -527,8 +527,13 @@ def renderizar_dashboard():
     st.markdown("### 🔍 Diretório de Alunos e Emissão de Dossiês")
 
     with st.container(border=True):
+        # Inicializa estado de ordenação por cabeçalho
+        if "dash_sort_col" not in st.session_state:
+            st.session_state["dash_sort_col"] = "nome"
+            st.session_state["dash_sort_asc"] = True
+
         # Controles Superiores
-        c_busca, c_ordem, c_pag = st.columns([3, 2, 1], vertical_alignment="bottom")
+        c_busca, c_pag = st.columns([4, 1], vertical_alignment="bottom")
 
         # 🚀 A MÁGICA DO LIVE SEARCH (ST_KEYUP)
         placeholder_texto = "🔍 Filtrar Ativos (mín. 3 letras)..."
@@ -549,19 +554,6 @@ def renderizar_dashboard():
                     label_visibility="collapsed",
                 )
 
-        ordenacao = c_ordem.selectbox(
-            "Ordenar por:",
-            [
-                "Nome (A-Z)",
-                "Nome (Z-A)",
-                "Mais Presenças",
-                "Menos Presenças",
-                "Maior Taxa de Presença",
-                "Menor Taxa de Presença",
-            ],
-            label_visibility="collapsed",
-        )
-
         # 🚀 Aplicação de Filtros (Gatilho de 3 Caracteres e Ignorando Acentos)
         df_grid = df_todos_crm.copy()
 
@@ -581,19 +573,15 @@ def renderizar_dashboard():
             elif len(busca_limpa) > 0:
                 st.caption("⏳ Digite pelo menos 3 letras para iniciar a filtragem rápida...")
 
-        # Aplicação de Ordenação
-        if ordenacao == "Nome (A-Z)":
-            df_grid = df_grid.sort_values("nome", ascending=True)
-        elif ordenacao == "Nome (Z-A)":
-            df_grid = df_grid.sort_values("nome", ascending=False)
-        elif ordenacao == "Mais Presenças":
-            df_grid = df_grid.sort_values("total_presencas", ascending=False)
-        elif ordenacao == "Menos Presenças":
-            df_grid = df_grid.sort_values("total_presencas", ascending=True)
-        elif ordenacao == "Maior Taxa de Presença":
-            df_grid = df_grid.sort_values("taxa_presenca", ascending=False)
-        elif ordenacao == "Menor Taxa de Presença":
-            df_grid = df_grid.sort_values("taxa_presenca", ascending=True)
+        # Aplicação de Ordenação via session_state (cabeçalhos clicáveis)
+        _scol = st.session_state.get("dash_sort_col", "nome")
+        _sasc = st.session_state.get("dash_sort_asc", True)
+        if _scol == "data_nascimento":
+            df_grid["_sort_dn"] = pd.to_datetime(df_grid["data_nascimento"], errors="coerce")
+            df_grid = df_grid.sort_values("_sort_dn", ascending=_sasc, na_position="last")
+            df_grid = df_grid.drop(columns=["_sort_dn"])
+        else:
+            df_grid = df_grid.sort_values(_scol, ascending=_sasc, na_position="last")
 
         # Paginação
         itens_por_pagina = 15
@@ -609,20 +597,42 @@ def renderizar_dashboard():
         inicio, fim = (pagina - 1) * itens_por_pagina, pagina * itens_por_pagina
         df_page = df_grid.iloc[inicio:fim]
 
-        # Cabeçalho do Action Grid (HTML)
+        # Cabeçalho do Action Grid — botões clicáveis de ordenação
+        def _sort_icon(col_key):
+            if st.session_state.get("dash_sort_col") == col_key:
+                return " ▲" if st.session_state.get("dash_sort_asc", True) else " ▼"
+            return ""
+
+        def _on_sort(col_key):
+            if st.session_state.get("dash_sort_col") == col_key:
+                st.session_state["dash_sort_asc"] = not st.session_state.get("dash_sort_asc", True)
+            else:
+                st.session_state["dash_sort_col"] = col_key
+                st.session_state["dash_sort_asc"] = True
+
         st.markdown(
-            """
-        <div class='grid-header'>
-            <div style='flex: 3.5;'>Aluno / Turma</div>
-            <div style='flex: 0.9; text-align:center;'>Nascimento</div>
-            <div style='flex: 1; text-align:center;'>Aulas</div>
-            <div style='flex: 1; text-align:center;'>Presenças</div>
-            <div style='flex: 1.5; text-align:center;'>Taxa Global</div>
-            <div style='flex: 2; text-align:center;'>Ações</div>
-        </div>
-        """,
+            "<style>.sort-header button{background:transparent!important;border:none!important;"
+            "font-weight:700!important;color:#0F172A!important;padding:4px 2px!important;"
+            "font-size:13px!important;cursor:pointer!important;width:100%;}"
+            ".sort-header button:hover{color:#1D4ED8!important;}</style>",
             unsafe_allow_html=True,
         )
+        with st.container():
+            st.markdown("<div class='sort-header'>", unsafe_allow_html=True)
+            gh0, gh1, gh2, gh3, gh4, gh5 = st.columns([3.5, 0.9, 1, 1, 1.5, 2])
+            if gh0.button(f"Aluno / Turma{_sort_icon('nome')}", key="sh_nome", use_container_width=True):
+                _on_sort("nome"); st.rerun()
+            if gh1.button(f"Nasc.{_sort_icon('data_nascimento')}", key="sh_nasc", use_container_width=True):
+                _on_sort("data_nascimento"); st.rerun()
+            if gh2.button(f"Aulas{_sort_icon('total_aulas')}", key="sh_aulas", use_container_width=True):
+                _on_sort("total_aulas"); st.rerun()
+            if gh3.button(f"Presenças{_sort_icon('total_presencas')}", key="sh_pres", use_container_width=True):
+                _on_sort("total_presencas"); st.rerun()
+            if gh4.button(f"Taxa Global{_sort_icon('taxa_presenca')}", key="sh_taxa", use_container_width=True):
+                _on_sort("taxa_presenca"); st.rerun()
+            gh5.markdown("<div style='text-align:center;font-weight:700;font-size:13px;padding:4px 2px;'>Ações</div>", unsafe_allow_html=True)
+            st.markdown("</div>", unsafe_allow_html=True)
+        st.markdown("<hr style='margin:0 0 6px 0;border-color:#CBD5E1;'/>", unsafe_allow_html=True)
 
         # ======================================================================
         # 🚀 MÁGICA UX: SE NÃO ENCONTRAR, MOSTRA FORMULÁRIO DE CADASTRO RÁPIDO
