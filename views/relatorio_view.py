@@ -426,11 +426,28 @@ def gerar_pdf_auditoria_core(falhas, contagem_falhas, turma_aud):
     pdf.cell(C_TURMA, 6, "Turma",          border=1, fill=True)
     pdf.cell(C_PEND,  6, "Pendencias Identificadas", border=1, fill=True, ln=True)
 
+    # helpers para download de imagem
+    import tempfile, urllib.request, os as _os
+
+    def _baixar_foto(url, timeout=6):
+        """Baixa a imagem da URL para um arquivo temporário. Retorna o caminho ou None."""
+        try:
+            req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+            with urllib.request.urlopen(req, timeout=timeout) as resp:
+                raw = resp.read()
+            suffix = ".png" if raw[:8] == b'\x89PNG\r\n\x1a\n' else ".jpg"
+            tmp = tempfile.NamedTemporaryFile(suffix=suffix, delete=False)
+            tmp.write(raw); tmp.close()
+            return tmp.name
+        except Exception:
+            return None
+
     # linhas de dados
     pdf.set_font("Helvetica", "", 8)
     for idx, f in enumerate(falhas):
-        # altura da linha: 2 linhas de texto (nome + data)
-        LH = 4.5
+        # altura da linha: aumentada para acomodar foto
+        LH = 6.5
+        LINHA_H = LH * 2   # altura total da linha (13 mm)
 
         # cor zebrada
         if idx % 2 == 0:
@@ -441,17 +458,41 @@ def gerar_pdf_auditoria_core(falhas, contagem_falhas, turma_aud):
         x0 = pdf.get_x()
         y0 = pdf.get_y()
 
-        # ── célula FOTO
+        # ── célula FOTO — tenta embutir a imagem real ─────────────────────────
         url_foto = str(f.get("url_foto") or "").strip()
         tem_foto = url_foto.startswith("http")
+        foto_embutida = False
+        tmp_foto = None
+
         if tem_foto:
-            pdf.set_fill_color(220, 252, 231); pdf.set_text_color(22, 101, 52)
-            foto_txt = "SIM"
-        else:
-            pdf.set_fill_color(254, 226, 226); pdf.set_text_color(153, 27, 27)
-            foto_txt = "NAO"
-        pdf.set_font("Helvetica", "B", 7)
-        pdf.cell(C_FOTO, LH * 2, foto_txt, border=1, fill=True, align="C")
+            tmp_foto = _baixar_foto(url_foto)
+            if tmp_foto:
+                try:
+                    # borda da célula
+                    pdf.set_draw_color(203, 213, 225)
+                    pdf.set_line_width(0.3)
+                    pdf.rect(x0, y0, C_FOTO, LINHA_H)
+                    # imagem preenche o quadrante inteiro
+                    pdf.image(tmp_foto, x=x0 + 0.5, y=y0 + 0.5,
+                              w=C_FOTO - 1, h=LINHA_H - 1)
+                    foto_embutida = True
+                    # avança cursor para início da célula Nome
+                    pdf.set_xy(x0 + C_FOTO, y0)
+                except Exception:
+                    foto_embutida = False
+                finally:
+                    if tmp_foto and _os.path.exists(tmp_foto):
+                        _os.unlink(tmp_foto)
+
+        if not foto_embutida:
+            if tem_foto:
+                pdf.set_fill_color(220, 252, 231); pdf.set_text_color(22, 101, 52)
+                foto_txt = "SIM"
+            else:
+                pdf.set_fill_color(254, 226, 226); pdf.set_text_color(153, 27, 27)
+                foto_txt = "NAO"
+            pdf.set_font("Helvetica", "B", 7)
+            pdf.cell(C_FOTO, LINHA_H, foto_txt, border=1, fill=True, align="C")
 
         # restaura fill para zebra
         if idx % 2 == 0:
@@ -466,28 +507,29 @@ def gerar_pdf_auditoria_core(falhas, contagem_falhas, turma_aud):
         nome_y = pdf.get_y()
         nome_txt = _a(f.get("Aluno", ""))
         ult_txt  = _a(_ult(f))
-        pdf.cell(C_NOME, LH, nome_txt, border="LRT", fill=True)
-        pdf.set_xy(nome_x, nome_y + LH)
+        # cada metade da linha de texto ocupa LH dentro de LINHA_H total
+        LH_NOME = LINHA_H / 2
+        pdf.cell(C_NOME, LH_NOME, nome_txt, border="LRT", fill=True)
+        pdf.set_xy(nome_x, nome_y + LH_NOME)
         pdf.set_font("Helvetica", "I", 7)
         pdf.set_text_color(100, 116, 139)
-        pdf.cell(C_NOME, LH, f"Ult. presenca: {ult_txt}", border="LRB", fill=True)
+        pdf.cell(C_NOME, LH_NOME, f"Ult. presenca: {ult_txt}", border="LRB", fill=True)
 
         # ── célula TURMA
         pdf.set_xy(nome_x + C_NOME, nome_y)
         pdf.set_text_color(15, 23, 42)
         pdf.set_font("Helvetica", "", 8)
-        pdf.cell(C_TURMA, LH * 2, _a(f.get("Turma", "")), border=1, fill=True, align="C")
+        pdf.cell(C_TURMA, LINHA_H, _a(f.get("Turma", "")), border=1, fill=True, align="C")
 
         # ── célula PENDÊNCIAS (multi_cell com posição manual)
         pdf.set_xy(nome_x + C_NOME + C_TURMA, nome_y)
         pdf.set_font("Helvetica", "", 7.5)
         pdf.set_text_color(51, 65, 85)
         pend_txt = _a(f.get("Pendências", ""))
-        # multi_cell avança o y; guardamos e restauramos x
-        pdf.multi_cell(C_PEND, LH, pend_txt, border=1, fill=True)
+        pdf.multi_cell(C_PEND, LH_NOME, pend_txt, border=1, fill=True)
 
         # garante que próxima linha começa na margem esquerda
-        proximo_y = max(pdf.get_y(), nome_y + LH * 2)
+        proximo_y = max(pdf.get_y(), nome_y + LINHA_H)
         pdf.set_xy(14, proximo_y)
 
     # ── RODAPÉ ─────────────────────────────────────────────────────────────────
