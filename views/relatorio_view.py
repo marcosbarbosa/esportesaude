@@ -1560,22 +1560,45 @@ def tela_relatorio():
                     st.markdown("#### 🖨️ Opções de Exportação Oficial")
                     c_dw1, c_dw2 = st.columns(2)
 
-                    # Exportação Excel
-                    df_export = pd.DataFrame(falhas)[["Aluno", "Turma", "Pendências"]]
+                    # Exportação Excel — espelha exatamente o grid na tela
+                    def _foto_label(row):
+                        url = str(row.get("url_foto") or "").strip()
+                        return "Sim" if url.startswith("http") else "Nao"
+
+                    def _ult_label(row):
+                        raw = row.get("Última Presença") or row.get("Ultima Presenca") or ""
+                        v = str(raw).strip()
+                        return v if v and v not in ("", "None", "-", "—", "nan") else "Sem registro"
+
+                    df_export_rows = [
+                        {
+                            "Foto": _foto_label(f),
+                            "Nome do Aluno": f.get("Aluno", ""),
+                            "Turma": f.get("Turma", ""),
+                            "Últ. Presença": _ult_label(f),
+                            "Pendências Identificadas": f.get("Pendências", ""),
+                        }
+                        for f in falhas
+                    ]
+                    df_export = pd.DataFrame(df_export_rows)
                     output_aud = io.BytesIO()
                     with pd.ExcelWriter(output_aud, engine="xlsxwriter") as writer:
                         pd.DataFrame(
                             list(contagem_falhas.items()),
                             columns=["Documento/Campo", "Quantidade em Falta"],
                         ).to_excel(writer, index=False, sheet_name="Resumo_Auditoria")
-                        writer.sheets["Resumo_Auditoria"].set_column(0, 0, 30)
-                        writer.sheets["Resumo_Auditoria"].set_column(1, 1, 20)
+                        ws_res = writer.sheets["Resumo_Auditoria"]
+                        ws_res.set_column(0, 0, 30)
+                        ws_res.set_column(1, 1, 20)
                         df_export.to_excel(
                             writer, index=False, sheet_name="Detalhamento"
                         )
-                        writer.sheets["Detalhamento"].set_column(0, 0, 35)
-                        writer.sheets["Detalhamento"].set_column(1, 1, 20)
-                        writer.sheets["Detalhamento"].set_column(2, 2, 50)
+                        ws_det = writer.sheets["Detalhamento"]
+                        ws_det.set_column(0, 0, 8)   # Foto
+                        ws_det.set_column(1, 1, 35)  # Nome
+                        ws_det.set_column(2, 2, 20)  # Turma
+                        ws_det.set_column(3, 3, 15)  # Últ. Presença
+                        ws_det.set_column(4, 4, 55)  # Pendências
 
                     c_dw1.download_button(
                         "📥 Exportar Lista Completa (Excel)",
