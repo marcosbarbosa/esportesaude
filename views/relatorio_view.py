@@ -1560,7 +1560,7 @@ def tela_relatorio():
                             _foto = f.get("url_foto", "")
                             if _foto and str(_foto).startswith("http"):
                                 try:
-                                    c0.image(_foto, width=48)
+                                    c0.image(_foto, use_container_width=True)
                                 except Exception:
                                     c0.markdown("👤")
                             else:
