@@ -70,8 +70,12 @@ def carregar_dados_crm_avaliacoes_senior():
         )
         df_av = pd.DataFrame(res_av.data)
 
-        res_freq = supabase.from_("frequencia").select("aluno_id, status").limit(50000).execute()
+        res_freq = supabase.from_("frequencia").select("aluno_id, status, data_aula").limit(50000).execute()
         df_f_bruto = pd.DataFrame(res_freq.data)
+        if not df_f_bruto.empty and "data_aula" in df_f_bruto.columns:
+            df_f_bruto["data_aula"] = pd.to_datetime(df_f_bruto["data_aula"], errors="coerce")
+        # guarda cópia limpa com datas para uso nos filtros de período
+        df_freq_datado = df_f_bruto.copy() if not df_f_bruto.empty else pd.DataFrame(columns=["aluno_id","status","data_aula"])
 
         if not df_av.empty:
             df_av["data_avaliacao"] = pd.to_datetime(
@@ -124,10 +128,10 @@ def carregar_dados_crm_avaliacoes_senior():
         )
         df_todos_crm = df_merged.sort_values("nome").copy()
 
-        return df_medidos, df_nao_medidos, df_todos_crm, df_inativos
+        return df_medidos, df_nao_medidos, df_todos_crm, df_inativos, df_freq_datado
     except Exception as e:
         st.error(f"Falha Crítica no Motor de Dados: {e}")
-        return pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
+        return pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
 
 
 # ==============================================================================
@@ -169,7 +173,7 @@ def renderizar_dashboard():
         unsafe_allow_html=True,
     )
 
-    df_medidos, df_nao_medidos, df_todos_crm, df_inativos = carregar_dados_crm_avaliacoes_senior()
+    df_medidos, df_nao_medidos, df_todos_crm, df_inativos, df_freq_datado = carregar_dados_crm_avaliacoes_senior()
 
     if df_todos_crm.empty and df_inativos.empty:
         st.warning("A base de dados de alunos está vazia.")
@@ -532,6 +536,90 @@ def renderizar_dashboard():
             st.session_state["dash_sort_col"] = "nome"
             st.session_state["dash_sort_asc"] = True
 
+        # ── SELETOR DE PERÍODO ──────────────────────────────────────────────────
+        PERIODOS = {
+            "Mês Atual":   "mes",
+            "30 dias":     "30d",
+            "90 dias":     "90d",
+            "Histórico":   "hist",
+        }
+        periodo_labels = list(PERIODOS.keys())
+        idx_periodo = st.session_state.get("dash_periodo_idx", 1)  # padrão: 30 dias
+
+        pc0, pc1, pc2, pc3, pc4 = st.columns([1.2, 1, 1, 1, 3])
+        pc0.markdown("<span style='font-size:12px;font-weight:700;color:#64748B;'>Período:</span>", unsafe_allow_html=True)
+        for i, (lbl, col_ref) in enumerate(zip(periodo_labels, [pc1, pc2, pc3, pc4])):
+            ativo = (idx_periodo == i)
+            estilo = "primary" if ativo else "secondary"
+            if col_ref.button(lbl, key=f"per_{i}", type=estilo, use_container_width=True):
+                st.session_state["dash_periodo_idx"] = i
+                st.rerun()
+
+        periodo_key = list(PERIODOS.values())[idx_periodo]
+        hoje_ts = pd.Timestamp(datetime.date.today())
+        if periodo_key == "mes":
+            corte = hoje_ts.replace(day=1)
+            label_periodo = hoje_ts.strftime("Mai/%y")   # ex: Mai/26
+        elif periodo_key == "30d":
+            corte = hoje_ts - pd.Timedelta(days=30)
+            label_periodo = "30 dias"
+        elif periodo_key == "90d":
+            corte = hoje_ts - pd.Timedelta(days=90)
+            label_periodo = "90 dias"
+        else:
+            corte = None
+            label_periodo = "Histórico"
+
+        # Recalcula métricas de frequência para o período selecionado
+        if not df_freq_datado.empty and corte is not None:
+            df_periodo = df_freq_datado[df_freq_datado["data_aula"] >= corte]
+        else:
+            df_periodo = df_freq_datado.copy()
+
+        if not df_periodo.empty:
+            df_stats_p = (
+                df_periodo.groupby("aluno_id")
+                .agg(
+                    total_aulas=("status", "count"),
+                    total_presencas=("status", lambda x: (x == "PRESENTE").sum()),
+                )
+                .reset_index()
+            )
+            df_base_periodo = pd.merge(
+                df_todos_crm[["id","nome","turma","data_nascimento","data_avaliacao","url_foto"]].copy(),
+                df_stats_p,
+                left_on="id", right_on="aluno_id", how="left"
+            )
+        else:
+            df_base_periodo = df_todos_crm[["id","nome","turma","data_nascimento","data_avaliacao","url_foto"]].copy()
+            df_base_periodo["total_aulas"] = 0
+            df_base_periodo["total_presencas"] = 0
+
+        df_base_periodo["total_aulas"]     = df_base_periodo["total_aulas"].fillna(0).astype(int)
+        df_base_periodo["total_presencas"] = df_base_periodo["total_presencas"].fillna(0).astype(int)
+        df_base_periodo["taxa_presenca"]   = (
+            df_base_periodo["total_presencas"] / df_base_periodo["total_aulas"].replace(0, pd.NA) * 100
+        ).fillna(0.0)
+
+        # Risco de evasão: considera 0 presenças no período = sem registro
+        def _risco(row):
+            if row["total_aulas"] == 0:
+                return ("⚫", "#94A3B8", "Sem aula no período")
+            t = row["taxa_presenca"]
+            if t >= 75:
+                return ("🟢", "#10B981", "Regular")
+            elif t >= 50:
+                return ("🟡", "#F59E0B", "Atenção")
+            else:
+                return ("🔴", "#EF4444", "Risco de Evasão")
+
+        df_base_periodo[["_risco_icon","_risco_cor","_risco_label"]] = pd.DataFrame(
+            df_base_periodo.apply(_risco, axis=1).tolist(),
+            index=df_base_periodo.index
+        )
+
+        st.markdown("<hr style='margin:8px 0 4px 0;border-color:#E2E8F0;'/>", unsafe_allow_html=True)
+
         # Controles Superiores
         c_busca, c_pag = st.columns([4, 1], vertical_alignment="bottom")
 
@@ -555,7 +643,7 @@ def renderizar_dashboard():
                 )
 
         # 🚀 Aplicação de Filtros (Gatilho de 3 Caracteres e Ignorando Acentos)
-        df_grid = df_todos_crm.copy()
+        df_grid = df_base_periodo.copy()
 
         if busca:
             busca_limpa = remover_acentos(busca).strip()
@@ -624,11 +712,11 @@ def renderizar_dashboard():
                 _on_sort("nome"); st.rerun()
             if gh1.button(f"Nasc.{_sort_icon('data_nascimento')}", key="sh_nasc", use_container_width=True):
                 _on_sort("data_nascimento"); st.rerun()
-            if gh2.button(f"Aulas{_sort_icon('total_aulas')}", key="sh_aulas", use_container_width=True):
+            if gh2.button(f"Aulas ({label_periodo}){_sort_icon('total_aulas')}", key="sh_aulas", use_container_width=True):
                 _on_sort("total_aulas"); st.rerun()
-            if gh3.button(f"Presenças{_sort_icon('total_presencas')}", key="sh_pres", use_container_width=True):
+            if gh3.button(f"Pres. ({label_periodo}){_sort_icon('total_presencas')}", key="sh_pres", use_container_width=True):
                 _on_sort("total_presencas"); st.rerun()
-            if gh4.button(f"Taxa Global{_sort_icon('taxa_presenca')}", key="sh_taxa", use_container_width=True):
+            if gh4.button(f"Taxa / Risco{_sort_icon('taxa_presenca')}", key="sh_taxa", use_container_width=True):
                 _on_sort("taxa_presenca"); st.rerun()
             gh5.markdown("<div style='text-align:center;font-weight:700;font-size:13px;padding:4px 2px;'>Ações</div>", unsafe_allow_html=True)
             st.markdown("</div>", unsafe_allow_html=True)
@@ -706,29 +794,42 @@ def renderizar_dashboard():
                     unsafe_allow_html=True,
                 )
 
-                # Col 3 e 4: Métricas
+                # Col 3 e 4: Métricas do período selecionado
+                _aulas = int(a.get("total_aulas", 0))
+                _pres  = int(a.get("total_presencas", 0))
+                _cor_aulas = "#475569" if _aulas > 0 else "#CBD5E1"
+                _cor_pres  = "#10B981" if _pres  > 0 else "#CBD5E1"
                 c3.markdown(
-                    f"<div style='text-align:center; font-size:14px; font-weight:600; color:#475569;'>{int(a['total_aulas'])}</div>",
+                    f"<div style='text-align:center; font-size:14px; font-weight:600; color:{_cor_aulas};'>{_aulas}</div>",
                     unsafe_allow_html=True,
                 )
                 c4.markdown(
-                    f"<div style='text-align:center; font-size:15px; font-weight:900; color:#10B981;'>{int(a['total_presencas'])}</div>",
+                    f"<div style='text-align:center; font-size:15px; font-weight:900; color:{_cor_pres};'>{_pres}</div>",
                     unsafe_allow_html=True,
                 )
 
-                # Col 5: Barra de Progresso Customizada
-                taxa = a["taxa_presenca"]
-                cor_barra = (
-                    "#10B981"
-                    if taxa >= 65
-                    else ("#F59E0B" if taxa >= 40 else "#EF4444")
-                )
+                # Col 5: Taxa % + badge de risco de evasão
+                taxa         = float(a.get("taxa_presenca", 0.0))
+                risco_icon   = a.get("_risco_icon",  "⚫")
+                risco_cor    = a.get("_risco_cor",   "#94A3B8")
+                risco_label  = a.get("_risco_label", "Sem dados")
+                _aulas_linha = int(a.get("total_aulas", 0))
+                if _aulas_linha == 0:
+                    taxa_txt = "—"
+                    barra_w  = 0
+                else:
+                    taxa_txt = f"{taxa:.1f}%"
+                    barra_w  = min(int(taxa), 100)
                 c5.markdown(
                     f"""
-                <div style='text-align:center; font-size:13px; font-weight:800; color:{cor_barra}; margin-bottom:2px;'>{taxa:.1f}%</div>
-                <div style='width:90%; margin:0 auto; background-color:#E2E8F0; border-radius:4px; height:6px;'>
-                    <div style='width:{taxa}%; background-color:{cor_barra}; height:100%; border-radius:4px;'></div>
+                <div style='text-align:center;'>
+                  <span style='font-size:13px;font-weight:800;color:{risco_cor};'>{taxa_txt}</span>
+                  <span style='font-size:11px;margin-left:4px;' title='{risco_label}'>{risco_icon}</span>
                 </div>
+                <div style='width:90%;margin:2px auto 0;background:#E2E8F0;border-radius:4px;height:5px;'>
+                  <div style='width:{barra_w}%;background:{risco_cor};height:100%;border-radius:4px;'></div>
+                </div>
+                <div style='text-align:center;font-size:9px;color:{risco_cor};margin-top:1px;font-weight:600;'>{risco_label}</div>
                 """,
                     unsafe_allow_html=True,
                 )
