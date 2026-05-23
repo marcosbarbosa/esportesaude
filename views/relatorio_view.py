@@ -338,124 +338,170 @@ def gerar_excel_planilha_frequencia(
 # 🖨️ MOTOR PDF NATIVO: AUDITORIA OFICIAL (NADA DE HTML)
 # ==============================================================================
 def gerar_pdf_auditoria_core(falhas, contagem_falhas, turma_aud):
-    """Gera um PDF nativo e robusto usando xhtml2pdf."""
-    if not XHTML_DISPONIVEL:
+    """Gera PDF de auditoria usando fpdf (sem dependência de Pillow/reportlab)."""
+    try:
+        from fpdf import FPDF
+    except ImportError:
         return None
 
-    # Base64 para as imagens não quebrarem no PDF
-    from utils.identidade import get_config as _gcfg_pdf, get_logo_data_url as _gld_pdf
-
+    from utils.identidade import get_config as _gcfg_pdf
     _pcfg = _gcfg_pdf()
-    logo_imbra = _gld_pdf(_pcfg.get("logo_principal", "logo-imbra.png"))
-    logo_sec = _gld_pdf(_pcfg.get("logo_secundaria", "logo-secretaria.png"))
+    org   = _pcfg.get("nome_organizacao", "INSTITUTO MUDA BRASIL").upper()
+    proj  = _pcfg.get("titulo_projeto",   "ESPORTE E SAUDE NA COMUNIDADE")
+    hoje  = datetime.date.today().strftime("%d/%m/%Y")
 
-    html_logo_imbra = (
-        f'<img src="{logo_imbra}" style="width: 100px; height: auto;">'
-        if logo_imbra
-        else "<b>IMBRA</b>"
-    )
-    html_logo_sec = (
-        f'<img src="{logo_sec}" style="width: 140px; height: auto;">'
-        if logo_sec
-        else "<b>SECRETARIA SP</b>"
-    )
+    # helper: limpa acentos que fpdf core não renderiza com Helvetica
+    def _a(txt):
+        import unicodedata
+        return unicodedata.normalize("NFKD", str(txt or "")).encode("latin-1", "replace").decode("latin-1")
 
-    data_hoje = datetime.date.today().strftime("%d/%m/%Y")
+    def _ult(f):
+        raw = f.get("Ultima Presenca") or f.get("\u00daltima Presen\u00e7a") or ""
+        v = str(raw).strip()
+        return v if v and v not in ("", "None", "-", "\u2014", "nan") else "Sem registro"
 
-    html_metrics = "".join(
-        [
-            f"<li><b>{k}:</b> {v} registro(s) pendente(s)</li>"
-            for k, v in contagem_falhas.items()
-            if v > 0
-        ]
-    )
-    # Foto: indicador textual (Pillow/reportlab podem estar indisponíveis no servidor)
-    # Última Presença: ASCII puro para garantir renderização em qualquer fonte PDF
-    html_linhas_parts = []
-    for f in falhas:
+    # ── layout A4 paisagem ─────────────────────────────────────────────────────
+    pdf = FPDF(orientation="L", unit="mm", format="A4")
+    pdf.set_auto_page_break(auto=True, margin=14)
+    pdf.add_page()
+    pdf.set_margins(14, 10, 14)
+    W = pdf.w - 28  # largura útil
+
+    # ── CABEÇALHO ──────────────────────────────────────────────────────────────
+    pdf.set_fill_color(10, 37, 64)
+    pdf.rect(14, 8, W, 18, "F")
+    pdf.set_xy(14, 10)
+    pdf.set_font("Helvetica", "B", 14)
+    pdf.set_text_color(255, 255, 255)
+    pdf.cell(W, 7, _a(org), align="C", ln=True)
+    pdf.set_x(14)
+    pdf.set_font("Helvetica", "", 9)
+    pdf.set_text_color(180, 210, 255)
+    pdf.cell(W, 5, _a(proj), align="C", ln=True)
+
+    pdf.ln(4)
+    pdf.set_text_color(10, 37, 64)
+    pdf.set_font("Helvetica", "B", 11)
+    pdf.cell(W, 7, "Relatorio Oficial de Auditoria de Cadastros e Documentos", ln=True)
+    pdf.set_font("Helvetica", "", 8)
+    pdf.set_text_color(100, 116, 139)
+    pdf.cell(W, 5, f"Emissao: {hoje}   |   Escopo: {_a(turma_aud)}", ln=True)
+
+    # linha separadora
+    pdf.set_draw_color(203, 213, 225)
+    pdf.set_line_width(0.4)
+    pdf.line(14, pdf.get_y(), 14 + W, pdf.get_y())
+    pdf.ln(3)
+
+    # ── RESUMO DE TOTALIZADORES ────────────────────────────────────────────────
+    pdf.set_font("Helvetica", "B", 9)
+    pdf.set_text_color(10, 37, 64)
+    pdf.cell(W, 5, "Resumo de Irregularidades:", ln=True)
+    pdf.set_font("Helvetica", "", 8)
+    pdf.set_text_color(51, 65, 85)
+    metricas = [(k, v) for k, v in contagem_falhas.items() if v > 0]
+    colunas_met = 4
+    chunk = [metricas[i:i+colunas_met] for i in range(0, len(metricas), colunas_met)]
+    cw = W / colunas_met
+    for linha in chunk:
+        for label, cnt in linha:
+            pdf.cell(cw, 5, _a(f"  {label}: {cnt}"), border=0)
+        pdf.ln()
+    pdf.ln(2)
+
+    # ── TABELA ─────────────────────────────────────────────────────────────────
+    # Colunas: Foto(14) | Nome + Ult.Presenca(85) | Turma(50) | Pendencias(resto)
+    C_FOTO  = 14
+    C_NOME  = 85
+    C_TURMA = 50
+    C_PEND  = W - C_FOTO - C_NOME - C_TURMA
+
+    # cabeçalho da tabela
+    pdf.set_fill_color(10, 37, 64)
+    pdf.set_text_color(255, 255, 255)
+    pdf.set_font("Helvetica", "B", 8)
+    pdf.set_line_width(0.3)
+    pdf.cell(C_FOTO,  6, "Foto",           border=1, fill=True, align="C")
+    pdf.cell(C_NOME,  6, "Nome / Ult. Presenca", border=1, fill=True)
+    pdf.cell(C_TURMA, 6, "Turma",          border=1, fill=True)
+    pdf.cell(C_PEND,  6, "Pendencias Identificadas", border=1, fill=True, ln=True)
+
+    # linhas de dados
+    pdf.set_font("Helvetica", "", 8)
+    for idx, f in enumerate(falhas):
+        # altura da linha: 2 linhas de texto (nome + data)
+        LH = 4.5
+
+        # cor zebrada
+        if idx % 2 == 0:
+            pdf.set_fill_color(248, 250, 252)
+        else:
+            pdf.set_fill_color(255, 255, 255)
+
+        x0 = pdf.get_x()
+        y0 = pdf.get_y()
+
+        # ── célula FOTO
         url_foto = str(f.get("url_foto") or "").strip()
         tem_foto = url_foto.startswith("http")
-        cel_foto_bg  = "#DCFCE7" if tem_foto else "#FEE2E2"
-        cel_foto_cor = "#166534" if tem_foto else "#991B1B"
-        cel_foto_txt = "Sim" if tem_foto else "Nao"
+        if tem_foto:
+            pdf.set_fill_color(220, 252, 231); pdf.set_text_color(22, 101, 52)
+            foto_txt = "SIM"
+        else:
+            pdf.set_fill_color(254, 226, 226); pdf.set_text_color(153, 27, 27)
+            foto_txt = "NAO"
+        pdf.set_font("Helvetica", "B", 7)
+        pdf.cell(C_FOTO, LH * 2, foto_txt, border=1, fill=True, align="C")
 
-        ult_raw = f.get("Ultima Presenca") or f.get("Última Presença") or ""
-        ult = str(ult_raw).strip() if ult_raw and str(ult_raw).strip() not in ("", "None", "-", "\u2014") else "Sem registro"
+        # restaura fill para zebra
+        if idx % 2 == 0:
+            pdf.set_fill_color(248, 250, 252)
+        else:
+            pdf.set_fill_color(255, 255, 255)
 
-        html_linhas_parts.append(
-            f"<tr>"
-            f"<td style='text-align:center;vertical-align:middle;padding:5px;"
-            f"background:{cel_foto_bg};color:{cel_foto_cor};font-weight:bold;font-size:9px;'>"
-            f"{cel_foto_txt}</td>"
-            f"<td style='vertical-align:middle;padding:5px;'>{f['Aluno']}</td>"
-            f"<td style='vertical-align:middle;padding:5px;'>{f['Turma']}</td>"
-            f"<td style='vertical-align:middle;text-align:center;padding:5px;"
-            f"font-weight:bold;'>{ult}</td>"
-            f"<td style='vertical-align:middle;padding:5px;'>{f['Pendências']}</td>"
-            f"</tr>"
-        )
-    html_linhas = "".join(html_linhas_parts)
+        # ── célula NOME + última presença
+        pdf.set_text_color(15, 23, 42)
+        pdf.set_font("Helvetica", "B", 8)
+        nome_x = pdf.get_x()
+        nome_y = pdf.get_y()
+        nome_txt = _a(f.get("Aluno", ""))
+        ult_txt  = _a(_ult(f))
+        pdf.cell(C_NOME, LH, nome_txt, border="LRT", fill=True)
+        pdf.set_xy(nome_x, nome_y + LH)
+        pdf.set_font("Helvetica", "I", 7)
+        pdf.set_text_color(100, 116, 139)
+        pdf.cell(C_NOME, LH, f"Ult. presenca: {ult_txt}", border="LRB", fill=True)
 
-    html_content = f"""
-    <html>
-    <head>
-        <meta charset="UTF-8">
-        <style>
-            @page {{ size: A4 landscape; margin: 1.2cm; }}
-            body {{ font-family: Helvetica, Arial, sans-serif; color: #1E293B; font-size: 10px; line-height: 1.4; }}
-            h1 {{ color: #0F172A; font-size: 17px; margin-bottom: 5px; text-align: center; }}
-            h2 {{ color: #1D4ED8; font-size: 13px; text-align: center; margin-top: 0; }}
-            h3 {{ color: #0F172A; font-size: 12px; border-bottom: 1.5px solid #CBD5E1; padding-bottom: 5px; margin-top: 20px; }}
-            .tb-header {{ width: 100%; border: none; margin-bottom: 20px; }}
-            .tb-header td {{ border: none; padding: 0; }}
-            .resumo-box {{ background-color: #F8FAFC; border: 1px solid #E2E8F0; padding: 10px; margin-bottom: 16px; border-radius: 5px; }}
-            .resumo-box ul {{ margin: 0; padding-left: 20px; }}
-            table.tabela-dados {{ width: 100%; border-collapse: collapse; margin-top: 10px; }}
-            table.tabela-dados th, table.tabela-dados td {{ border: 1px solid #CBD5E1; padding: 6px 8px; text-align: left; }}
-            table.tabela-dados th {{ background-color: #0F172A; color: #FFFFFF; font-weight: bold; font-size: 10px; }}
-            table.tabela-dados tr:nth-child(even) td {{ background-color: #F8FAFC; }}
-            .footer {{ text-align: center; font-size: 8px; color: #64748B; margin-top: 24px; }}
-        </style>
-    </head>
-    <body>
-        <table class="tb-header">
-            <tr>
-                <td style="width: 25%; text-align: left; vertical-align: middle;">{html_logo_sec}</td>
-                <td style="width: 50%; text-align: center; vertical-align: middle;">
-                    <h1>{_pcfg.get("nome_organizacao", "INSTITUTO MUDA BRASIL").upper()}</h1>
-                    <h2>{_pcfg.get("titulo_projeto", "PROJETO ESPORTE E SAÚDE NA COMUNIDADE")}</h2>
-                </td>
-                <td style="width: 25%; text-align: right; vertical-align: middle;">{html_logo_imbra}</td>
-            </tr>
-        </table>
+        # ── célula TURMA
+        pdf.set_xy(nome_x + C_NOME, nome_y)
+        pdf.set_text_color(15, 23, 42)
+        pdf.set_font("Helvetica", "", 8)
+        pdf.cell(C_TURMA, LH * 2, _a(f.get("Turma", "")), border=1, fill=True, align="C")
 
-        <h3>Relatório Oficial de Auditoria de Cadastros e Documentos</h3>
-        <p><strong>Data da Emissão:</strong> {data_hoje} &nbsp;|&nbsp; <strong>Escopo Filtrado:</strong> {turma_aud}</p>
+        # ── célula PENDÊNCIAS (multi_cell com posição manual)
+        pdf.set_xy(nome_x + C_NOME + C_TURMA, nome_y)
+        pdf.set_font("Helvetica", "", 7.5)
+        pdf.set_text_color(51, 65, 85)
+        pend_txt = _a(f.get("Pendências", ""))
+        # multi_cell avança o y; guardamos e restauramos x
+        pdf.multi_cell(C_PEND, LH, pend_txt, border=1, fill=True)
 
-        <div class="resumo-box">
-            <strong>Resumo Global de Totalizadores de Irregularidades:</strong><br>
-            <ul>{html_metrics}</ul>
-        </div>
+        # garante que próxima linha começa na margem esquerda
+        proximo_y = max(pdf.get_y(), nome_y + LH * 2)
+        pdf.set_xy(14, proximo_y)
 
-        <table class="tabela-dados">
-            <tr>
-                <th style="width: 7%; text-align:center;">Foto</th>
-                <th style="width: 28%;">Nome do Aluno</th>
-                <th style="width: 18%;">Turma de Origem</th>
-                <th style="width: 12%; text-align:center;">Últ. Presença</th>
-                <th style="width: 35%;">Pendências Identificadas</th>
-            </tr>
-            {html_linhas}
-        </table>
+    # ── RODAPÉ ─────────────────────────────────────────────────────────────────
+    pdf.ln(4)
+    pdf.set_draw_color(203, 213, 225)
+    pdf.line(14, pdf.get_y(), 14 + W, pdf.get_y())
+    pdf.ln(2)
+    pdf.set_font("Helvetica", "", 7)
+    pdf.set_text_color(148, 163, 184)
+    pdf.cell(W, 5, "Sistema Esporte e Saude - Gestao Inteligente Moveright(tm) - Documento Oficial de Auditoria", align="C")
 
-        <div class="footer">Sistema Esporte e Saúde - Gestão Inteligente Moveright™ - Documento Oficial de Auditoria</div>
-    </body>
-    </html>
-    """
-
-    result = io.BytesIO()
-    pisa.pisaDocument(io.StringIO(html_content), result)
-    return result.getvalue()
+    buf = io.BytesIO()
+    pdf.output(buf)
+    return buf.getvalue()
 
 
 # ==============================================================================
