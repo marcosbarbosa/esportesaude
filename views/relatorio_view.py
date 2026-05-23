@@ -22,6 +22,7 @@ from database import (
     get_diarios_periodo,
     get_avaliacoes_aluno,
     get_midias_diario,
+    get_ultima_presenca_batch,
 )
 
 # 🚀 IMPORTAÇÃO DO MOTOR NATIVO DO WORD
@@ -1465,9 +1466,17 @@ def tela_relatorio():
                                     "Turma": r["turma"],
                                     "Pendências": ", ".join(missing),
                                     "id_aluno": str(r.get("id", "")).split(".")[0],
+                                    "url_foto": r.get("url_foto") or "",
                                     "dict_aluno": r.to_dict(),
                                 }
                             )
+
+                # Busca última presença de todos os alunos com pendência em 1 query
+                if falhas:
+                    _ids_batch = tuple(f["id_aluno"] for f in falhas)
+                    _ult_pres = get_ultima_presenca_batch(_ids_batch)
+                    for f in falhas:
+                        f["Última Presença"] = _ult_pres.get(f["id_aluno"], "—")
 
                 if falhas:
                     st.error(
@@ -1531,24 +1540,36 @@ def tela_relatorio():
                         "<div style='background-color: #F8FAFC; padding: 10px; border-radius: 8px; margin-bottom: 10px;'>",
                         unsafe_allow_html=True,
                     )
-                    ch1, ch2, ch3, ch4 = st.columns(
-                        [2.5, 2, 4.5, 2], vertical_alignment="center"
+                    ch0, ch1, ch2, ch3, ch4, ch5 = st.columns(
+                        [1, 2.2, 1.6, 3.8, 1.4, 1.6], vertical_alignment="center"
                     )
+                    ch0.markdown("**Foto**")
                     ch1.markdown("**Nome do Aluno**")
                     ch2.markdown("**Turma**")
                     ch3.markdown("**Falta Preencher**")
-                    ch4.markdown("**Ação**")
+                    ch4.markdown("**Últ. Presença**")
+                    ch5.markdown("**Ação**")
                     st.markdown("</div>", unsafe_allow_html=True)
 
                     for f in falhas:
                         with st.container():
-                            c1, c2, c3, c4 = st.columns(
-                                [2.5, 2, 4.5, 2], vertical_alignment="center"
+                            c0, c1, c2, c3, c4, c5 = st.columns(
+                                [1, 2.2, 1.6, 3.8, 1.4, 1.6], vertical_alignment="center"
                             )
+                            # Foto do aluno
+                            _foto = f.get("url_foto", "")
+                            if _foto and str(_foto).startswith("http"):
+                                try:
+                                    c0.image(_foto, width=48)
+                                except Exception:
+                                    c0.markdown("👤")
+                            else:
+                                c0.markdown("👤")
                             c1.write(f["Aluno"])
                             c2.write(f["Turma"])
                             c3.write(f["Pendências"])
-                            with c4:
+                            c4.write(f.get("Última Presença", "—"))
+                            with c5:
                                 st.button(
                                     "🩺 Abrir Ficha",
                                     key=f"aud_{f['id_aluno']}",
