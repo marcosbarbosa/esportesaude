@@ -369,31 +369,58 @@ def gerar_pdf_auditoria_core(falhas, contagem_falhas, turma_aud):
             if v > 0
         ]
     )
-    html_linhas = "".join(
-        [
-            f"<tr><td>{f['Aluno']}</td><td>{f['Turma']}</td><td>{f['Pendências']}</td></tr>"
-            for f in falhas
-        ]
-    )
+    # Converte foto de cada aluno para base64 para garantir exibição no PDF
+    import urllib.request, base64 as _b64
+    def _foto_b64(url):
+        try:
+            if not url or not str(url).startswith("http"):
+                return None
+            req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+            with urllib.request.urlopen(req, timeout=4) as resp:
+                mime = resp.headers.get_content_type() or "image/jpeg"
+                data = _b64.b64encode(resp.read()).decode()
+                return f"data:{mime};base64,{data}"
+        except Exception:
+            return None
+
+    html_linhas_parts = []
+    for f in falhas:
+        b64 = _foto_b64(f.get("url_foto", ""))
+        if b64:
+            cel_foto = f'<img src="{b64}" style="width:52px;height:52px;object-fit:cover;border-radius:4px;">'
+        else:
+            cel_foto = '<span style="font-size:22px;">👤</span>'
+        ult = f.get("Última Presença", "—")
+        html_linhas_parts.append(
+            f"<tr>"
+            f"<td style='text-align:center;vertical-align:middle;padding:4px;'>{cel_foto}</td>"
+            f"<td style='vertical-align:middle;'>{f['Aluno']}</td>"
+            f"<td style='vertical-align:middle;'>{f['Turma']}</td>"
+            f"<td style='vertical-align:middle;text-align:center;'>{ult}</td>"
+            f"<td style='vertical-align:middle;'>{f['Pendências']}</td>"
+            f"</tr>"
+        )
+    html_linhas = "".join(html_linhas_parts)
 
     html_content = f"""
     <html>
     <head>
         <meta charset="UTF-8">
         <style>
-            @page {{ size: A4 portrait; margin: 1.2cm; }}
-            body {{ font-family: Helvetica, Arial, sans-serif; color: #1E293B; font-size: 11px; line-height: 1.4; }}
-            h1 {{ color: #0F172A; font-size: 18px; margin-bottom: 5px; text-align: center; }}
-            h2 {{ color: #1D4ED8; font-size: 14px; text-align: center; margin-top: 0; }}
-            h3 {{ color: #0F172A; font-size: 13px; border-bottom: 1.5px solid #CBD5E1; padding-bottom: 5px; margin-top: 20px; }}
+            @page {{ size: A4 landscape; margin: 1.2cm; }}
+            body {{ font-family: Helvetica, Arial, sans-serif; color: #1E293B; font-size: 10px; line-height: 1.4; }}
+            h1 {{ color: #0F172A; font-size: 17px; margin-bottom: 5px; text-align: center; }}
+            h2 {{ color: #1D4ED8; font-size: 13px; text-align: center; margin-top: 0; }}
+            h3 {{ color: #0F172A; font-size: 12px; border-bottom: 1.5px solid #CBD5E1; padding-bottom: 5px; margin-top: 20px; }}
             .tb-header {{ width: 100%; border: none; margin-bottom: 20px; }}
             .tb-header td {{ border: none; padding: 0; }}
-            .resumo-box {{ background-color: #F8FAFC; border: 1px solid #E2E8F0; padding: 12px; margin-bottom: 20px; border-radius: 5px; }}
+            .resumo-box {{ background-color: #F8FAFC; border: 1px solid #E2E8F0; padding: 10px; margin-bottom: 16px; border-radius: 5px; }}
             .resumo-box ul {{ margin: 0; padding-left: 20px; }}
             table.tabela-dados {{ width: 100%; border-collapse: collapse; margin-top: 10px; }}
-            table.tabela-dados th, table.tabela-dados td {{ border: 1px solid #CBD5E1; padding: 8px; text-align: left; }}
-            table.tabela-dados th {{ background-color: #0F172A; color: #FFFFFF; font-weight: bold; font-size: 12px; }}
-            .footer {{ text-align: center; font-size: 9px; color: #64748B; margin-top: 30px; }}
+            table.tabela-dados th, table.tabela-dados td {{ border: 1px solid #CBD5E1; padding: 6px 8px; text-align: left; }}
+            table.tabela-dados th {{ background-color: #0F172A; color: #FFFFFF; font-weight: bold; font-size: 10px; }}
+            table.tabela-dados tr:nth-child(even) td {{ background-color: #F8FAFC; }}
+            .footer {{ text-align: center; font-size: 8px; color: #64748B; margin-top: 24px; }}
         </style>
     </head>
     <body>
@@ -418,9 +445,11 @@ def gerar_pdf_auditoria_core(falhas, contagem_falhas, turma_aud):
 
         <table class="tabela-dados">
             <tr>
-                <th style="width: 35%;">Nome do Aluno</th>
-                <th style="width: 20%;">Turma de Origem</th>
-                <th style="width: 45%;">Pendências Identificadas (Ação Necessária)</th>
+                <th style="width: 7%; text-align:center;">Foto</th>
+                <th style="width: 28%;">Nome do Aluno</th>
+                <th style="width: 18%;">Turma de Origem</th>
+                <th style="width: 12%; text-align:center;">Últ. Presença</th>
+                <th style="width: 35%;">Pendências Identificadas</th>
             </tr>
             {html_linhas}
         </table>
@@ -1560,7 +1589,7 @@ def tela_relatorio():
                             _foto = f.get("url_foto", "")
                             if _foto and str(_foto).startswith("http"):
                                 try:
-                                    c0.image(_foto, use_container_width=True)
+                                    c0.image(_foto, width="stretch")
                                 except Exception:
                                     c0.markdown("👤")
                             else:
