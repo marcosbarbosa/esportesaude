@@ -35,91 +35,205 @@ from database import (
 # ==============================================================================
 # 🎨 SELETOR DINÂMICO DE TEMA E FERRAMENTAS GLOBAIS
 # ==============================================================================
-def renderizar_seletor_tema():
-    """
-    Gera as ferramentas de topo (Acesso ao Drive e Seletor de Tema).
-    Utiliza a memória (session_state) para lembrar a escolha e injeta CSS.
-    """
+def injetar_css_tema():
+    """Injeta CSS do tema ativo. Chamada incondicionalmente antes do check de login."""
     if "tema_operador" not in st.session_state:
         st.session_state.tema_operador = "Claro"
 
-    # Injeção de CSS Dinâmico com base na escolha
     if st.session_state.tema_operador == "Escuro":
-        css_tema = """
-        <style>
-            .stApp { background: #0E1117 !important; }
-            .stSidebar { background-color: #1E293B !important; }
+        st.markdown("""
+<style>
+/* ══════════════════════════════════════════════
+   TEMA ESCURO — cobertura total de contraste
+══════════════════════════════════════════════ */
+.stApp { background: #0E1117 !important; }
+.stSidebar { background-color: #1E293B !important; }
 
-            /* Fundo dos painéis e bordas dos containers */
-            div[data-testid="stVerticalBlockBorderWrapper"] { 
-                background-color: #1E293B !important; 
-                border-color: #334155 !important; 
-            }
+/* Containers com borda */
+div[data-testid="stVerticalBlockBorderWrapper"] {
+    background-color: #1E293B !important;
+    border-color: #334155 !important;
+}
 
-            /* Cor do texto global */
-            p, span, h1, h2, h3, h4, h5, h6, label, .stMarkdown { color: #F8FAFC !important; }
+/* Texto global */
+p, span, h1, h2, h3, h4, h5, h6, label,
+.stMarkdown, .stText, div[data-testid="stMarkdownContainer"] p {
+    color: #F8FAFC !important;
+}
 
-            /* Menu Radiogroup Superior */
-            div[role="radiogroup"] { 
-                background: #1E293B !important; 
-                border-color: #334155 !important; 
-            }
-            div[role="radiogroup"]::before { color: #3B82F6 !important; }
-            div[role="radiogroup"] label p { color: #94A3B8 !important; }
-            div[role="radiogroup"] label:hover { background: #334155 !important; }
-            div[role="radiogroup"] label[data-checked="true"] { background: #3B82F6 !important; }
-            div[role="radiogroup"] label[data-checked="true"] p { color: #FFFFFF !important; }
+/* Nav radiogroup */
+div[role="radiogroup"] { background: #1E293B !important; border-color: #334155 !important; }
+div[role="radiogroup"]::before { color: #3B82F6 !important; }
+div[role="radiogroup"] label p { color: #94A3B8 !important; }
+div[role="radiogroup"] label:hover { background: #334155 !important; }
+div[role="radiogroup"] label[data-checked="true"] { background: #3B82F6 !important; }
+div[role="radiogroup"] label[data-checked="true"] p { color: #FFFFFF !important; }
 
-            /* Inputs e Selects */
-            div[data-baseweb="input"] > div {
-                background: #0E1117 !important;
-                border-color: #334155 !important;
-                color: #F8FAFC !important;
-            }
+/* Inputs e Selects */
+div[data-baseweb="input"] > div,
+div[data-baseweb="select"] > div {
+    background: #1E293B !important;
+    border-color: #334155 !important;
+    color: #F8FAFC !important;
+}
+div[data-baseweb="input"] input,
+div[data-baseweb="select"] input,
+div[data-baseweb="select"] [data-testid="stSelectboxValue"] {
+    color: #F8FAFC !important;
+}
 
-            /* 🚀 FIX: Correção de visibilidade dos Botões Secundários no Modo Escuro */
-            button[kind="secondary"] {
-                background: #1E293B !important; 
-                border-color: #334155 !important; 
-                color: #F8FAFC !important;
-            }
-            button[kind="secondary"]:hover {
-                background: #334155 !important;
-                border-color: #475569 !important;
-                color: #60A5FA !important;
-            }
-            button[kind="secondary"] p { color: #F8FAFC !important; }
+/* ── BOTÕES: cobertura de TODOS os kinds ────────── */
 
-        </style>
-        """
-        st.markdown(css_tema, unsafe_allow_html=True)
+/* Primary (azul) — mantém visual no escuro */
+button[kind="primary"],
+button[kind="primaryFormSubmit"],
+button[data-testid="stBaseButton-primary"],
+button[data-testid="stBaseButton-primaryFormSubmit"] {
+    background: linear-gradient(135deg,#0056b3 0%,#0072e5 100%) !important;
+    color: #FFFFFF !important;
+    border: none !important;
+}
+button[kind="primary"] p,
+button[kind="primaryFormSubmit"] p { color: #FFFFFF !important; }
 
-    # Criamos colunas para posicionar o Botão do Drive e o Tema à direita
+/* Secondary */
+button[kind="secondary"],
+button[kind="secondaryFormSubmit"],
+button[data-testid="stBaseButton-secondary"],
+button[data-testid="stBaseButton-secondaryFormSubmit"] {
+    background: #1E293B !important;
+    border: 1.5px solid #334155 !important;
+    color: #F8FAFC !important;
+}
+button[kind="secondary"]:hover,
+button[kind="secondaryFormSubmit"]:hover {
+    background: #334155 !important;
+    border-color: #475569 !important;
+    color: #60A5FA !important;
+}
+button[kind="secondary"] p,
+button[kind="secondaryFormSubmit"] p { color: #F8FAFC !important; }
+
+/* Tertiary (sem borda) */
+button[kind="tertiary"],
+button[data-testid="stBaseButton-tertiary"] {
+    background: transparent !important;
+    color: #93C5FD !important;
+}
+button[kind="tertiary"] p { color: #93C5FD !important; }
+
+/* Icon buttons */
+button[kind="icon"],
+button[data-testid="stBaseButton-icon"] {
+    background: #1E293B !important;
+    color: #F8FAFC !important;
+}
+
+/* Link buttons (st.link_button) */
+a[data-testid="stLinkButton"],
+.stLinkButton a,
+a[kind="secondary"] {
+    background: #1E293B !important;
+    border: 1.5px solid #334155 !important;
+    color: #F8FAFC !important;
+}
+a[data-testid="stLinkButton"]:hover,
+.stLinkButton a:hover {
+    background: #334155 !important;
+    color: #60A5FA !important;
+}
+a[data-testid="stLinkButton"] p,
+.stLinkButton a p { color: #F8FAFC !important; }
+
+/* Expanders */
+details summary { color: #F8FAFC !important; }
+details[data-testid="stExpander"] { border-color: #334155 !important; }
+
+/* Tabs */
+button[data-baseweb="tab"] { color: #94A3B8 !important; }
+button[data-baseweb="tab"][aria-selected="true"] { color: #60A5FA !important; border-color: #60A5FA !important; }
+
+/* Métricas */
+div[data-testid="stMetricValue"] { color: #F8FAFC !important; }
+div[data-testid="stMetricLabel"] p { color: #94A3B8 !important; }
+</style>
+""", unsafe_allow_html=True)
+
+    else:
+        # Tema Claro — garante contraste total em todos os botões
+        st.markdown("""
+<style>
+/* ══════════════════════════════════════════════
+   TEMA CLARO — fixar contraste de todos os botões
+══════════════════════════════════════════════ */
+
+/* Secondary (inclui form submit) */
+button[kind="secondaryFormSubmit"],
+button[data-testid="stBaseButton-secondaryFormSubmit"] {
+    background: #F8FAFC !important;
+    border: 1.5px solid #E2E8F0 !important;
+    color: #475569 !important;
+    border-radius: 10px !important;
+    font-weight: 600 !important;
+}
+button[kind="secondary"] p,
+button[kind="secondaryFormSubmit"] p { color: #475569 !important; }
+
+/* Tertiary */
+button[kind="tertiary"],
+button[data-testid="stBaseButton-tertiary"] {
+    color: #0056b3 !important;
+}
+button[kind="tertiary"] p { color: #0056b3 !important; }
+
+/* Link buttons */
+a[data-testid="stLinkButton"],
+.stLinkButton a {
+    background: #F8FAFC !important;
+    border: 1.5px solid #E2E8F0 !important;
+    color: #475569 !important;
+}
+a[data-testid="stLinkButton"]:hover,
+.stLinkButton a:hover {
+    background: #EEF2FF !important;
+    border-color: #C7D2FE !important;
+    color: #0056b3 !important;
+}
+a[data-testid="stLinkButton"] p,
+.stLinkButton a p { color: #475569 !important; }
+</style>
+""", unsafe_allow_html=True)
+
+
+def _toggle_tema_ui(key_suffix=""):
+    """Widget compacto de toggle de tema — reutilizável no login e no app."""
+    tema_escolhido = st.selectbox(
+        "🌗",
+        ["☀️ Claro", "🌙 Escuro"],
+        index=0 if st.session_state.tema_operador == "Claro" else 1,
+        label_visibility="collapsed",
+        key=f"tema_sel_{key_suffix}",
+    )
+    novo = "Claro" if tema_escolhido.startswith("☀️") else "Escuro"
+    if novo != st.session_state.tema_operador:
+        st.session_state.tema_operador = novo
+        st.rerun()
+
+
+def renderizar_seletor_tema():
+    """Renderiza Drive + Seletor de Tema no topo do app (apenas logado)."""
     col_vazia, col_drive, col_tema = st.columns(
         [5.5, 2.5, 2], vertical_alignment="center"
     )
-
     with col_drive:
-        # 🚀 NOVO: Link Direto para o Google Drive
         st.link_button(
             "📂 Abrir Google Drive",
             "https://drive.google.com/drive/u/7/my-drive",
             use_container_width=True,
             help="Acesse a pasta da nuvem para gerir as fotografias.",
         )
-
     with col_tema:
-        tema_escolhido = st.selectbox(
-            "🌗 Preferência Visual:",
-            ["Claro", "Escuro"],
-            index=0 if st.session_state.tema_operador == "Claro" else 1,
-            label_visibility="collapsed",
-        )
-
-    # Se o operador mudar o tema, recarrega a página
-    if tema_escolhido != st.session_state.tema_operador:
-        st.session_state.tema_operador = tema_escolhido
-        st.rerun()
+        _toggle_tema_ui(key_suffix="app")
 
 
 # ==============================================================================
@@ -366,11 +480,19 @@ div[role="radiogroup"] label[data-checked="true"] p {
     unsafe_allow_html=True,
 )
 
+# CSS do tema injeta SEMPRE (antes do check de login)
+injetar_css_tema()
+
 # ==============================================================================
 # 🔐 PORTAL DE ACESSO — PRIME
 # ==============================================================================
 if not st.session_state.usuario_logado:
-    st.markdown("<div style='min-height:5vh;'></div>", unsafe_allow_html=True)
+    # Toggle de tema no canto superior direito do login
+    _cl, _ct = st.columns([6, 1])
+    with _ct:
+        _toggle_tema_ui(key_suffix="login")
+
+    st.markdown("<div style='min-height:3vh;'></div>", unsafe_allow_html=True)
     _, col_c, _ = st.columns([1, 1.05, 1])
 
     with col_c:
