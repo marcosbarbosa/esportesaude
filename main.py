@@ -36,171 +36,235 @@ from database import (
 # 🎨 SELETOR DINÂMICO DE TEMA E FERRAMENTAS GLOBAIS
 # ==============================================================================
 def injetar_css_tema():
-    """Injeta CSS do tema ativo. Chamada incondicionalmente antes do check de login."""
+    """Injeta CSS do tema ativo com .stApp como prefixo para superar especificidade do CSS base."""
     if "tema_operador" not in st.session_state:
         st.session_state.tema_operador = "Claro"
 
     if st.session_state.tema_operador == "Escuro":
         st.markdown("""
 <style>
-/* ══════════════════════════════════════════════
-   TEMA ESCURO — cobertura total de contraste
-══════════════════════════════════════════════ */
-.stApp { background: #0E1117 !important; }
-.stSidebar { background-color: #1E293B !important; }
+/* ════════════════════════════════════════════════════════════════
+   TEMA ESCURO v3 — prefixo .stApp garante especificidade máxima
+════════════════════════════════════════════════════════════════ */
 
-/* Containers com borda */
-div[data-testid="stVerticalBlockBorderWrapper"] {
-    background-color: #1E293B !important;
-    border-color: #334155 !important;
-}
-
-/* Texto global */
-p, span, h1, h2, h3, h4, h5, h6, label,
-.stMarkdown, .stText, div[data-testid="stMarkdownContainer"] p {
-    color: #F8FAFC !important;
-}
-
-/* Nav radiogroup */
-div[role="radiogroup"] { background: #1E293B !important; border-color: #334155 !important; }
-div[role="radiogroup"]::before { color: #3B82F6 !important; }
-div[role="radiogroup"] label p { color: #94A3B8 !important; }
-div[role="radiogroup"] label:hover { background: #334155 !important; }
-div[role="radiogroup"] label[data-checked="true"] { background: #3B82F6 !important; }
-div[role="radiogroup"] label[data-checked="true"] p { color: #FFFFFF !important; }
-
-/* Inputs e Selects */
-div[data-baseweb="input"] > div,
-div[data-baseweb="select"] > div {
+/* ── Fundos ─────────────────────────────────────────────────── */
+.stApp                                        { background: #0E1117 !important; }
+.stApp .stSidebar                             { background: #1E293B !important; }
+.stApp div[data-testid="stVerticalBlockBorderWrapper"] {
     background: #1E293B !important;
     border-color: #334155 !important;
-    color: #F8FAFC !important;
-}
-div[data-baseweb="input"] input,
-div[data-baseweb="select"] input,
-div[data-baseweb="select"] [data-testid="stSelectboxValue"] {
-    color: #F8FAFC !important;
 }
 
-/* ── BOTÕES: cobertura de TODOS os kinds ────────── */
+/* ── Texto global ─────────────────────────────────────────────── */
+.stApp p, .stApp span, .stApp li,
+.stApp h1, .stApp h2, .stApp h3,
+.stApp h4, .stApp h5, .stApp h6,
+.stApp label,
+.stApp div[data-testid="stMarkdownContainer"] p { color: #F8FAFC !important; }
+.stApp small, .stApp .stCaption p             { color: #94A3B8 !important; }
 
-/* Primary (azul) — mantém visual no escuro */
-button[kind="primary"],
-button[kind="primaryFormSubmit"],
-button[data-testid="stBaseButton-primary"],
-button[data-testid="stBaseButton-primaryFormSubmit"] {
+/* ── Nav radiogroup ───────────────────────────────────────────── */
+.stApp div[role="radiogroup"]                 { background: #1E293B !important; border-color: #334155 !important; }
+.stApp div[role="radiogroup"]::before         { color: #3B82F6 !important; }
+.stApp div[role="radiogroup"] label p         { color: #94A3B8 !important; }
+.stApp div[role="radiogroup"] label:hover     { background: #334155 !important; }
+.stApp div[role="radiogroup"] label[data-checked="true"]   { background: #3B82F6 !important; }
+.stApp div[role="radiogroup"] label[data-checked="true"] p { color: #FFFFFF !important; }
+
+/* ── Inputs / Selects / Textareas ─────────────────────────────── */
+.stApp div[data-baseweb="input"] > div,
+.stApp div[data-baseweb="select"] > div,
+.stApp div[data-baseweb="textarea"] > div {
+    background: #1E293B !important;
+    border-color: #334155 !important;
+}
+.stApp div[data-baseweb="input"] input,
+.stApp div[data-baseweb="textarea"] textarea,
+.stApp div[data-baseweb="select"] input,
+.stApp div[data-baseweb="select"] [data-testid="stSelectboxValue"],
+.stApp div[data-baseweb="select"] [data-testid="stSelectboxLabel"] { color: #F8FAFC !important; }
+
+/* ── BOTÕES PRIMARY ───────────────────────────────────────────── */
+.stApp button[kind="primary"],
+.stApp button[kind="primaryFormSubmit"],
+.stApp button[data-testid="stBaseButton-primary"],
+.stApp button[data-testid="stBaseButton-primaryFormSubmit"] {
     background: linear-gradient(135deg,#0056b3 0%,#0072e5 100%) !important;
     color: #FFFFFF !important;
     border: none !important;
 }
-button[kind="primary"] p,
-button[kind="primaryFormSubmit"] p { color: #FFFFFF !important; }
+.stApp button[kind="primary"] p,
+.stApp button[kind="primary"] span,
+.stApp button[kind="primaryFormSubmit"] p,
+.stApp button[kind="primaryFormSubmit"] span,
+.stApp button[data-testid="stBaseButton-primary"] p,
+.stApp button[data-testid="stBaseButton-primaryFormSubmit"] p { color: #FFFFFF !important; }
 
-/* Secondary */
-button[kind="secondary"],
-button[kind="secondaryFormSubmit"],
-button[data-testid="stBaseButton-secondary"],
-button[data-testid="stBaseButton-secondaryFormSubmit"] {
+/* ── BOTÕES SECONDARY ─────────────────────────────────────────── */
+.stApp button[kind="secondary"],
+.stApp button[kind="secondaryFormSubmit"],
+.stApp button[data-testid="stBaseButton-secondary"],
+.stApp button[data-testid="stBaseButton-secondaryFormSubmit"] {
     background: #1E293B !important;
-    border: 1.5px solid #334155 !important;
+    border: 1.5px solid #475569 !important;
     color: #F8FAFC !important;
 }
-button[kind="secondary"]:hover,
-button[kind="secondaryFormSubmit"]:hover {
+.stApp button[kind="secondary"]:hover,
+.stApp button[kind="secondaryFormSubmit"]:hover,
+.stApp button[data-testid="stBaseButton-secondary"]:hover,
+.stApp button[data-testid="stBaseButton-secondaryFormSubmit"]:hover {
     background: #334155 !important;
-    border-color: #475569 !important;
-    color: #60A5FA !important;
-}
-button[kind="secondary"] p,
-button[kind="secondaryFormSubmit"] p { color: #F8FAFC !important; }
-
-/* Tertiary (sem borda) */
-button[kind="tertiary"],
-button[data-testid="stBaseButton-tertiary"] {
-    background: transparent !important;
+    border-color: #64748B !important;
     color: #93C5FD !important;
 }
-button[kind="tertiary"] p { color: #93C5FD !important; }
+.stApp button[kind="secondary"] p,
+.stApp button[kind="secondary"] span,
+.stApp button[kind="secondaryFormSubmit"] p,
+.stApp button[kind="secondaryFormSubmit"] span,
+.stApp button[data-testid="stBaseButton-secondary"] p,
+.stApp button[data-testid="stBaseButton-secondary"] span,
+.stApp button[data-testid="stBaseButton-secondaryFormSubmit"] p,
+.stApp button[data-testid="stBaseButton-secondaryFormSubmit"] span { color: #F8FAFC !important; }
+.stApp button[kind="secondary"]:hover p,
+.stApp button[kind="secondary"]:hover span,
+.stApp button[data-testid="stBaseButton-secondary"]:hover p,
+.stApp button[data-testid="stBaseButton-secondary"]:hover span { color: #93C5FD !important; }
 
-/* Icon buttons */
-button[kind="icon"],
-button[data-testid="stBaseButton-icon"] {
+/* ── BOTÕES TERTIARY ──────────────────────────────────────────── */
+.stApp button[kind="tertiary"],
+.stApp button[data-testid="stBaseButton-tertiary"] {
+    background: transparent !important;
+    border: none !important;
+    color: #93C5FD !important;
+}
+.stApp button[kind="tertiary"] p,
+.stApp button[kind="tertiary"] span,
+.stApp button[data-testid="stBaseButton-tertiary"] p,
+.stApp button[data-testid="stBaseButton-tertiary"] span { color: #93C5FD !important; }
+
+/* ── BOTÕES ICON ──────────────────────────────────────────────── */
+.stApp button[kind="icon"],
+.stApp button[data-testid="stBaseButton-icon"] {
     background: #1E293B !important;
+    border-color: #334155 !important;
     color: #F8FAFC !important;
 }
+.stApp button[kind="icon"] p,
+.stApp button[data-testid="stBaseButton-icon"] p { color: #F8FAFC !important; }
 
-/* Link buttons (st.link_button) */
-a[data-testid="stLinkButton"],
-.stLinkButton a,
-a[kind="secondary"] {
+/* ── LINK BUTTONS ─────────────────────────────────────────────── */
+.stApp a[data-testid="stLinkButton"],
+.stApp .stLinkButton a {
     background: #1E293B !important;
-    border: 1.5px solid #334155 !important;
+    border: 1.5px solid #475569 !important;
     color: #F8FAFC !important;
 }
-a[data-testid="stLinkButton"]:hover,
-.stLinkButton a:hover {
-    background: #334155 !important;
-    color: #60A5FA !important;
+.stApp a[data-testid="stLinkButton"]:hover,
+.stApp .stLinkButton a:hover { background: #334155 !important; color: #93C5FD !important; }
+.stApp a[data-testid="stLinkButton"] p,
+.stApp a[data-testid="stLinkButton"] span,
+.stApp .stLinkButton a p,
+.stApp .stLinkButton a span { color: #F8FAFC !important; }
+
+/* ── SORT HEADER (cabeçalhos clicáveis do grid) ───────────────── */
+.stApp .sort-header button {
+    background: transparent !important;
+    border: none !important;
+    color: #CBD5E1 !important;
+    font-weight: 700 !important;
 }
-a[data-testid="stLinkButton"] p,
-.stLinkButton a p { color: #F8FAFC !important; }
+.stApp .sort-header button:hover { color: #60A5FA !important; }
+.stApp .sort-header button p,
+.stApp .sort-header button span { color: inherit !important; }
 
-/* Expanders */
-details summary { color: #F8FAFC !important; }
-details[data-testid="stExpander"] { border-color: #334155 !important; }
+/* ── TABS ─────────────────────────────────────────────────────── */
+.stApp button[data-baseweb="tab"]                           { color: #94A3B8 !important; }
+.stApp button[data-baseweb="tab"][aria-selected="true"]     { color: #60A5FA !important; border-color: #60A5FA !important; }
 
-/* Tabs */
-button[data-baseweb="tab"] { color: #94A3B8 !important; }
-button[data-baseweb="tab"][aria-selected="true"] { color: #60A5FA !important; border-color: #60A5FA !important; }
+/* ── EXPANDERS ────────────────────────────────────────────────── */
+.stApp details summary                        { color: #F8FAFC !important; }
+.stApp details[data-testid="stExpander"]      { border-color: #334155 !important; }
 
-/* Métricas */
-div[data-testid="stMetricValue"] { color: #F8FAFC !important; }
-div[data-testid="stMetricLabel"] p { color: #94A3B8 !important; }
+/* ── MÉTRICAS ─────────────────────────────────────────────────── */
+.stApp div[data-testid="stMetricValue"]       { color: #F8FAFC !important; }
+.stApp div[data-testid="stMetricLabel"] p     { color: #94A3B8 !important; }
+.stApp div[data-testid="stMetricDelta"]       { color: #94A3B8 !important; }
+
+/* ── ALERTAS / INFO / WARNING ─────────────────────────────────── */
+.stApp div[data-testid="stAlert"] p           { color: inherit !important; }
 </style>
 """, unsafe_allow_html=True)
 
     else:
-        # Tema Claro — garante contraste total em todos os botões
+        # Tema Claro — especificidade .stApp garante contraste sobre qualquer override
         st.markdown("""
 <style>
-/* ══════════════════════════════════════════════
-   TEMA CLARO — fixar contraste de todos os botões
-══════════════════════════════════════════════ */
+/* ════════════════════════════════════════════════════════════════
+   TEMA CLARO v3 — contraste total em todos os tipos de botão
+════════════════════════════════════════════════════════════════ */
 
-/* Secondary (inclui form submit) */
-button[kind="secondaryFormSubmit"],
-button[data-testid="stBaseButton-secondaryFormSubmit"] {
+/* ── BOTÕES SECONDARY ─────────────────────────────────────────── */
+.stApp button[kind="secondary"],
+.stApp button[kind="secondaryFormSubmit"],
+.stApp button[data-testid="stBaseButton-secondary"],
+.stApp button[data-testid="stBaseButton-secondaryFormSubmit"] {
     background: #F8FAFC !important;
     border: 1.5px solid #E2E8F0 !important;
-    color: #475569 !important;
-    border-radius: 10px !important;
-    font-weight: 600 !important;
+    color: #1E293B !important;
 }
-button[kind="secondary"] p,
-button[kind="secondaryFormSubmit"] p { color: #475569 !important; }
-
-/* Tertiary */
-button[kind="tertiary"],
-button[data-testid="stBaseButton-tertiary"] {
-    color: #0056b3 !important;
-}
-button[kind="tertiary"] p { color: #0056b3 !important; }
-
-/* Link buttons */
-a[data-testid="stLinkButton"],
-.stLinkButton a {
-    background: #F8FAFC !important;
-    border: 1.5px solid #E2E8F0 !important;
-    color: #475569 !important;
-}
-a[data-testid="stLinkButton"]:hover,
-.stLinkButton a:hover {
+.stApp button[kind="secondary"]:hover,
+.stApp button[kind="secondaryFormSubmit"]:hover,
+.stApp button[data-testid="stBaseButton-secondary"]:hover,
+.stApp button[data-testid="stBaseButton-secondaryFormSubmit"]:hover {
     background: #EEF2FF !important;
     border-color: #C7D2FE !important;
     color: #0056b3 !important;
 }
-a[data-testid="stLinkButton"] p,
-.stLinkButton a p { color: #475569 !important; }
+.stApp button[kind="secondary"] p,
+.stApp button[kind="secondary"] span,
+.stApp button[kind="secondaryFormSubmit"] p,
+.stApp button[kind="secondaryFormSubmit"] span,
+.stApp button[data-testid="stBaseButton-secondary"] p,
+.stApp button[data-testid="stBaseButton-secondary"] span,
+.stApp button[data-testid="stBaseButton-secondaryFormSubmit"] p,
+.stApp button[data-testid="stBaseButton-secondaryFormSubmit"] span { color: #1E293B !important; }
+.stApp button[kind="secondary"]:hover p,
+.stApp button[data-testid="stBaseButton-secondary"]:hover p { color: #0056b3 !important; }
+
+/* ── BOTÕES TERTIARY ──────────────────────────────────────────── */
+.stApp button[kind="tertiary"],
+.stApp button[data-testid="stBaseButton-tertiary"] { color: #0056b3 !important; }
+.stApp button[kind="tertiary"] p,
+.stApp button[data-testid="stBaseButton-tertiary"] p { color: #0056b3 !important; }
+
+/* ── LINK BUTTONS ─────────────────────────────────────────────── */
+.stApp a[data-testid="stLinkButton"],
+.stApp .stLinkButton a {
+    background: #F8FAFC !important;
+    border: 1.5px solid #E2E8F0 !important;
+    color: #1E293B !important;
+}
+.stApp a[data-testid="stLinkButton"]:hover,
+.stApp .stLinkButton a:hover {
+    background: #EEF2FF !important;
+    border-color: #C7D2FE !important;
+    color: #0056b3 !important;
+}
+.stApp a[data-testid="stLinkButton"] p,
+.stApp a[data-testid="stLinkButton"] span,
+.stApp .stLinkButton a p,
+.stApp .stLinkButton a span { color: #1E293B !important; }
+
+/* ── SORT HEADER (cabeçalhos clicáveis do grid) ───────────────── */
+.stApp .sort-header button {
+    background: transparent !important;
+    border: none !important;
+    color: #0F172A !important;
+    font-weight: 700 !important;
+}
+.stApp .sort-header button:hover { color: #1D4ED8 !important; }
+.stApp .sort-header button p,
+.stApp .sort-header button span { color: inherit !important; }
 </style>
 """, unsafe_allow_html=True)
 
