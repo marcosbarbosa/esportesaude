@@ -1201,7 +1201,7 @@ elif st.session_state.menu_atual in (
         tela_conferencia_facial()
     else:
         _aba_cfg = st.tabs(
-            ["🏫 Turmas", "💬 Mensagens", "🎨 Identidade Visual", "🛠️ Admin", "🔀 Mesclar Fichas"]
+            ["🏫 Turmas", "💬 Mensagens", "🎂 Aniversários", "🎨 Identidade Visual", "🛠️ Admin", "🔀 Mesclar Fichas"]
         )
         with _aba_cfg[0]:
             from views.turmas_view import tela_gestao_turmas
@@ -1210,15 +1210,18 @@ elif st.session_state.menu_atual in (
             from views.templates_view import tela_gestao_templates
             tela_gestao_templates()
         with _aba_cfg[2]:
+            from views.config_niver_view import tela_config_niver
+            tela_config_niver()
+        with _aba_cfg[3]:
             from views.identidade_view import tela_identidade_visual
             tela_identidade_visual()
-        with _aba_cfg[3]:
+        with _aba_cfg[4]:
             from views.backup_view import tela_backup
             from database import ferramenta_reparacao_turmas
             tela_backup()
             st.markdown("---")
             ferramenta_reparacao_turmas()
-        with _aba_cfg[4]:
+        with _aba_cfg[5]:
             from views.merge_alunos_view import tela_merge_alunos
             tela_merge_alunos()
 

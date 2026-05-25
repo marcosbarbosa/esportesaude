@@ -1,10 +1,8 @@
 # ==============================================================================
 # 📄 ARQUIVO: modulos_frequencia/tab_niver.py
-# 🏷️ VERSÃO: 13.5 PRIMEMAX (Cartaz Ecológico — Fotos em Alta Definição e Ampliadas)
+# 🏷️ VERSÃO: 14.0 — Automação WhatsApp + E-mail + Status Parabenizado
 # 👤 COPYRIGHT: © 2026 MoveRight Gestão Inteligente • Instituto Muda Brasil
-# 📏 LINHAS: ~260
-# ⚙️ FUNÇÃO: Portal de Aniversários e Emissão de Cartazes Oficiais em Word/PDF.
-#            Gera listas em 2 colunas com imagens ampliadas (110px) e nítidas (300px).
+# ⚙️ FUNÇÃO: Portal de Aniversários, Disparo WhatsApp/E-mail e Cartazes.
 # ==============================================================================
 
 import streamlit as st
@@ -19,6 +17,17 @@ from PIL import Image, ImageOps
 from database import buscar_alunos_geral
 from utils.texto import formatar_whatsapp_link
 from utils.identidade import get_config as _get_id_cfg, get_logo_data_url as _get_logo_url
+from utils.niver_automatico import (
+    get_config_niver,
+    is_parabenizado,
+    get_parabenizados_dict,
+    marcar_parabenizado,
+    desmarcar_parabenizado,
+    montar_link_whatsapp,
+    personalizar_mensagem,
+    enviar_email_aniversariantes,
+    disparar_zapi_aniversariantes,
+)
 
 try:
     from xhtml2pdf import pisa
@@ -41,7 +50,6 @@ except Exception as _e:
 # ==============================================================================
 # 🗜️ FUNÇÕES UTILITÁRIAS E TRATAMENTO DE IMAGEM
 # ==============================================================================
-# 🚀 AJUSTE DE NITIDEZ: Resolução da imagem aumentada de (120, 120) para (300, 300)
 def processar_imagem_para_redondo_b64(url, size=(300, 300)):
     if not url or pd.isna(url):
         return None
@@ -135,7 +143,7 @@ def gerar_cartaz_word_core(df_mes, titulo, subtitulo="", mensagem_cartaz=""):
         run_m.font.color.rgb = RGBColor(71, 85, 105)
 
     table = doc.add_table(rows=0, cols=3)
-    table.alignment = WD_TABLE_ALIGNMENT.CENTER if 'WD_TABLE_ALIGNMENT' in locals() else WD_ALIGN_PARAGRAPH.CENTER
+    table.alignment = WD_ALIGN_PARAGRAPH.CENTER
     col_idx = 0
     for _, r in df_mes.iterrows():
         if col_idx == 0:
@@ -185,12 +193,10 @@ def gerar_cartaz_pdf_core(df_mes, titulo, subtitulo="", mensagem_cartaz=""):
     if not mensagem_cartaz.strip():
         mensagem_cartaz = "Celebrando os aniversariantes! Muita saúde e vida ativa para todos!"
 
-    # ── CONSTRUÇÃO DO GRID DE DUAS COLUNAS LADO A LADO ──
     linhas_colunas_html = ""
     registros = df_mes.reset_index(drop=True)
 
     for i in range(0, len(registros), 2):
-        # Configuração Dinâmica da Célula Esquerda (Aluno Ímpar)
         aluno_esq = registros.iloc[i]
         nome_esq = str(aluno_esq["nome"]).upper().strip()
         dia_esq = f"{int(aluno_esq['dia']):02d}/{int(aluno_esq['mes']):02d}"
@@ -198,7 +204,6 @@ def gerar_cartaz_pdf_core(df_mes, titulo, subtitulo="", mensagem_cartaz=""):
 
         foto_html_esq = f'<img src="data:image/png;base64,{b64_img_esq}" class="foto-perfil">' if b64_img_esq else '<div class="no-foto"></div>'
 
-        # 🚀 AJUSTE: Largura do esquadro da foto aumentada de 75px para 125px
         celula_esquerda = f"""
             <td class="celula-aluno">
                 <table style="width: 100%; border: none;">
@@ -213,7 +218,6 @@ def gerar_cartaz_pdf_core(df_mes, titulo, subtitulo="", mensagem_cartaz=""):
             </td>
         """
 
-        # Configuração Dinâmica da Célula Direita (Aluno Par, se houver)
         if i + 1 < len(registros):
             aluno_dir = registros.iloc[i + 1]
             nome_dir = str(aluno_dir["nome"]).upper().strip()
@@ -251,11 +255,8 @@ def gerar_cartaz_pdf_core(df_mes, titulo, subtitulo="", mensagem_cartaz=""):
         .msg-box {{ background-color: #F0F9FF; border-left: 4px solid #1E88E5; padding: 12px; text-align: center; font-size: 12px; font-style: italic; color: #0369A1; margin-bottom: 25px; }}
         .grid-table {{ width: 100%; border-collapse: separate; border-spacing: 12px; }}
         .celula-aluno {{ width: 50%; background-color: #F8FAFC; border: 1px solid #E2E8F0; padding: 10px; vertical-align: middle; border-radius: 6px; }}
-
-        /* 🚀 AJUSTE DE TAMANHO CSS: Foto aumentada de 65px para 110px */
         .foto-perfil {{ width: 110px; height: 110px; border-radius: 55px; border: 3px solid #1E88E5; object-fit: cover; }}
         .no-foto {{ width: 110px; height: 110px; border-radius: 55px; border: 2px dashed #94A3B8; background: #F1F5F9; display: inline-block; }}
-
         .nome-aluno {{ font-size: 13px; font-weight: bold; color: #0F172A; line-height: 1.3; }}
         .data-aluno {{ font-size: 12px; font-weight: bold; color: #DC2626; margin-top: 4px; }}
         .celula-vazia {{ width: 50%; border: none; background: none; }}
@@ -282,6 +283,45 @@ def gerar_cartaz_pdf_core(df_mes, titulo, subtitulo="", mensagem_cartaz=""):
     result = io.BytesIO()
     pisa.pisaDocument(io.StringIO(html_content), result)
     return result.getvalue()
+
+
+# ==============================================================================
+# 🚀 MOTOR DE DISPARO — executa automação se habilitada no horário configurado
+# ==============================================================================
+def _verificar_disparo_automatico(df_hoje):
+    """Verifica se deve disparar e-mail/Z-API automaticamente pelo horário."""
+    if df_hoje is None or len(df_hoje) == 0:
+        return
+    cfg = get_config_niver()
+    agora = datetime.datetime.now()
+    horario_str = cfg.get("zapi_horario", "08:00")
+
+    try:
+        h, m = [int(x) for x in horario_str.split(":")]
+        horario_alvo = agora.replace(hour=h, minute=m, second=0, microsecond=0)
+        diff_min = abs((agora - horario_alvo).total_seconds() / 60)
+    except Exception:
+        return
+
+    chave_sess = f"niver_auto_disparado_{agora.date()}"
+    if st.session_state.get(chave_sess):
+        return
+    if diff_min > 30:
+        return
+
+    # janela de ±30 min — dispara
+    st.session_state[chave_sess] = True
+
+    if cfg["email_habilitado"]:
+        ok, msg = enviar_email_aniversariantes(df_hoje, cfg)
+        if ok:
+            st.toast(f"📧 E-mail de aniversários enviado!", icon="🎂")
+
+    if cfg["zapi_habilitado"]:
+        resultados = disparar_zapi_aniversariantes(df_hoje, cfg)
+        enviados = sum(1 for r in resultados if r["sucesso"])
+        if enviados:
+            st.toast(f"📱 {enviados} mensagem(ns) enviada(s) via WhatsApp!", icon="🎉")
 
 
 # ==============================================================================
@@ -314,6 +354,15 @@ def renderizar_aba_niver():
     meses_nums = [meses_inv[m] for m in meses_selecionados]
     df_mes = df_validos[df_validos["mes"].isin(meses_nums)].sort_values(by=["mes", "dia"]).copy()
 
+    # Filtrar aniversariantes de HOJE para automação
+    df_hoje = df_validos[
+        (df_validos["dia"] == hoje.day) & (df_validos["mes"] == hoje.month)
+    ].copy()
+
+    # ── DISPARO AUTOMÁTICO (verificação silenciosa) ──────────────────────────
+    if not df_hoje.empty:
+        _verificar_disparo_automatico(df_hoje)
+
     if len(meses_selecionados) == 1:
         titulo_doc = f"ANIVERSARIANTES DE {meses_selecionados[0].upper()}"
         subtitulo_doc = ""
@@ -324,6 +373,107 @@ def renderizar_aba_niver():
         subtitulo_doc = f"{meses_selecionados[0].upper()} A {meses_selecionados[-1].upper()}"
         nome_arq = f"{meses_selecionados[0]}_A_{meses_selecionados[-1]}"
         nome_meses_tela = f"{meses_selecionados[0]} a {meses_selecionados[-1]}"
+
+    # ── PAINEL DE DISPARO DO DIA ─────────────────────────────────────────────
+    if not df_hoje.empty:
+        cfg_niver = get_config_niver()
+        n_hoje = len(df_hoje)
+        parab_dict = get_parabenizados_dict()
+        n_parab = sum(1 for _, r in df_hoje.iterrows() if str(r.get("id", "")) in parab_dict)
+
+        with st.container(border=True):
+            st.markdown(
+                f"<div style='display:flex;align-items:center;gap:10px;'>"
+                f"<span style='font-size:28px;'>🎂</span>"
+                f"<div><strong style='font-size:15px;'>Hoje fazem aniversário: {n_hoje} aluno(s)</strong>"
+                f"<br><span style='font-size:12px;color:#64748B;'>"
+                f"{n_parab} parabenizado(s) · {n_hoje - n_parab} pendente(s)</span></div>"
+                f"</div>",
+                unsafe_allow_html=True,
+            )
+            st.markdown("<div style='height:8px;'></div>", unsafe_allow_html=True)
+
+            col_wa, col_em, col_zapi = st.columns(3)
+
+            with col_wa:
+                if st.button(
+                    "💬 Abrir WhatsApp p/ Todos",
+                    use_container_width=True,
+                    type="primary",
+                    key="btn_wa_todos",
+                    help="Abre uma aba do WhatsApp para cada aniversariante com a mensagem pronta",
+                ):
+                    template = cfg_niver["mensagem_padrao"]
+                    links_gerados = []
+                    sem_wap = []
+                    for _, r in df_hoje.iterrows():
+                        nome = str(r.get("nome", "")).strip()
+                        wap = str(r.get("whatsapp", "") or "").strip()
+                        msg = personalizar_mensagem(template, nome)
+                        link = montar_link_whatsapp(wap, msg) if wap else None
+                        if link:
+                            links_gerados.append((nome, link))
+                        else:
+                            sem_wap.append(nome)
+
+                    if links_gerados:
+                        # Abre todos os links via JS
+                        js_links = "\n".join(
+                            [f'window.open("{lnk}", "_blank");' for _, lnk in links_gerados]
+                        )
+                        st.markdown(
+                            f"<script>{js_links}</script>",
+                            unsafe_allow_html=True,
+                        )
+                        # Mostra botões individuais também
+                        st.success(f"✅ {len(links_gerados)} link(s) aberto(s)! Clique abaixo se algum não abriu:")
+                        for nome_al, lnk in links_gerados:
+                            st.markdown(
+                                f'<a href="{lnk}" target="_blank" style="display:inline-block;'
+                                f'margin:3px 4px;background:#25D366;color:white;padding:5px 12px;'
+                                f'border-radius:6px;text-decoration:none;font-size:12px;font-weight:700;">'
+                                f'💬 {nome_al.split()[0]}</a>',
+                                unsafe_allow_html=True,
+                            )
+                    if sem_wap:
+                        st.warning(f"Sem WhatsApp: {', '.join(sem_wap)}")
+
+            with col_em:
+                if st.button(
+                    "📧 Enviar E-mail Agora",
+                    use_container_width=True,
+                    key="btn_email_hoje",
+                    help="Envia e-mail com a lista de hoje para os endereços configurados",
+                ):
+                    if not cfg_niver["email_habilitado"]:
+                        st.warning("⚠️ E-mail não habilitado. Configure em ⚙️ Config → 🎂 Aniversários.")
+                    else:
+                        with st.spinner("Enviando e-mail..."):
+                            ok, msg = enviar_email_aniversariantes(df_hoje, cfg_niver)
+                        if ok:
+                            st.success(f"✅ {msg}")
+                        else:
+                            st.error(f"❌ {msg}")
+
+            with col_zapi:
+                if st.button(
+                    "📱 Disparar via Z-API",
+                    use_container_width=True,
+                    key="btn_zapi_hoje",
+                    help="Envia mensagem automática via WhatsApp para todos os aniversariantes de hoje",
+                ):
+                    if not cfg_niver["zapi_habilitado"]:
+                        st.warning("⚠️ Z-API não habilitada. Configure em ⚙️ Config → 🎂 Aniversários.")
+                    else:
+                        with st.spinner("Disparando via Z-API..."):
+                            resultados = disparar_zapi_aniversariantes(df_hoje, cfg_niver)
+                        ok_list = [r for r in resultados if r["sucesso"]]
+                        err_list = [r for r in resultados if not r["sucesso"]]
+                        if ok_list:
+                            st.success(f"✅ {len(ok_list)} mensagem(ns) enviada(s)!")
+                        if err_list:
+                            for e in err_list:
+                                st.warning(f"⚠️ {e['nome']}: {e['msg']}")
 
     st.markdown("<hr style='margin: 10px 0;'>", unsafe_allow_html=True)
 
@@ -349,38 +499,81 @@ def renderizar_aba_niver():
         .badge-hoje { background: #10B981; color: white; padding: 4px 10px; border-radius: 12px; font-size: 11px; font-weight: 800; }
         .badge-passou { background: #F1F5F9; color: #64748B; padding: 4px 10px; border-radius: 12px; font-size: 11px; font-weight: 800; border: 1px solid #E2E8F0; }
         .badge-chegando { background: #FEF3C7; color: #D97706; padding: 4px 10px; border-radius: 12px; font-size: 11px; font-weight: 800; border: 1px solid #FDE68A; }
+        .badge-parab { background: #DCFCE7; color: #16A34A; padding: 4px 10px; border-radius: 12px; font-size: 11px; font-weight: 800; border: 1px solid #BBF7D0; }
     </style>""",
         unsafe_allow_html=True,
     )
 
+    # ── LISTA DE ANIVERSARIANTES ─────────────────────────────────────────────
+    cfg_niver = get_config_niver()
+    template_msg = cfg_niver["mensagem_padrao"]
+    parab_dict = get_parabenizados_dict()
+
     for _, r in df_mes.iterrows():
         aniv_data = datetime.date(hoje.year, int(r["mes"]), int(r["dia"]))
         delta = (aniv_data - hoje).days
+        aluno_id = str(r.get("id", ""))
+        ja_parab = aluno_id in parab_dict
 
         with st.container(border=True):
-            c_av, c_info, c_status, c_whats, c_ficha = st.columns([1, 3.5, 2, 0.8, 0.8], vertical_alignment="center")
+            c_av, c_info, c_status, c_whats, c_parab, c_ficha = st.columns(
+                [1, 3, 2, 0.7, 1.4, 0.7], vertical_alignment="center"
+            )
             with c_av:
                 if pd.notna(r.get("url_foto")) and str(r.get("url_foto")).strip() != "":
                     st.markdown(f'<img src="{r["url_foto"]}" class="zoom-niver">', unsafe_allow_html=True)
                 else:
                     st.markdown("👤", unsafe_allow_html=True)
+
             with c_info:
                 st.markdown(f"**{r['nome'].upper()}**")
                 st.markdown(f"<span style='font-size:12px; color:#64748B;'>🎂 {r['dia']:02d}/{r['mes']:02d}</span>", unsafe_allow_html=True)
+
             with c_status:
                 if delta == 0:
                     st.markdown('<span class="badge-hoje">🎈 É HOJE!</span>', unsafe_allow_html=True)
                 elif delta > 0:
-                    st.markdown(f'<span class="badge-chegando">⏳ Faltam {delta} dias</span>', unsafe_allow_html=True)
+                    st.markdown(f'<span class="badge-chegando">⏳ Faltam {delta}d</span>', unsafe_allow_html=True)
                 else:
-                    st.markdown('<span class="badge-passou">✔️ Já completou</span>', unsafe_allow_html=True)
+                    st.markdown('<span class="badge-passou">✔️ Passou</span>', unsafe_allow_html=True)
                 _turma = str(r.get("turma") or "").strip()[:10]
                 if _turma:
-                    st.markdown(f"<span style='font-size:12px; color:#000000; font-weight:600;'>📍 {_turma}</span>", unsafe_allow_html=True)
+                    st.markdown(f"<span style='font-size:12px;color:#475569;font-weight:600;'>📍 {_turma}</span>", unsafe_allow_html=True)
+
             with c_whats:
-                link_w = formatar_whatsapp_link(r.get("whatsapp"))
+                msg_pessoal = personalizar_mensagem(template_msg, str(r.get("nome", "")))
+                link_w = montar_link_whatsapp(str(r.get("whatsapp", "") or ""), msg_pessoal)
                 if link_w:
-                    st.markdown(f'<a href="{link_w}?text=Parabéns!" target="_blank">💬</a>', unsafe_allow_html=True)
+                    st.markdown(
+                        f'<a href="{link_w}" target="_blank" title="Enviar parabéns via WhatsApp" '
+                        f'style="font-size:20px;text-decoration:none;">💬</a>',
+                        unsafe_allow_html=True,
+                    )
+
+            with c_parab:
+                if ja_parab:
+                    # Mostrar quando foi parabenizado
+                    ts_raw = parab_dict.get(aluno_id, "")
+                    ts_parte = ts_raw.split("|")[0][:16].replace("T", " ") if ts_raw else ""
+                    st.markdown(
+                        f'<span class="badge-parab">✅ Parabenizado</span>'
+                        f'{"<br><span style=\"font-size:10px;color:#64748B;\">"+ts_parte+"</span>" if ts_parte else ""}',
+                        unsafe_allow_html=True,
+                    )
+                    if st.button("↩️", key=f"desparab_{aluno_id}", help="Desfazer marcação"):
+                        desmarcar_parabenizado(aluno_id)
+                        st.rerun()
+                else:
+                    if st.button(
+                        "✅ Parabenizei",
+                        key=f"parab_{aluno_id}",
+                        use_container_width=True,
+                        help="Marcar como parabenizado",
+                    ):
+                        nome_op = st.session_state.get("usuario_nome", "")
+                        marcar_parabenizado(aluno_id, nome_op)
+                        st.rerun()
+
             with c_ficha:
                 if st.button("🩺", key=f"n_{r['id']}"):
                     st.session_state.aluno_prontuario = r.to_dict()
