@@ -591,9 +591,9 @@ def renderizar_aba_niver():
                     # Mostrar quando foi parabenizado
                     ts_raw = parab_dict.get(aluno_id, "")
                     ts_parte = ts_raw.split("|")[0][:16].replace("T", " ") if ts_raw else ""
+                    _ts_html = f'<br><span style="font-size:10px;color:#64748B;">{ts_parte}</span>' if ts_parte else ""
                     st.markdown(
-                        f'<span class="badge-parab">✅ Parabenizado</span>'
-                        f'{"<br><span style=\"font-size:10px;color:#64748B;\">"+ts_parte+"</span>" if ts_parte else ""}',
+                        f'<span class="badge-parab">✅ Parabenizado</span>{_ts_html}',
                         unsafe_allow_html=True,
                     )
                     if st.button("↩️", key=f"desparab_{aluno_id}", help="Desfazer marcação"):
