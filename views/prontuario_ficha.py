@@ -28,6 +28,9 @@ from database import (
     salvar_atestado_temporario,
     atualizar_dados_sociais_aluno,
     excluir_aluno_completo,
+    buscar_aluno_por_id,
+    buscar_alunos_geral,
+    get_alunos_por_turma,
     ADMIN_MASTER,
     supabase,
 )
@@ -83,6 +86,11 @@ def atualizar_perfil_aluno_dict_seguro(aluno_id, dados_atualizados):
         supabase.from_("alunos").update(dados_atualizados).eq(
             "id", str(aluno_id)
         ).execute()
+        for fn in (buscar_aluno_por_id, buscar_alunos_geral, get_alunos_por_turma):
+            try:
+                fn.clear()
+            except Exception:
+                pass
         return True, "Sucesso"
     except Exception as e:
         return False, str(e)
