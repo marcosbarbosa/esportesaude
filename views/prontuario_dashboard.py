@@ -586,12 +586,12 @@ def renderizar_dashboard():
                 .reset_index()
             )
             df_base_periodo = pd.merge(
-                df_todos_crm[["id","nome","turma","data_nascimento","data_avaliacao","url_foto"]].copy(),
+                df_todos_crm.copy(),
                 df_stats_p,
                 left_on="id", right_on="aluno_id", how="left"
             )
         else:
-            df_base_periodo = df_todos_crm[["id","nome","turma","data_nascimento","data_avaliacao","url_foto"]].copy()
+            df_base_periodo = df_todos_crm.copy()
             df_base_periodo["total_aulas"] = 0
             df_base_periodo["total_presencas"] = 0
 

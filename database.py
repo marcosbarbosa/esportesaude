@@ -168,7 +168,7 @@ def get_agendamentos_pendentes(limite=8):
     try:
         res = (
             supabase.from_("agendamentos")
-            .select("*, alunos(nome)")
+            .select("*, alunos(*)")
             .eq("status", "Pendente")
             .limit(limite)
             .execute()

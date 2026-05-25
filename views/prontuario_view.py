@@ -55,6 +55,15 @@ def atualizar_perfil_aluno_dict_seguro(aluno_id, dados_atualizados):
                 fn.clear()
             except Exception:
                 pass
+        try:
+            from views.prontuario_dashboard import (
+                carregar_dados_crm_avaliacoes_senior,
+                obter_todos_alunos_cache,
+            )
+            carregar_dados_crm_avaliacoes_senior.clear()
+            obter_todos_alunos_cache.clear()
+        except Exception:
+            pass
         return True, "Sucesso"
     except Exception as e:
         return False, str(e)
