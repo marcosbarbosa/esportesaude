@@ -442,8 +442,8 @@ def render_formulario_medicao(aluno, edit=None):
         ):
             historico = get_avaliacoes_aluno(aluno["id"])
             datas_existentes = (
-                [a.get("data_avaliacao") for a in historico]
-                if not historico.empty
+                historico["data_avaliacao"].astype(str).tolist()
+                if not historico.empty and "data_avaliacao" in historico.columns
                 else []
             )
             if str(d_av) in datas_existentes:
