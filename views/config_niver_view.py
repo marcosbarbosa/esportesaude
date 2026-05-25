@@ -61,13 +61,28 @@ def tela_config_niver():
             key="niver_email_toggle",
         )
 
-        emails_raw = ", ".join(cfg["emails_destino"])
-        emails_input = st.text_input(
-            "E-mails de destino (separados por vírgula):",
-            value=emails_raw,
-            placeholder="gestor@academia.com, coordenador@academia.com",
-            key="niver_emails_dest",
-        )
+        col_em_dias, col_em_dest = st.columns([1, 2])
+        with col_em_dias:
+            aviso_dias = st.number_input(
+                "Avisar com quantos dias de antecedência:",
+                min_value=0,
+                max_value=30,
+                value=int(cfg.get("aviso_dias", 0)),
+                step=1,
+                key="niver_aviso_dias_input",
+                help=(
+                    "0 = avisa somente no dia do aniversário\n"
+                    "1 = avisa também 1 dia antes\n"
+                    "3 = avisa nos 3 dias anteriores + o próprio dia"
+                ),
+            )
+        with col_em_dest:
+            emails_input = st.text_input(
+                "E-mails de destino (separados por vírgula):",
+                value=", ".join(cfg["emails_destino"]),
+                placeholder="gestor@academia.com, coordenador@academia.com",
+                key="niver_emails_dest",
+            )
 
         col_rem, col_sen = st.columns(2)
         with col_rem:
@@ -103,6 +118,7 @@ def tela_config_niver():
                     "niver_emails_destino": json.dumps(lista_emails),
                     "niver_email_remetente": remetente,
                     "niver_email_senha_app": senha_app,
+                    "niver_aviso_dias": str(int(aviso_dias)),
                 })
                 st.success("✅ Configurações de e-mail salvas!")
                 st.rerun()

@@ -354,14 +354,34 @@ def renderizar_aba_niver():
     meses_nums = [meses_inv[m] for m in meses_selecionados]
     df_mes = df_validos[df_validos["mes"].isin(meses_nums)].sort_values(by=["mes", "dia"]).copy()
 
-    # Filtrar aniversariantes de HOJE para automação
+    # Filtrar aniversariantes dentro da janela configurada (hoje + N dias à frente)
+    cfg_niver_pre = get_config_niver()
+    _aviso_dias = int(cfg_niver_pre.get("aviso_dias", 0))
+
+    datas_janela = set()
+    for _d in range(_aviso_dias + 1):
+        _dt = hoje + datetime.timedelta(days=_d)
+        datas_janela.add((_dt.day, _dt.month))
+
     df_hoje = df_validos[
-        (df_validos["dia"] == hoje.day) & (df_validos["mes"] == hoje.month)
+        df_validos.apply(lambda r: (int(r["dia"]), int(r["mes"])) in datas_janela, axis=1)
     ].copy()
 
-    # ── DISPARO AUTOMÁTICO (verificação silenciosa) ──────────────────────────
+    # Adiciona coluna com quantos dias faltam para cada aniversariante da janela
+    def _dias_para(row):
+        for _d in range(_aviso_dias + 1):
+            _dt = hoje + datetime.timedelta(days=_d)
+            if int(row["dia"]) == _dt.day and int(row["mes"]) == _dt.month:
+                return _d
+        return 0
     if not df_hoje.empty:
-        _verificar_disparo_automatico(df_hoje)
+        df_hoje["dias_para_niver"] = df_hoje.apply(_dias_para, axis=1)
+        df_hoje = df_hoje.sort_values("dias_para_niver")
+
+    # ── DISPARO AUTOMÁTICO (verificação silenciosa — só para os de HOJE) ─────
+    df_so_hoje = df_hoje[df_hoje.get("dias_para_niver", pd.Series(dtype=int)) == 0] if not df_hoje.empty else df_hoje
+    if not df_so_hoje.empty:
+        _verificar_disparo_automatico(df_so_hoje)
 
     if len(meses_selecionados) == 1:
         titulo_doc = f"ANIVERSARIANTES DE {meses_selecionados[0].upper()}"
@@ -377,17 +397,33 @@ def renderizar_aba_niver():
     # ── PAINEL DE DISPARO DO DIA ─────────────────────────────────────────────
     if not df_hoje.empty:
         cfg_niver = get_config_niver()
+        _aviso_dias_cfg = int(cfg_niver.get("aviso_dias", 0))
         n_hoje = len(df_hoje)
         parab_dict = get_parabenizados_dict()
         n_parab = sum(1 for _, r in df_hoje.iterrows() if str(r.get("id", "")) in parab_dict)
+
+        # Título dinâmico conforme janela configurada
+        if _aviso_dias_cfg == 0:
+            _titulo_painel = f"Hoje fazem aniversário: {n_hoje} aluno(s)"
+        else:
+            _n_exato_hoje = sum(1 for _, r in df_hoje.iterrows() if int(r.get("dias_para_niver", 0)) == 0)
+            _n_proximos = n_hoje - _n_exato_hoje
+            partes = []
+            if _n_exato_hoje:
+                partes.append(f"{_n_exato_hoje} hoje")
+            if _n_proximos:
+                partes.append(f"{_n_proximos} nos próximos {_aviso_dias_cfg} dia(s)")
+            _titulo_painel = f"Aniversários na janela: {' · '.join(partes)}"
 
         with st.container(border=True):
             st.markdown(
                 f"<div style='display:flex;align-items:center;gap:10px;'>"
                 f"<span style='font-size:28px;'>🎂</span>"
-                f"<div><strong style='font-size:15px;'>Hoje fazem aniversário: {n_hoje} aluno(s)</strong>"
+                f"<div><strong style='font-size:15px;'>{_titulo_painel}</strong>"
                 f"<br><span style='font-size:12px;color:#64748B;'>"
-                f"{n_parab} parabenizado(s) · {n_hoje - n_parab} pendente(s)</span></div>"
+                f"{n_parab} parabenizado(s) · {n_hoje - n_parab} pendente(s)"
+                f"{f' · aviso com até {_aviso_dias_cfg}d de antecedência' if _aviso_dias_cfg > 0 else ''}"
+                f"</span></div>"
                 f"</div>",
                 unsafe_allow_html=True,
             )

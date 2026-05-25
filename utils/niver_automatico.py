@@ -26,6 +26,7 @@ _CHAVES = [
     "niver_zapi_habilitado",     # "1" / "0"
     "niver_zapi_horario",        # "08:00"
     "niver_mensagem_padrao",     # texto com {nome}
+    "niver_aviso_dias",          # int: janela de aviso em dias (0 = só hoje)
 ]
 
 
@@ -76,6 +77,7 @@ def get_config_niver() -> dict:
         "zapi_client_token":cfg.get("niver_zapi_client_token", ""),
         "zapi_habilitado":  cfg.get("niver_zapi_habilitado", "0") == "1",
         "zapi_horario":     cfg.get("niver_zapi_horario", "08:00"),
+        "aviso_dias":       int(cfg.get("niver_aviso_dias", "0") or "0"),
         "mensagem_padrao":  cfg.get(
             "niver_mensagem_padrao",
             "Olá {nome}! 🎂 Feliz Aniversário! O time do Esporte e Saúde deseja a você muita saúde, disposição e muitos anos de vida ativa! 🎉🏃"
