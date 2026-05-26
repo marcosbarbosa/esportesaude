@@ -1125,16 +1125,18 @@ if st.session_state.menu_atual == "Principal":
 
                     # Última Presença
                     _up = _r.get("ultima_presenca")
+                    _dias_sem = ["seg","ter","qua","qui","sex","sáb","dom"]
                     if pd.notna(_up):
                         _up_dt   = pd.Timestamp(_up).date()
                         _up_dias = (_hoje_hg - _up_dt).days
                         _up_cor  = "#10B981" if _up_dias <= 7 else ("#F59E0B" if _up_dias <= 30 else "#EF4444")
                         _up_txt  = _up_dt.strftime("%d/%m/%y")
+                        _up_dsem = _dias_sem[_up_dt.weekday()]
                         _up_html = (
                             f"<span style='font-size:12px;font-weight:700;color:{_up_cor};'>"
                             f"{_up_txt}</span>"
                             f"<span style='font-size:10px;color:#94A3B8;margin-left:4px;'>"
-                            f"({_up_dias}d)</span>"
+                            f"{_up_dsem} · {_up_dias}d</span>"
                         )
                     else:
                         _up_html = "<span style='font-size:12px;color:#CBD5E1;'>Sem registro</span>"
