@@ -994,6 +994,17 @@ if st.session_state.menu_atual == "Principal":
         _df_alunos = buscar_alunos_geral("")
         _df_ultima  = load_frequencia_ultima_presenca()
 
+        # Templates WhatsApp (carregados uma vez, fora do loop)
+        try:
+            from utils.niver_automatico import montar_link_whatsapp, personalizar_mensagem
+            from database import get_crm_templates
+            _df_tpl = get_crm_templates()
+            _tpl_niver = _df_tpl[_df_tpl["gatilho"].str.contains("niver", na=False)]["mensagem"].iloc[0] if not _df_tpl.empty else "{nome}, parabéns pelo seu aniversário! 🎂"
+            _tpl_evasao = _df_tpl[_df_tpl["gatilho"].str.contains("evasao", na=False)]["mensagem"].iloc[0] if not _df_tpl.empty else "Olá {nome}, sentimos sua falta! Quando nos visita?"
+            _wapp_ok = True
+        except Exception:
+            _wapp_ok = False
+
         if not _df_alunos.empty:
             # Merge com última presença
             if not _df_ultima.empty:
@@ -1158,6 +1169,18 @@ if st.session_state.menu_atual == "Principal":
                             _niver_html = f"<span class='hg-niver-breve'>⏳ {_nasc_str}</span>"
                         else:
                             _niver_html = f"<span class='hg-niver-passou'>🎈 {_nasc_str}</span>"
+                        # Link WhatsApp de parabéns — aparece apenas no mês do aniversário
+                        if _wapp_ok and _mes_n == _hoje_mes:
+                            _wap_n = str(_r.get("whatsapp") or "").strip()
+                            if _wap_n:
+                                _msg_n = personalizar_mensagem(_tpl_niver, str(_r.get("nome", "")))
+                                _link_n = montar_link_whatsapp(_wap_n, _msg_n)
+                                if _link_n:
+                                    _niver_html += (
+                                        f"<br><a href='{_link_n}' target='_blank' "
+                                        f"style='font-size:10px;color:#25D366;text-decoration:none;"
+                                        f"font-weight:600;'>📱 Parabéns</a>"
+                                    )
                     else:
                         _niver_html = "<span style='color:#CBD5E1;'>—</span>"
                     _cd.markdown(
@@ -1180,8 +1203,33 @@ if st.session_state.menu_atual == "Principal":
                             f"<span style='font-size:10px;color:#94A3B8;margin-left:4px;'>"
                             f"{_up_dsem} · {_up_dias}d</span>"
                         )
+                        # Link WhatsApp de retenção/evasão — aparece quando ausente > 14 dias
+                        if _wapp_ok and _up_dias > 14:
+                            _wap_e = str(_r.get("whatsapp") or "").strip()
+                            if _wap_e:
+                                _msg_e = personalizar_mensagem(_tpl_evasao, str(_r.get("nome", "")))
+                                _link_e = montar_link_whatsapp(_wap_e, _msg_e)
+                                if _link_e:
+                                    _cor_icone = "#F59E0B" if _up_dias <= 30 else "#EF4444"
+                                    _up_html += (
+                                        f"<br><a href='{_link_e}' target='_blank' "
+                                        f"style='font-size:10px;color:{_cor_icone};text-decoration:none;"
+                                        f"font-weight:600;'>📱 Contato</a>"
+                                    )
                     else:
                         _up_html = "<span style='font-size:12px;color:#CBD5E1;'>Sem registro</span>"
+                        # Sem histórico = possível evasão desde o início
+                        if _wapp_ok:
+                            _wap_e = str(_r.get("whatsapp") or "").strip()
+                            if _wap_e:
+                                _msg_e = personalizar_mensagem(_tpl_evasao, str(_r.get("nome", "")))
+                                _link_e = montar_link_whatsapp(_wap_e, _msg_e)
+                                if _link_e:
+                                    _up_html += (
+                                        f"<br><a href='{_link_e}' target='_blank' "
+                                        f"style='font-size:10px;color:#EF4444;text-decoration:none;"
+                                        f"font-weight:600;'>📱 Contato</a>"
+                                    )
                     _ce.markdown(_up_html, unsafe_allow_html=True)
 
                     # Botão Ficha
