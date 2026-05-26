@@ -396,7 +396,7 @@ def rejeitar_inscricao_aluno(pre_cadastro_id):
 # ==============================================================================
 # 👨‍🎓 GESTÃO DE ALUNOS E DIÁRIOS
 # ==============================================================================
-@st.cache_data(ttl=300)
+@st.cache_data(ttl=300, show_spinner=False)
 def buscar_alunos_geral(termo="", incluir_inativos=False):
     try:
         query = supabase.from_("alunos").select("*")

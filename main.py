@@ -356,7 +356,7 @@ def load_niver_geral():
         return pd.DataFrame()
 
 
-@st.cache_data(ttl=300)
+@st.cache_data(ttl=300, show_spinner=False)
 def load_frequencia_ultima_presenca():
     """Retorna DataFrame com colunas [id, ultima_presenca] — máx data_aula PRESENTE por aluno."""
     try:
@@ -1015,7 +1015,21 @@ if st.session_state.menu_atual == "Principal":
             if _hg_turma != "Todas":
                 _df_grid = _df_grid[_df_grid["turma"] == _hg_turma]
 
-            _df_grid = _df_grid.sort_values("nome").reset_index(drop=True)
+            # Ordenação dinâmica
+            if "hg_sort_col" not in st.session_state:
+                st.session_state.hg_sort_col = "nome"
+                st.session_state.hg_sort_asc = True
+            _sc = st.session_state.get("hg_sort_col", "nome")
+            _sa = st.session_state.get("hg_sort_asc", True)
+            if _sc == "aniversario":
+                _df_grid = _df_grid.sort_values(
+                    ["_mes_n", "_dia_n"], ascending=_sa, na_position="last"
+                )
+            elif _sc in _df_grid.columns:
+                _df_grid = _df_grid.sort_values(_sc, ascending=_sa, na_position="last")
+            else:
+                _df_grid = _df_grid.sort_values("nome")
+            _df_grid = _df_grid.reset_index(drop=True)
 
             # Paginação com botões ◀ ▶
             _hg_ppp   = 20
@@ -1046,21 +1060,34 @@ if st.session_state.menu_atual == "Principal":
                 st.session_state.hg_pg += 1
                 st.rerun()
 
-            # ── Cabeçalho das colunas ──────────────────────────────────
+            # ── Cabeçalho das colunas (clicável para ordenar) ──────────
             _h0, _h1, _h2, _h3, _h4, _h5 = st.columns(
                 [0.5, 3.2, 1.6, 1.5, 1.8, 0.9], gap="small"
             )
-            for _hdr, _col in zip(
-                ["", "**Nome**", "**Turma**", "**🎂 Aniversário**", "**⏱ Última Presença**", ""],
-                [_h0, _h1, _h2, _h3, _h4, _h5],
-            ):
-                if _hdr:
-                    _col.markdown(
-                        f"<span style='font-size:11px;color:#64748B;font-weight:700;'>{_hdr}</span>",
-                        unsafe_allow_html=True,
-                    )
+            _h0.markdown(" ", unsafe_allow_html=True)
+            _h5.markdown(" ", unsafe_allow_html=True)
 
-            st.markdown("<div style='height:2px'></div>", unsafe_allow_html=True)
+            def _sort_btn(col_widget, label, sort_key):
+                _ativo = (st.session_state.get("hg_sort_col") == sort_key)
+                _seta  = (" ▲" if st.session_state.get("hg_sort_asc", True) else " ▼") if _ativo else ""
+                if col_widget.button(
+                    f"{label}{_seta}",
+                    key=f"hdr_{sort_key}",
+                    use_container_width=True,
+                    help=f"Ordenar por {label}",
+                ):
+                    if st.session_state.get("hg_sort_col") == sort_key:
+                        st.session_state.hg_sort_asc = not st.session_state.get("hg_sort_asc", True)
+                    else:
+                        st.session_state.hg_sort_col = sort_key
+                        st.session_state.hg_sort_asc = True
+                    st.session_state.hg_pg = 1
+                    st.rerun()
+
+            _sort_btn(_h1, "Nome",           "nome")
+            _sort_btn(_h2, "Turma",          "turma")
+            _sort_btn(_h3, "🎂 Aniversário", "aniversario")
+            _sort_btn(_h4, "⏱ Última Pres.", "ultima_presenca")
 
             # ── Linhas do Grid ─────────────────────────────────────────
             _hoje_hg   = datetime.date.today()
