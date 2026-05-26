@@ -114,6 +114,13 @@ def gerar_html_fichas(lista_alunos, host_url):
             .footer-info {{ margin-top: 30px; display: flex; justify-content: space-between; align-items: flex-end; font-size: 7.5pt; color: #94a3b8; border-top: 1px solid #e2e8f0; padding-top: 10px; }}
             .qr-placeholder {{ width: 60px; height: 60px; border: 1px solid #cbd5e1; display: flex; align-items: center; justify-content: center; font-size: 6pt; text-align: center; background: #f8fafc; }}
 
+            .termo-container {{ display: flex; gap: 10px; margin: 14px 0; }}
+            .termo-box {{ flex: 1; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 5px; padding: 10px 12px; font-size: 8pt; text-align: justify; color: #475569; font-style: italic; display: flex; flex-direction: column; justify-content: space-between; }}
+            .termo-box-title {{ font-size: 7.5pt; font-weight: bold; text-transform: uppercase; color: #0a2540; font-style: normal; margin-bottom: 6px; border-bottom: 1px solid #e2e8f0; padding-bottom: 4px; }}
+            .termo-check {{ display: flex; align-items: flex-start; gap: 6px; margin-bottom: 6px; font-style: normal; font-size: 8pt; font-weight: bold; color: #0a2540; }}
+            .termo-check input[type=checkbox] {{ width: 13px; height: 13px; margin-top: 1px; flex-shrink: 0; accent-color: #0056b3; }}
+            .termo-badge {{ margin-top: 8px; font-size: 6.5pt; font-style: normal; color: #94a3b8; border-top: 1px solid #f1f5f9; padding-top: 4px; }}
+
             .btn-imprimir {{ position: fixed; top: 20px; right: 20px; background: #0056b3; color: white; border: none; padding: 12px 24px; border-radius: 8px; font-size: 14px; font-weight: bold; cursor: pointer; box-shadow: 0 4px 15px rgba(0,86,179,0.3); transition: 0.3s; z-index: 1000; display: flex; align-items: center; gap: 8px; }}
             .btn-imprimir:hover {{ background: #004494; transform: translateY(-2px); }}
 
@@ -147,6 +154,8 @@ def gerar_html_fichas(lista_alunos, host_url):
         endereco = aluno.get("endereco", "NÃO INFORMADO")
         turma = aluno.get("turma", "Turma Padrão")
         id_aluno = aluno.get("id", "0000")
+        termo_imagem = aluno.get("termo_imagem", False)
+        check_img = "checked" if termo_imagem else ""
 
         # 🚀 LÓGICA DE PRIORIDADE RG -> CPF
         rg_raw = str(aluno.get("rg", ""))
@@ -239,8 +248,35 @@ def gerar_html_fichas(lista_alunos, host_url):
                 </div>
             </div>
 
-            <div class="legal-term">
-                Eu, <strong>{nome}</strong>, declaro estar ciente e concordo com minha inscrição no {_cfg.get("nome_organizacao","Instituto Muda Brasil")} para o projeto {_cfg.get("titulo_projeto","ESPORTE E SAÚDE NA COMUNIDADE - FASE 2")}. Declaro que as informações de saúde acima são verídicas e condizem com meu atestado físico. Autorizo expressamente o tratamento de meus dados pessoais, <strong>bem como o uso gratuito da minha imagem e voz captadas durante as atividades</strong>, para fins de gestão acadêmica, prestação de contas oficial, divulgação institucional e registros de frequência, em total conformidade com a Lei Geral de Proteção de Dados (Lei 13.709/2018 - LGPD) e a legislação vigente sobre direitos de imagem.
+            <div class="termo-container">
+                <div class="termo-box">
+                    <div class="termo-box-title">Termo 1 — Adesão, Saúde e LGPD (Obrigatório)</div>
+                    <div>
+                        Eu, <strong>{nome}</strong>, declaro estar ciente e concordo com minha inscrição no {_cfg.get("nome_organizacao","Instituto Muda Brasil")} para o projeto <em>{_cfg.get("titulo_projeto","ESPORTE E SAÚDE NA COMUNIDADE - FASE 2")}</em>. Declaro que as informações de saúde prestadas são verídicas e condizem com meu atestado físico. Autorizo expressamente o tratamento dos meus dados pessoais para fins de gestão acadêmica, prestação de contas oficial e registros de frequência, em conformidade com a LGPD.
+                    </div>
+                    <div>
+                        <div class="termo-check">
+                            <input type="checkbox" disabled /> ☐ &nbsp;Li e aceito este Termo (assinatura física obrigatória)
+                        </div>
+                    </div>
+                    <div class="termo-badge">
+                        Base legal: Lei nº 13.709/2018 — LGPD, Art. 7º, inciso V (execução de contrato/serviço público)
+                    </div>
+                </div>
+                <div class="termo-box">
+                    <div class="termo-box-title">Termo 2 — Uso de Imagem e Voz (Opcional)</div>
+                    <div>
+                        Autorizo, de forma gratuita, o uso da minha imagem e voz captadas durante as atividades do projeto para fins de divulgação institucional e prestação de contas junto aos órgãos fomentadores. Esta autorização pode ser revogada a qualquer momento mediante solicitação formal. <strong>A não autorização não impede a participação no projeto.</strong>
+                    </div>
+                    <div>
+                        <div class="termo-check">
+                            <input type="checkbox" {check_img} disabled /> {'☑' if check_img else '☐'} &nbsp;{'Autorizo o uso de imagem e voz' if check_img else 'Não autorizo / deixar em branco'}
+                        </div>
+                    </div>
+                    <div class="termo-badge">
+                        Base legal: Constituição Federal, Art. 5º, inciso XXVIII | Lei nº 9.610/1998 — Direitos Autorais
+                    </div>
+                </div>
             </div>
 
             <div class="signature-area">
@@ -251,7 +287,7 @@ def gerar_html_fichas(lista_alunos, host_url):
                 </div>
                 <div class="sig-box">
                     <div class="sig-line"></div>
-                    <div class="sig-label">INSTITUTO MUDA BRASIL / SECRETARIA</div>
+                    <div class="sig-label">{_cfg.get("nome_organizacao","INSTITUTO MUDA BRASIL").upper()} / SECRETARIA</div>
                     <div style="font-size: 7.5pt; color: #64748b; margin-top: 4px;">Rubrica do Coordenador</div>
                 </div>
             </div>
@@ -293,6 +329,9 @@ def _html_pagina_ficha_pdf(aluno, cfg, host_url, data_hoje, logo_p_url, logo_s_u
     endereco = aluno.get("endereco", "NÃO INFORMADO")
     turma = aluno.get("turma", "Turma Padrão")
     id_aluno = aluno.get("id", "0000")
+    termo_imagem = aluno.get("termo_imagem", False)
+    check_img_pdf = "&#9745;" if termo_imagem else "&#9744;"
+    auth_txt_pdf = "Autorizo o uso de imagem e voz" if termo_imagem else "Não autorizo / deixar em branco"
 
     # 🚀 LÓGICA DE PRIORIDADE RG -> CPF APLICADA AQUI TAMBÉM
     rg_raw = str(aluno.get("rg", ""))
@@ -417,16 +456,40 @@ def _html_pagina_ficha_pdf(aluno, cfg, host_url, data_hoje, logo_p_url, logo_s_u
   </tr>
 </table>
 
-<p style="font-size:8.5pt;text-align:justify;background:#f8fafc;border:1px solid #e2e8f0;
-          padding:10px;font-style:italic;margin:8px 0;color:#475569;">
-  Eu, <b>{nome}</b>, declaro estar ciente e concordo com minha inscrição no {nome_org} para
-  o projeto {titulo_proj}. Declaro que as informações de saúde acima são verídicas e condizem com
-  meu atestado físico. Autorizo expressamente o tratamento de meus dados pessoais,
-  <b>bem como o uso gratuito da minha imagem e voz captadas durante as atividades</b>,
-  para fins de gestão acadêmica, prestação de contas oficial, divulgação institucional e
-  registros de frequência, em total conformidade com a Lei Geral de Proteção de Dados
-  (Lei 13.709/2018 - LGPD) e a legislação vigente sobre direitos de imagem.
-</p>
+<table width="100%" border="0" cellspacing="0" cellpadding="0" style="margin:8px 0;">
+  <tr>
+    <td width="49%" valign="top"
+        style="background:#f8fafc;border:1px solid #e2e8f0;padding:8px 10px;font-size:8pt;color:#475569;">
+      <b style="font-size:7.5pt;text-transform:uppercase;color:#0a2540;font-style:normal;">
+        Termo 1 — Adesão, Saúde e LGPD (Obrigatório)
+      </b><br/><br/>
+      <i>Eu, <b>{nome}</b>, declaro estar ciente e concordo com minha inscrição no {nome_org}
+      para o projeto <i>{titulo_proj}</i>. Declaro que as informações de saúde prestadas são
+      verídicas e condizem com meu atestado físico. Autorizo o tratamento dos meus dados
+      pessoais para gestão acadêmica, prestação de contas e registros de frequência,
+      em conformidade com a LGPD.</i><br/><br/>
+      <b style="font-size:8pt;">&#9744; Li e aceito este Termo (assinatura física obrigatória)</b><br/><br/>
+      <span style="font-size:6.5pt;color:#94a3b8;">
+        Base legal: Lei nº 13.709/2018 — LGPD, Art. 7º, inciso V
+      </span>
+    </td>
+    <td width="2%">&nbsp;</td>
+    <td width="49%" valign="top"
+        style="background:#f8fafc;border:1px solid #e2e8f0;padding:8px 10px;font-size:8pt;color:#475569;">
+      <b style="font-size:7.5pt;text-transform:uppercase;color:#0a2540;font-style:normal;">
+        Termo 2 — Uso de Imagem e Voz (Opcional)
+      </b><br/><br/>
+      <i>Autorizo, de forma gratuita, o uso da minha imagem e voz captadas durante as
+      atividades para divulgação institucional e prestação de contas. Esta autorização
+      pode ser revogada a qualquer momento. <b>A não autorização não impede a participação
+      no projeto.</b></i><br/><br/>
+      <b style="font-size:8pt;">{check_img_pdf} {auth_txt_pdf}</b><br/><br/>
+      <span style="font-size:6.5pt;color:#94a3b8;">
+        Base legal: CF Art. 5º, inc. XXVIII | Lei nº 9.610/1998 — Direitos Autorais
+      </span>
+    </td>
+  </tr>
+</table>
 
 <table width="100%" border="0" cellspacing="0" cellpadding="0" style="margin-top:28px;">
   <tr>
