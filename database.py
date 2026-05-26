@@ -848,9 +848,10 @@ def load_frequencia_ultima_presenca():
     try:
         res = (
             supabase.from_("frequencia")
-            .select("aluno_id, data_aula, status")
+            .select("aluno_id, data_aula")
             .eq("status", "PRESENTE")
-            .limit(50000)
+            .order("data_aula", desc=True)
+            .limit(200000)
             .execute()
         )
         if not res.data:
