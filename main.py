@@ -890,11 +890,12 @@ if st.session_state.menu_atual == "Principal":
         )
 
     with _col_clock:
-        st.markdown(
+        import streamlit.components.v1 as _stc
+        _stc.html(
             """
-<div style='text-align:right; padding:6px 0;'>
-  <div id="hg_clock_h"
-       style='font-size:1.7rem; font-weight:900; color:#1E40AF;
+<div style='text-align:right; padding:4px 0; font-family:sans-serif;'>
+  <div id="ck"
+       style='font-size:1.65rem; font-weight:900; color:#1E40AF;
               font-family:monospace; letter-spacing:2px; line-height:1;'>
     --:--:--
   </div>
@@ -904,18 +905,18 @@ if st.session_state.menu_atual == "Principal":
 </div>
 <script>
 (function(){
-  function _tick(){
-    var el = document.getElementById('hg_clock_h');
-    if (!el){ setTimeout(_tick, 150); return; }
-    var t = new Date().toLocaleTimeString('pt-BR',
-      {timeZone:'America/Sao_Paulo', hour:'2-digit', minute:'2-digit', second:'2-digit'});
-    el.textContent = t;
+  function tick(){
+    var el = document.getElementById('ck');
+    if(!el){ setTimeout(tick,150); return; }
+    el.textContent = new Date().toLocaleTimeString('pt-BR',
+      {timeZone:'America/Sao_Paulo',hour:'2-digit',minute:'2-digit',second:'2-digit'});
   }
-  _tick();
-  setInterval(_tick, 1000);
+  tick();
+  setInterval(tick, 1000);
 })();
 </script>""",
-            unsafe_allow_html=True,
+            height=58,
+            scrolling=False,
         )
 
     st.markdown("<hr style='margin:8px 0 10px;border-color:#E2E8F0;'/>", unsafe_allow_html=True)
@@ -962,8 +963,8 @@ if st.session_state.menu_atual == "Principal":
     # ════════════════════════════════════════════════
     with _col_grid:
         from database import buscar_alunos_geral
-        _hg_c_titulo, _hg_c_busca, _hg_c_turma, _hg_c_pg = st.columns(
-            [1.4, 2.5, 1.8, 0.9], vertical_alignment="bottom", gap="small"
+        _hg_c_titulo, _hg_c_busca, _hg_c_turma = st.columns(
+            [1.4, 2.5, 1.8], vertical_alignment="bottom", gap="small"
         )
         _hg_c_titulo.markdown(
             "<p style='font-weight:800;color:#0A2540;font-size:1.05rem;margin:0;'>👥 Alunos Ativos</p>",
@@ -1005,7 +1006,7 @@ if st.session_state.menu_atual == "Principal":
 
             # Aplicar filtros
             _df_grid = _df_hg.copy()
-            if _hg_busca and len(_hg_busca.strip()) >= 2:
+            if _hg_busca and len(_hg_busca.strip()) >= 3:
                 _b = _hg_busca.strip().lower()
                 _df_grid = _df_grid[
                     _df_grid["nome"].str.lower().str.contains(_b, na=False) |
@@ -1016,20 +1017,34 @@ if st.session_state.menu_atual == "Principal":
 
             _df_grid = _df_grid.sort_values("nome").reset_index(drop=True)
 
-            # Paginação
+            # Paginação com botões ◀ ▶
             _hg_ppp   = 20
             _hg_total = max(1, math.ceil(len(_df_grid) / _hg_ppp))
-            _hg_pg    = _hg_c_pg.number_input(
-                f"Pág/{_hg_total}", min_value=1, max_value=_hg_total, value=1,
-                label_visibility="collapsed", key="hg_pg"
-            )
+            if "hg_pg" not in st.session_state:
+                st.session_state.hg_pg = 1
+            # Reset para pág 1 quando filtro muda
+            if st.session_state.get("hg_busca_prev") != _hg_busca or \
+               st.session_state.get("hg_turma_prev") != _hg_turma:
+                st.session_state.hg_pg = 1
+                st.session_state.hg_busca_prev = _hg_busca
+                st.session_state.hg_turma_prev = _hg_turma
+            st.session_state.hg_pg = max(1, min(st.session_state.hg_pg, _hg_total))
+            _hg_pg  = st.session_state.hg_pg
             _hg_ini = (_hg_pg - 1) * _hg_ppp
             _df_pag = _df_grid.iloc[_hg_ini: _hg_ini + _hg_ppp]
 
-            # Contagem
-            st.caption(
-                f"{len(_df_grid)} aluno(s) encontrado(s) · página {_hg_pg} de {_hg_total}"
-            )
+            # Barra de info + navegação
+            _pc1, _pc2, _pc3, _pc4 = st.columns([3, 0.6, 0.6, 1], gap="small",
+                                                  vertical_alignment="center")
+            _pc1.caption(f"{len(_df_grid)} aluno(s) · pág {_hg_pg}/{_hg_total}")
+            if _pc2.button("◀", key="hg_prev", disabled=(_hg_pg <= 1),
+                           use_container_width=True):
+                st.session_state.hg_pg -= 1
+                st.rerun()
+            if _pc3.button("▶", key="hg_next", disabled=(_hg_pg >= _hg_total),
+                           use_container_width=True):
+                st.session_state.hg_pg += 1
+                st.rerun()
 
             # ── Cabeçalho das colunas ──────────────────────────────────
             _h0, _h1, _h2, _h3, _h4, _h5 = st.columns(
