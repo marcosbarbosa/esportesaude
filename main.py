@@ -28,6 +28,7 @@ from database import (
     cadastrar_usuario_sistema,
     recuperar_senha_usuario,
     get_template_seguro_db,
+    load_frequencia_ultima_presenca,
     ADMIN_MASTER,
     supabase,
 )
@@ -355,27 +356,6 @@ def load_niver_geral():
     except Exception:
         return pd.DataFrame()
 
-
-@st.cache_data(ttl=300, show_spinner=False)
-def load_frequencia_ultima_presenca():
-    """Retorna DataFrame com colunas [id, ultima_presenca] — máx data_aula PRESENTE por aluno."""
-    try:
-        res = (
-            supabase.from_("frequencia")
-            .select("aluno_id, data_aula, status")
-            .eq("status", "PRESENTE")
-            .limit(50000)
-            .execute()
-        )
-        if not res.data:
-            return pd.DataFrame(columns=["id", "ultima_presenca"])
-        df_f = pd.DataFrame(res.data)
-        df_f["data_aula"] = pd.to_datetime(df_f["data_aula"], errors="coerce")
-        ultima = df_f.groupby("aluno_id")["data_aula"].max().reset_index()
-        ultima.columns = ["id", "ultima_presenca"]
-        return ultima
-    except Exception:
-        return pd.DataFrame(columns=["id", "ultima_presenca"])
 
 
 # ==============================================================================

@@ -453,8 +453,9 @@ def _inv_agendamentos():
 
 
 def _inv_frequencia():
-    """Caches de frequência/presenças (afetados ao excluir um dia de aula)."""
+    """Caches de frequência, última presença e BI — chamar após alternar_presenca ou excluir aula."""
     for fn in (
+        get_ultima_presenca_batch, load_frequencia_ultima_presenca,
         get_presencas_dia, bi_presencas_periodo, bi_frequencia_turmas,
         bi_resumo_studio, get_diarios_periodo,
     ):
@@ -841,6 +842,28 @@ def excluir_midia_diario(midia_id):
 # ==============================================================================
 # ✅ FREQUÊNCIA E RELATÓRIOS (MOTOR ANTI-FURO)
 # ==============================================================================
+@st.cache_data(ttl=300, show_spinner=False)
+def load_frequencia_ultima_presenca():
+    """Retorna DataFrame com colunas [id, ultima_presenca] — máx data_aula PRESENTE por aluno."""
+    try:
+        res = (
+            supabase.from_("frequencia")
+            .select("aluno_id, data_aula, status")
+            .eq("status", "PRESENTE")
+            .limit(50000)
+            .execute()
+        )
+        if not res.data:
+            return pd.DataFrame(columns=["id", "ultima_presenca"])
+        df_f = pd.DataFrame(res.data)
+        df_f["data_aula"] = pd.to_datetime(df_f["data_aula"], errors="coerce")
+        ultima = df_f.groupby("aluno_id")["data_aula"].max().reset_index()
+        ultima.columns = ["id", "ultima_presenca"]
+        return ultima
+    except Exception:
+        return pd.DataFrame(columns=["id", "ultima_presenca"])
+
+
 def alternar_presenca(aluno_id, data_aula, presente, solicitante_email=""):
     status = "PRESENTE" if presente else "FALTA"
     try:
@@ -863,6 +886,7 @@ def alternar_presenca(aluno_id, data_aula, presente, solicitante_email=""):
                     "status": status,
                 }
             ).execute()
+        _inv_frequencia()
         return True, "Ok"
     except Exception as e:
         return False, str(e)
