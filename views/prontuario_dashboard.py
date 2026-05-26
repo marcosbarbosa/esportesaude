@@ -585,13 +585,15 @@ def renderizar_dashboard():
                 )
                 .reset_index()
             )
+            _cols_drop = [c for c in ("total_aulas","total_presencas","taxa_presenca","aluno_id","dias_passados") if c in df_todos_crm.columns]
             df_base_periodo = pd.merge(
-                df_todos_crm.copy(),
+                df_todos_crm.drop(columns=_cols_drop).copy(),
                 df_stats_p,
                 left_on="id", right_on="aluno_id", how="left"
             )
         else:
-            df_base_periodo = df_todos_crm.copy()
+            _cols_drop = [c for c in ("total_aulas","total_presencas","taxa_presenca","aluno_id","dias_passados") if c in df_todos_crm.columns]
+            df_base_periodo = df_todos_crm.drop(columns=_cols_drop).copy()
             df_base_periodo["total_aulas"] = 0
             df_base_periodo["total_presencas"] = 0
 
