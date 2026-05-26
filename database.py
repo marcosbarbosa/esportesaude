@@ -21,7 +21,7 @@ from email.mime.multipart import MIMEMultipart
 ADMIN_MASTER = "marcosbarbosa.am@gmail.com"
 
 
-@st.cache_resource
+@st.cache_resource(show_spinner=False)
 def init_connection():
     url = st.secrets["SUPABASE_URL"]
     key = st.secrets["SUPABASE_KEY"]
