@@ -842,45 +842,7 @@ if st.session_state.nav == "Sair":
 
 # --- DASHBOARD PRINCIPAL ---
 if st.session_state.menu_atual == "Principal":
-    # ── Saudação compacta ──────────────────────────────────────────────────
-    _hoje = datetime.date.today()
-    _ds = ["Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado", "Domingo"][
-        _hoje.weekday()
-    ]
-    _meses_pt = [
-        "jan",
-        "fev",
-        "mar",
-        "abr",
-        "mai",
-        "jun",
-        "jul",
-        "ago",
-        "set",
-        "out",
-        "nov",
-        "dez",
-    ]
-    _nome_curto = (
-        st.session_state.usuario_nome.split()[0]
-        if st.session_state.usuario_nome
-        else "Gestor"
-    )
-    st.markdown(
-        f"<div style='display:flex;align-items:center;justify-content:space-between;"
-        f"margin-bottom:12px;'>"
-        f"<div><h3 style='color:#0A2540;margin:0;font-size:1.25rem;font-weight:800;'>"
-        f"Olá, {_nome_curto} 👋</h3>"
-        f"<p style='color:#94A3B8;font-size:12px;margin:2px 0 0;'>"
-        f"{_ds}, {_hoje.day} {_meses_pt[_hoje.month - 1]} {_hoje.year}</p></div>"
-        f"<span style='background:#EFF6FF;border:1px solid #BFDBFE;border-radius:8px;"
-        f"padding:5px 12px;font-size:11px;font-weight:700;color:#1E40AF;'>"
-        f"● {st.session_state.perfil}</span>"
-        f"</div>",
-        unsafe_allow_html=True,
-    )
-
-    # ── CSS do Grid de Alunos ───────────────────────────────────────────────
+    # ── CSS Global do Dashboard ─────────────────────────────────────────────
     st.markdown("""
 <style>
 .hg-avatar-wrap { display:flex; align-items:center; justify-content:center; position:relative; }
@@ -898,196 +860,285 @@ if st.session_state.menu_atual == "Principal":
 .hg-niver-passou { color:#94A3B8; }
 </style>""", unsafe_allow_html=True)
 
-    # ── Próximas Avaliações (compacto — só aparece se houver) ───────────────
-    _agendamentos = get_agendamentos_pendentes(limite=6)
-    if _agendamentos:
-        with st.expander(f"🗓️ Próximas Avaliações — {len(_agendamentos)} pendente(s)", expanded=False):
-            _c_ag1, _c_ag2 = st.columns(2, gap="small")
-            for _i, _ag in enumerate(_agendamentos):
+    # ── Cabeçalho: Saudação + Data + Relógio SP ─────────────────────────────
+    _hoje = datetime.date.today()
+    _ds = ["Segunda-feira", "Terça-feira", "Quarta-feira", "Quinta-feira",
+           "Sexta-feira", "Sábado", "Domingo"][_hoje.weekday()]
+    _meses_pt_full = ["Janeiro","Fevereiro","Março","Abril","Maio","Junho",
+                      "Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"]
+    _meses_abrev   = ["jan","fev","mar","abr","mai","jun","jul","ago","set","out","nov","dez"]
+    _nome_curto = (
+        st.session_state.usuario_nome.split()[0]
+        if st.session_state.usuario_nome else "Gestor"
+    )
+
+    _col_greet, _col_clock = st.columns([3, 1], gap="small", vertical_alignment="center")
+
+    with _col_greet:
+        st.markdown(
+            f"<div style='margin-bottom:4px;'>"
+            f"<h3 style='color:#0A2540;margin:0;font-size:1.2rem;font-weight:800;line-height:1.3;'>"
+            f"Olá, {_nome_curto} 👋</h3>"
+            f"<p style='color:#475569;font-size:13px;font-weight:600;margin:2px 0 0;'>"
+            f"📅 {_ds}, {_hoje.day:02d} de {_meses_pt_full[_hoje.month-1]} de {_hoje.year}"
+            f"&nbsp;&nbsp;"
+            f"<span style='background:#EFF6FF;border:1px solid #BFDBFE;border-radius:6px;"
+            f"padding:2px 8px;font-size:11px;font-weight:700;color:#1E40AF;'>"
+            f"● {st.session_state.perfil}</span>"
+            f"</p></div>",
+            unsafe_allow_html=True,
+        )
+
+    with _col_clock:
+        st.markdown(
+            """
+<div style='text-align:right; padding:6px 0;'>
+  <div id="hg_clock_h"
+       style='font-size:1.7rem; font-weight:900; color:#1E40AF;
+              font-family:monospace; letter-spacing:2px; line-height:1;'>
+    --:--:--
+  </div>
+  <div style='font-size:10px; color:#94A3B8; font-weight:600; margin-top:2px;'>
+    🕒 Horário de São Paulo
+  </div>
+</div>
+<script>
+(function(){
+  function _tick(){
+    var el = document.getElementById('hg_clock_h');
+    if (!el){ setTimeout(_tick, 150); return; }
+    var t = new Date().toLocaleTimeString('pt-BR',
+      {timeZone:'America/Sao_Paulo', hour:'2-digit', minute:'2-digit', second:'2-digit'});
+    el.textContent = t;
+  }
+  _tick();
+  setInterval(_tick, 1000);
+})();
+</script>""",
+            unsafe_allow_html=True,
+        )
+
+    st.markdown("<hr style='margin:8px 0 10px;border-color:#E2E8F0;'/>", unsafe_allow_html=True)
+
+    # ── Layout principal: Grid (esq) + Avaliações (dir) ─────────────────────
+    _col_grid, _col_agenda = st.columns([3, 1], gap="large")
+
+    # ════════════════════════════════════════════════
+    # COLUNA DIREITA — Próximas Avaliações (sempre visível)
+    # ════════════════════════════════════════════════
+    with _col_agenda:
+        st.markdown(
+            "<p style='font-weight:800;color:#0A2540;font-size:0.95rem;margin:0 0 8px;'>"
+            "🗓️ Próximas Avaliações</p>",
+            unsafe_allow_html=True,
+        )
+        _agendamentos = get_agendamentos_pendentes(limite=8)
+        if _agendamentos:
+            for _ag in _agendamentos:
                 _nm = ((_ag.get("alunos") or {}).get("nome") or _ag.get("nome_aluno") or "—")
                 _hr = _ag.get("horario") or _ag.get("data_hora") or "—"
-                _dt = _ag.get("data") or ""
-                (_c_ag1 if _i % 2 == 0 else _c_ag2).markdown(
-                    f"🕒 **{_hr}** {('· ' + _dt[:10]) if _dt else ''} — {_nm}"
-                )
-
-    st.markdown("<div style='height:4px'></div>", unsafe_allow_html=True)
-
-    # ── Cabeçalho do Grid ───────────────────────────────────────────────────
-    from database import buscar_alunos_geral
-    _hg_c_titulo, _hg_c_busca, _hg_c_turma, _hg_c_pg = st.columns(
-        [1.4, 2.5, 1.8, 0.9], vertical_alignment="bottom", gap="small"
-    )
-    _hg_c_titulo.markdown(
-        "<p style='font-weight:800;color:#0A2540;font-size:1.05rem;margin:0;'>👥 Alunos Ativos</p>",
-        unsafe_allow_html=True,
-    )
-    _hg_busca = _hg_c_busca.text_input(
-        "Buscar:", placeholder="🔍 Nome ou turma…",
-        label_visibility="collapsed", key="hg_busca"
-    )
-
-    # Carregar dados
-    _df_alunos = buscar_alunos_geral("")
-    _df_ultima  = load_frequencia_ultima_presenca()
-
-    if not _df_alunos.empty:
-        # Merge com última presença
-        if not _df_ultima.empty:
-            _df_hg = _df_alunos.merge(_df_ultima, on="id", how="left")
+                _dt = str(_ag.get("data") or "")
+                _dt_fmt = ""
+                if _dt and len(_dt) >= 10:
+                    try:
+                        _dp = datetime.date.fromisoformat(_dt[:10])
+                        _dt_fmt = f"{_dp.day:02d}/{_dp.month:02d}"
+                    except Exception:
+                        _dt_fmt = _dt[:5]
+                with st.container(border=True):
+                    st.markdown(
+                        f"<div style='font-size:12px;line-height:1.4;'>"
+                        f"<span style='font-weight:700;color:#1E40AF;'>🕒 {_hr}"
+                        f"{(' · ' + _dt_fmt) if _dt_fmt else ''}</span><br>"
+                        f"<span style='color:#0F172A;'>{_nm}</span>"
+                        f"</div>",
+                        unsafe_allow_html=True,
+                    )
         else:
-            _df_hg = _df_alunos.copy()
-            _df_hg["ultima_presenca"] = pd.NaT
+            st.info("Agenda livre ✅", icon=None)
 
-        _df_hg["ultima_presenca"] = pd.to_datetime(_df_hg["ultima_presenca"], errors="coerce")
-
-        # Birthday
-        _df_hg["_dt_nasc"] = pd.to_datetime(_df_hg["data_nascimento"], errors="coerce")
-        _df_hg["_dia_n"]   = _df_hg["_dt_nasc"].dt.day
-        _df_hg["_mes_n"]   = _df_hg["_dt_nasc"].dt.month
-
-        # Filtro de turma
-        _turmas_disp = sorted(
-            [t for t in _df_hg["turma"].dropna().unique().tolist() if str(t).strip()],
-            key=str
+    # ════════════════════════════════════════════════
+    # COLUNA ESQUERDA — Grid de Alunos
+    # ════════════════════════════════════════════════
+    with _col_grid:
+        from database import buscar_alunos_geral
+        _hg_c_titulo, _hg_c_busca, _hg_c_turma, _hg_c_pg = st.columns(
+            [1.4, 2.5, 1.8, 0.9], vertical_alignment="bottom", gap="small"
         )
-        _hg_turma = _hg_c_turma.selectbox(
-            "Turma:", ["Todas"] + _turmas_disp,
-            label_visibility="collapsed", key="hg_turma"
+        _hg_c_titulo.markdown(
+            "<p style='font-weight:800;color:#0A2540;font-size:1.05rem;margin:0;'>👥 Alunos Ativos</p>",
+            unsafe_allow_html=True,
         )
-
-        # Aplicar filtros
-        _df_grid = _df_hg.copy()
-        if _hg_busca and len(_hg_busca.strip()) >= 2:
-            _b = _hg_busca.strip().lower()
-            _df_grid = _df_grid[
-                _df_grid["nome"].str.lower().str.contains(_b, na=False) |
-                _df_grid["turma"].str.lower().str.contains(_b, na=False)
-            ]
-        if _hg_turma != "Todas":
-            _df_grid = _df_grid[_df_grid["turma"] == _hg_turma]
-
-        _df_grid = _df_grid.sort_values("nome").reset_index(drop=True)
-
-        # Paginação
-        _hg_ppp   = 20
-        _hg_total = max(1, math.ceil(len(_df_grid) / _hg_ppp))
-        _hg_pg    = _hg_c_pg.number_input(
-            f"Pág/{_hg_total}", min_value=1, max_value=_hg_total, value=1,
-            label_visibility="collapsed", key="hg_pg"
-        )
-        _hg_ini = (_hg_pg - 1) * _hg_ppp
-        _df_pag = _df_grid.iloc[_hg_ini: _hg_ini + _hg_ppp]
-
-        # Contagem
-        st.caption(
-            f"{len(_df_grid)} aluno(s) encontrado(s) · página {_hg_pg} de {_hg_total}"
+        _hg_busca = _hg_c_busca.text_input(
+            "Buscar:", placeholder="🔍 Nome ou turma…",
+            label_visibility="collapsed", key="hg_busca"
         )
 
-        # ── Cabeçalho das colunas ─────────────────────────────────────────
-        _h0, _h1, _h2, _h3, _h4, _h5 = st.columns(
-            [0.5, 3.2, 1.6, 1.5, 1.8, 0.9], gap="small"
-        )
-        for _hdr, _col in zip(
-            ["", "**Nome**", "**Turma**", "**🎂 Aniversário**", "**⏱ Última Presença**", ""],
-            [_h0, _h1, _h2, _h3, _h4, _h5],
-        ):
-            if _hdr:
-                _col.markdown(
-                    f"<span style='font-size:11px;color:#64748B;font-weight:700;'>{_hdr}</span>",
-                    unsafe_allow_html=True,
-                )
+        # Carregar dados
+        _df_alunos = buscar_alunos_geral("")
+        _df_ultima  = load_frequencia_ultima_presenca()
 
-        st.markdown("<div style='height:2px'></div>", unsafe_allow_html=True)
+        if not _df_alunos.empty:
+            # Merge com última presença
+            if not _df_ultima.empty:
+                _df_hg = _df_alunos.merge(_df_ultima, on="id", how="left")
+            else:
+                _df_hg = _df_alunos.copy()
+                _df_hg["ultima_presenca"] = pd.NaT
 
-        # ── Linhas do Grid ────────────────────────────────────────────────
-        _hoje_hg    = datetime.date.today()
-        _hoje_dia   = _hoje_hg.day
-        _hoje_mes   = _hoje_hg.month
-        _meses_abr  = ["","jan","fev","mar","abr","mai","jun","jul","ago","set","out","nov","dez"]
+            _df_hg["ultima_presenca"] = pd.to_datetime(_df_hg["ultima_presenca"], errors="coerce")
 
-        for _, _r in _df_pag.iterrows():
-            with st.container(border=True):
-                _ca, _cb, _cc, _cd, _ce, _cf = st.columns(
-                    [0.5, 3.2, 1.6, 1.5, 1.8, 0.9], gap="small",
-                    vertical_alignment="center"
-                )
+            # Birthday
+            _df_hg["_dt_nasc"] = pd.to_datetime(_df_hg["data_nascimento"], errors="coerce")
+            _df_hg["_dia_n"]   = _df_hg["_dt_nasc"].dt.day
+            _df_hg["_mes_n"]   = _df_hg["_dt_nasc"].dt.month
 
-                # Foto
-                _foto   = str(_r.get("url_foto") or "").strip()
-                _inic   = "".join(p[0].upper() for p in str(_r["nome"]).split()[:2] if p)
-                if _foto.startswith("http"):
-                    _av_html = (
-                        f'<div class="hg-avatar-wrap">'
-                        f'<img class="hg-avatar" src="{_foto}" alt="{_inic}" '
-                        f"onerror=\"this.outerHTML='<div class=hg-initials>{_inic}</div>'\">"
-                        f'</div>'
+            # Filtro de turma
+            _turmas_disp = sorted(
+                [t for t in _df_hg["turma"].dropna().unique().tolist() if str(t).strip()],
+                key=str
+            )
+            _hg_turma = _hg_c_turma.selectbox(
+                "Turma:", ["Todas"] + _turmas_disp,
+                label_visibility="collapsed", key="hg_turma"
+            )
+
+            # Aplicar filtros
+            _df_grid = _df_hg.copy()
+            if _hg_busca and len(_hg_busca.strip()) >= 2:
+                _b = _hg_busca.strip().lower()
+                _df_grid = _df_grid[
+                    _df_grid["nome"].str.lower().str.contains(_b, na=False) |
+                    _df_grid["turma"].str.lower().str.contains(_b, na=False)
+                ]
+            if _hg_turma != "Todas":
+                _df_grid = _df_grid[_df_grid["turma"] == _hg_turma]
+
+            _df_grid = _df_grid.sort_values("nome").reset_index(drop=True)
+
+            # Paginação
+            _hg_ppp   = 20
+            _hg_total = max(1, math.ceil(len(_df_grid) / _hg_ppp))
+            _hg_pg    = _hg_c_pg.number_input(
+                f"Pág/{_hg_total}", min_value=1, max_value=_hg_total, value=1,
+                label_visibility="collapsed", key="hg_pg"
+            )
+            _hg_ini = (_hg_pg - 1) * _hg_ppp
+            _df_pag = _df_grid.iloc[_hg_ini: _hg_ini + _hg_ppp]
+
+            # Contagem
+            st.caption(
+                f"{len(_df_grid)} aluno(s) encontrado(s) · página {_hg_pg} de {_hg_total}"
+            )
+
+            # ── Cabeçalho das colunas ──────────────────────────────────
+            _h0, _h1, _h2, _h3, _h4, _h5 = st.columns(
+                [0.5, 3.2, 1.6, 1.5, 1.8, 0.9], gap="small"
+            )
+            for _hdr, _col in zip(
+                ["", "**Nome**", "**Turma**", "**🎂 Aniversário**", "**⏱ Última Presença**", ""],
+                [_h0, _h1, _h2, _h3, _h4, _h5],
+            ):
+                if _hdr:
+                    _col.markdown(
+                        f"<span style='font-size:11px;color:#64748B;font-weight:700;'>{_hdr}</span>",
+                        unsafe_allow_html=True,
                     )
-                else:
-                    _av_html = f'<div class="hg-avatar-wrap"><div class="hg-initials">{_inic}</div></div>'
-                with _ca:
-                    st.markdown(_av_html, unsafe_allow_html=True)
 
-                # Nome
-                _cb.markdown(
-                    f"<span style='font-size:13.5px;font-weight:700;color:#0F172A;'>{_r['nome']}</span>",
-                    unsafe_allow_html=True,
-                )
+            st.markdown("<div style='height:2px'></div>", unsafe_allow_html=True)
 
-                # Turma
-                _turma_v = str(_r.get("turma") or "—").strip() or "—"
-                _cc.markdown(
-                    f"<span style='font-size:12px;color:#475569;'>{_turma_v}</span>",
-                    unsafe_allow_html=True,
-                )
+            # ── Linhas do Grid ─────────────────────────────────────────
+            _hoje_hg   = datetime.date.today()
+            _hoje_dia  = _hoje_hg.day
+            _hoje_mes  = _hoje_hg.month
+            _meses_abr = ["","jan","fev","mar","abr","mai","jun","jul","ago","set","out","nov","dez"]
 
-                # Aniversário
-                _dia_n = _r.get("_dia_n")
-                _mes_n = _r.get("_mes_n")
-                if pd.notna(_dia_n) and pd.notna(_mes_n):
-                    _dia_n, _mes_n = int(_dia_n), int(_mes_n)
-                    _nasc_str = f"{_dia_n:02d}/{_meses_abr[_mes_n]}"
-                    if _mes_n == _hoje_mes and _dia_n == _hoje_dia:
-                        _niver_html = f"<span class='hg-niver-hoje'>🎉 {_nasc_str} HOJE!</span>"
-                    elif (_mes_n > _hoje_mes) or (_mes_n == _hoje_mes and _dia_n > _hoje_dia):
-                        _niver_html = f"<span class='hg-niver-breve'>⏳ {_nasc_str}</span>"
+            for _, _r in _df_pag.iterrows():
+                with st.container(border=True):
+                    _ca, _cb, _cc, _cd, _ce, _cf = st.columns(
+                        [0.5, 3.2, 1.6, 1.5, 1.8, 0.9], gap="small",
+                        vertical_alignment="center"
+                    )
+
+                    # Foto
+                    _foto = str(_r.get("url_foto") or "").strip()
+                    _inic = "".join(p[0].upper() for p in str(_r["nome"]).split()[:2] if p)
+                    if _foto.startswith("http"):
+                        _av_html = (
+                            f'<div class="hg-avatar-wrap">'
+                            f'<img class="hg-avatar" src="{_foto}" alt="{_inic}" '
+                            f"onerror=\"this.outerHTML='<div class=hg-initials>{_inic}</div>'\">"
+                            f'</div>'
+                        )
                     else:
-                        _niver_html = f"<span class='hg-niver-passou'>🎈 {_nasc_str}</span>"
-                else:
-                    _niver_html = "<span style='color:#CBD5E1;'>—</span>"
-                _cd.markdown(
-                    f"<span style='font-size:12px;'>{_niver_html}</span>",
-                    unsafe_allow_html=True,
-                )
+                        _av_html = f'<div class="hg-avatar-wrap"><div class="hg-initials">{_inic}</div></div>'
+                    with _ca:
+                        st.markdown(_av_html, unsafe_allow_html=True)
 
-                # Última Presença
-                _up = _r.get("ultima_presenca")
-                if pd.notna(_up):
-                    _up_dt   = pd.Timestamp(_up).date()
-                    _up_dias = (_hoje_hg - _up_dt).days
-                    _up_cor  = "#10B981" if _up_dias <= 7 else ("#F59E0B" if _up_dias <= 30 else "#EF4444")
-                    _up_txt  = _up_dt.strftime("%d/%m/%y")
-                    _up_html = (
-                        f"<span style='font-size:12px;font-weight:700;color:{_up_cor};'>"
-                        f"{_up_txt}</span>"
-                        f"<span style='font-size:10px;color:#94A3B8;margin-left:4px;'>"
-                        f"({_up_dias}d)</span>"
+                    # Nome
+                    _cb.markdown(
+                        f"<span style='font-size:13.5px;font-weight:700;color:#0F172A;'>"
+                        f"{_r['nome']}</span>",
+                        unsafe_allow_html=True,
                     )
-                else:
-                    _up_html = "<span style='font-size:12px;color:#CBD5E1;'>Sem registro</span>"
-                _ce.markdown(_up_html, unsafe_allow_html=True)
 
-                # Botão Ficha
-                with _cf:
-                    if st.button("🩺", key=f"hg_{_r['id']}", use_container_width=True, help="Abrir Prontuário"):
-                        from database import buscar_aluno_por_id
-                        _aluno_fresh = buscar_aluno_por_id(_r["id"]) or _r.to_dict()
-                        st.session_state.aluno_prontuario = _aluno_fresh
-                        st.session_state.origem_prontuario = "Principal"
-                        st.session_state.menu_atual = "Portal do Aluno"
-                        st.rerun()
-    else:
-        st.info("Nenhum aluno ativo encontrado.")
+                    # Turma
+                    _turma_v = str(_r.get("turma") or "—").strip() or "—"
+                    _cc.markdown(
+                        f"<span style='font-size:12px;color:#475569;'>{_turma_v}</span>",
+                        unsafe_allow_html=True,
+                    )
+
+                    # Aniversário
+                    _dia_n = _r.get("_dia_n")
+                    _mes_n = _r.get("_mes_n")
+                    if pd.notna(_dia_n) and pd.notna(_mes_n):
+                        _dia_n, _mes_n = int(_dia_n), int(_mes_n)
+                        _nasc_str = f"{_dia_n:02d}/{_meses_abr[_mes_n]}"
+                        if _mes_n == _hoje_mes and _dia_n == _hoje_dia:
+                            _niver_html = f"<span class='hg-niver-hoje'>🎉 {_nasc_str} HOJE!</span>"
+                        elif (_mes_n > _hoje_mes) or (_mes_n == _hoje_mes and _dia_n > _hoje_dia):
+                            _niver_html = f"<span class='hg-niver-breve'>⏳ {_nasc_str}</span>"
+                        else:
+                            _niver_html = f"<span class='hg-niver-passou'>🎈 {_nasc_str}</span>"
+                    else:
+                        _niver_html = "<span style='color:#CBD5E1;'>—</span>"
+                    _cd.markdown(
+                        f"<span style='font-size:12px;'>{_niver_html}</span>",
+                        unsafe_allow_html=True,
+                    )
+
+                    # Última Presença
+                    _up = _r.get("ultima_presenca")
+                    if pd.notna(_up):
+                        _up_dt   = pd.Timestamp(_up).date()
+                        _up_dias = (_hoje_hg - _up_dt).days
+                        _up_cor  = "#10B981" if _up_dias <= 7 else ("#F59E0B" if _up_dias <= 30 else "#EF4444")
+                        _up_txt  = _up_dt.strftime("%d/%m/%y")
+                        _up_html = (
+                            f"<span style='font-size:12px;font-weight:700;color:{_up_cor};'>"
+                            f"{_up_txt}</span>"
+                            f"<span style='font-size:10px;color:#94A3B8;margin-left:4px;'>"
+                            f"({_up_dias}d)</span>"
+                        )
+                    else:
+                        _up_html = "<span style='font-size:12px;color:#CBD5E1;'>Sem registro</span>"
+                    _ce.markdown(_up_html, unsafe_allow_html=True)
+
+                    # Botão Ficha
+                    with _cf:
+                        if st.button(
+                            "🩺", key=f"hg_{_r['id']}",
+                            use_container_width=True, help="Abrir Prontuário"
+                        ):
+                            from database import buscar_aluno_por_id
+                            _aluno_fresh = buscar_aluno_por_id(_r["id"]) or _r.to_dict()
+                            st.session_state.aluno_prontuario = _aluno_fresh
+                            st.session_state.origem_prontuario = "Principal"
+                            st.session_state.menu_atual = "Portal do Aluno"
+                            st.rerun()
+        else:
+            st.info("Nenhum aluno ativo encontrado.")
 
 # ==============================================================================
 # 🚀 ROTEAMENTO DE VISTAS
