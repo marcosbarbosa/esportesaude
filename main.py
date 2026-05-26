@@ -845,19 +845,54 @@ if st.session_state.menu_atual == "Principal":
     # ── CSS Global do Dashboard ─────────────────────────────────────────────
     st.markdown("""
 <style>
-.hg-avatar-wrap { display:flex; align-items:center; justify-content:center; position:relative; }
-.hg-avatar { width:44px; height:44px; border-radius:50%; object-fit:cover; object-position:center top;
-  border:2.5px solid #3B82F6; flex-shrink:0;
-  transition:transform 0.25s cubic-bezier(0.34,1.56,0.64,1), box-shadow 0.25s ease;
-  cursor:zoom-in; position:relative; z-index:2; }
-.hg-avatar:hover { transform:scale(3.2); box-shadow:0 10px 32px rgba(0,0,0,0.45); z-index:9999; }
-.hg-initials { width:44px; height:44px; border-radius:50%; flex-shrink:0;
-  background:linear-gradient(135deg,#3B82F6,#06B6D4);
-  display:flex; align-items:center; justify-content:center;
-  color:#fff; font-weight:900; font-size:14px; border:2.5px solid #3B82F6; }
-.hg-niver-hoje { color:#10B981; font-weight:800; }
-.hg-niver-breve { color:#F59E0B; font-weight:700; }
-.hg-niver-passou { color:#94A3B8; }
+.hg-avatar-wrap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.hg-avatar {
+  display: block;
+  width: 42px !important;
+  height: 42px !important;
+  min-width: 42px;
+  min-height: 42px;
+  max-width: 42px;
+  max-height: 42px;
+  aspect-ratio: 1 / 1;
+  border-radius: 50%;
+  object-fit: cover;
+  object-position: center center;
+  flex-shrink: 0;
+  box-shadow: 0 0 0 2.5px #3B82F6, 0 2px 8px rgba(59,130,246,0.25);
+  transition: transform 0.25s cubic-bezier(0.34,1.56,0.64,1), box-shadow 0.25s ease;
+  cursor: zoom-in;
+}
+.hg-avatar:hover {
+  transform: scale(3.5);
+  box-shadow: 0 0 0 2.5px #3B82F6, 0 12px 36px rgba(0,0,0,0.5);
+  z-index: 9999;
+  position: relative;
+}
+.hg-initials {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 42px;
+  height: 42px;
+  min-width: 42px;
+  min-height: 42px;
+  aspect-ratio: 1 / 1;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: linear-gradient(135deg, #3B82F6, #06B6D4);
+  color: #fff;
+  font-weight: 900;
+  font-size: 14px;
+  box-shadow: 0 0 0 2.5px #3B82F6, 0 2px 8px rgba(59,130,246,0.2);
+}
+.hg-niver-hoje  { color: #10B981; font-weight: 800; }
+.hg-niver-breve { color: #F59E0B; font-weight: 700; }
+.hg-niver-passou{ color: #94A3B8; }
 </style>""", unsafe_allow_html=True)
 
     # ── Cabeçalho: Saudação + Data + Relógio SP ─────────────────────────────
