@@ -355,10 +355,22 @@ def gerar_pdf_auditoria_core(falhas, contagem_falhas, turma_aud):
         import unicodedata
         return unicodedata.normalize("NFC", str(txt or "")).encode("latin-1", "replace").decode("latin-1")
 
+    _DSEM_PDF = ["seg","ter","qua","qui","sex","sab","dom"]
+
     def _ult(f):
         raw = f.get("Ultima Presenca") or f.get("\u00daltima Presen\u00e7a") or ""
         v = str(raw).strip()
-        return v if v and v not in ("", "None", "-", "\u2014", "nan") else "Sem registro"
+        if not v or v in ("", "None", "-", "\u2014", "nan"):
+            return "Sem registro"
+        try:
+            _d = datetime.datetime.strptime(v, "%d/%m/%y").date()
+            return f"{v} {_DSEM_PDF[_d.weekday()]}"
+        except Exception:
+            try:
+                _d = datetime.datetime.strptime(v, "%d/%m/%Y").date()
+                return f"{v} {_DSEM_PDF[_d.weekday()]}"
+            except Exception:
+                return v
 
     # ── layout A4 paisagem ─────────────────────────────────────────────────────
     pdf = FPDF(orientation="L", unit="mm", format="A4")
@@ -1607,10 +1619,25 @@ def tela_relatorio():
                         url = str(row.get("url_foto") or "").strip()
                         return "Sim" if url.startswith("http") else "Nao"
 
+                    _DSEM = ["seg","ter","qua","qui","sex","sáb","dom"]
+
+                    def _fmt_dsem(raw):
+                        v = str(raw or "").strip()
+                        if not v or v in ("", "None", "-", "—", "nan"):
+                            return "Sem registro"
+                        try:
+                            _d = datetime.datetime.strptime(v, "%d/%m/%y").date()
+                            return f"{v} {_DSEM[_d.weekday()]}"
+                        except Exception:
+                            try:
+                                _d = datetime.datetime.strptime(v, "%d/%m/%Y").date()
+                                return f"{v} {_DSEM[_d.weekday()]}"
+                            except Exception:
+                                return v
+
                     def _ult_label(row):
                         raw = row.get("Última Presença") or row.get("Ultima Presenca") or ""
-                        v = str(raw).strip()
-                        return v if v and v not in ("", "None", "-", "—", "nan") else "Sem registro"
+                        return _fmt_dsem(raw)
 
                     df_export_rows = [
                         {
@@ -1702,7 +1729,7 @@ def tela_relatorio():
                             c1.write(f["Aluno"])
                             c2.write(f["Turma"])
                             c3.write(f["Pendências"])
-                            c4.write(f.get("Última Presença", "—"))
+                            c4.write(_fmt_dsem(f.get("Última Presença", "—")))
                             with c5:
                                 st.button(
                                     "🩺 Abrir Ficha",
