@@ -30,7 +30,7 @@ _CHAVES = [
 ]
 
 
-@st.cache_data(ttl=60)
+@st.cache_data(ttl=60, show_spinner=False)
 def _ler_cfg_niver() -> dict:
     """Lê todas as chaves de aniversário da tabela configuracoes_sistema."""
     from database import supabase
@@ -139,7 +139,7 @@ def desmarcar_parabenizado(aluno_id: str) -> bool:
         return False
 
 
-@st.cache_data(ttl=30)
+@st.cache_data(ttl=30, show_spinner=False)
 def _ler_parabenizados_ano() -> dict:
     """Retorna {aluno_id: timestamp_str} dos parabenizados no ano atual."""
     from database import supabase

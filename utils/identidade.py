@@ -28,7 +28,7 @@ _DEFAULTS = {
 
 # ── Leitura / escrita ──────────────────────────────────────────────────────────
 
-@st.cache_data(ttl=3600)
+@st.cache_data(ttl=3600, show_spinner=False)
 def get_config() -> dict:
     """Retorna configuração actual (lê do ficheiro; usa defaults se falhar)."""
     try:
@@ -51,7 +51,7 @@ def salvar_config(data: dict) -> None:
 
 # ── Logos em base64 ────────────────────────────────────────────────────────────
 
-@st.cache_data(ttl=3600)
+@st.cache_data(ttl=3600, show_spinner=False)
 def get_logo_b64(nome_ficheiro: str) -> str:
     """Devolve string base64 da imagem ou '' se não existir."""
     if not nome_ficheiro:
@@ -66,7 +66,7 @@ def get_logo_b64(nome_ficheiro: str) -> str:
         return ""
 
 
-@st.cache_data(ttl=3600)
+@st.cache_data(ttl=3600, show_spinner=False)
 def get_logo_data_url(nome_ficheiro: str) -> str:
     """Devolve data:image/png;base64,... para uso directo em HTML src=."""
     b64 = get_logo_b64(nome_ficheiro)

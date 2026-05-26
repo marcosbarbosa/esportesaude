@@ -162,7 +162,7 @@ def recuperar_senha_usuario(email):
     return False, "Função de recuperação em manutenção."
 
 
-@st.cache_data(ttl=180)
+@st.cache_data(ttl=180, show_spinner=False)
 def get_agendamentos_pendentes(limite=8):
     """Retorna os agendamentos pendentes para a dashboard do main.py"""
     try:
@@ -191,7 +191,7 @@ def get_agendamentos_pendentes(limite=8):
 # ==============================================================================
 # 🏛️ GESTÃO DE TURMAS
 # ==============================================================================
-@st.cache_data(ttl=300)
+@st.cache_data(ttl=300, show_spinner=False)
 def get_todas_turmas(ativas_apenas=False):
     try:
         query = supabase.from_("turmas").select("*").order("nome")
@@ -203,7 +203,7 @@ def get_todas_turmas(ativas_apenas=False):
         return pd.DataFrame()
 
 
-@st.cache_data(ttl=300)
+@st.cache_data(ttl=300, show_spinner=False)
 def get_ocupacao_turmas(limite_padrao=40):
     try:
         res = (
@@ -306,7 +306,7 @@ def excluir_turma(turma_id):
 # ==============================================================================
 # 🚀 PIPELINE DE INSCRIÇÕES (CADASTRO FULL 28 CAMPOS)
 # ==============================================================================
-@st.cache_data(ttl=180)
+@st.cache_data(ttl=180, show_spinner=False)
 def get_pre_cadastros_pendentes():
     try:
         res = (
@@ -410,7 +410,7 @@ def buscar_alunos_geral(termo="", incluir_inativos=False):
         return pd.DataFrame()
 
 
-@st.cache_data(ttl=120)
+@st.cache_data(ttl=120, show_spinner=False)
 def buscar_aluno_por_id(aluno_id):
     try:
         res = (
@@ -664,7 +664,7 @@ def obter_dependencias_lote(ids: list) -> dict:
     return resultado
 
 
-@st.cache_data(ttl=120)
+@st.cache_data(ttl=120, show_spinner=False)
 def get_alunos_por_turma(turma_nome):
     try:
         res = (
@@ -679,7 +679,7 @@ def get_alunos_por_turma(turma_nome):
         return pd.DataFrame()
 
 
-@st.cache_data(ttl=300)
+@st.cache_data(ttl=300, show_spinner=False)
 def listar_datas_aulas_registradas() -> pd.DataFrame:
     """
     Retorna DataFrame com todas as datas que têm registros em frequencia ou diario_aulas.
@@ -1127,7 +1127,7 @@ def salvar_avaliacao_prontuario(
         return False, str(e)
 
 
-@st.cache_data(ttl=120)
+@st.cache_data(ttl=120, show_spinner=False)
 def get_avaliacoes_aluno(aluno_id):
     try:
         res = (
@@ -1166,7 +1166,7 @@ def get_avaliacoes_aluno(aluno_id):
 # ==============================================================================
 # 📊 BI PRIME - INTELIGÊNCIA DE NEGÓCIOS
 # ==============================================================================
-@st.cache_data(ttl=120)
+@st.cache_data(ttl=120, show_spinner=False)
 def bi_resumo_studio():
     hoje = datetime.date.today()
     c30 = (hoje - datetime.timedelta(days=30)).isoformat()
@@ -1207,7 +1207,7 @@ def bi_resumo_studio():
     }
 
 
-@st.cache_data(ttl=120)
+@st.cache_data(ttl=120, show_spinner=False)
 def bi_evolucao_cadastros():
     try:
         r = supabase.from_("alunos").select("created_at").execute()
@@ -1227,7 +1227,7 @@ def bi_evolucao_cadastros():
         return pd.DataFrame()
 
 
-@st.cache_data(ttl=120)
+@st.cache_data(ttl=120, show_spinner=False)
 def bi_frequencia_turmas(dias=30):
     try:
         corte = (datetime.date.today() - datetime.timedelta(days=dias)).isoformat()
@@ -1250,7 +1250,7 @@ def bi_frequencia_turmas(dias=30):
         return pd.DataFrame()
 
 
-@st.cache_data(ttl=120)
+@st.cache_data(ttl=120, show_spinner=False)
 def bi_distribuicao_risco():
     try:
         r = supabase.from_("alunos").select("cor_alerta_atual").eq("status", "Ativo").execute()
@@ -1265,7 +1265,7 @@ def bi_distribuicao_risco():
         return pd.DataFrame()
 
 
-@st.cache_data(ttl=120)
+@st.cache_data(ttl=120, show_spinner=False)
 def bi_dores_studio():
     try:
         r = supabase.from_("anamnese_dores").select("regiao").execute()
@@ -1279,7 +1279,7 @@ def bi_dores_studio():
         return pd.DataFrame()
 
 
-@st.cache_data(ttl=120)
+@st.cache_data(ttl=120, show_spinner=False)
 def bi_alunos_risco_abandono(dias=30):
     try:
         hoje = datetime.date.today()
@@ -1317,7 +1317,7 @@ def bi_alunos_risco_abandono(dias=30):
         return pd.DataFrame()
 
 
-@st.cache_data(ttl=120)
+@st.cache_data(ttl=120, show_spinner=False)
 def bi_presencas_periodo(data_inicio: str, data_fim: str) -> pd.DataFrame:
     """
     Retorna todos os registos PRESENTE no intervalo.
@@ -1350,7 +1350,7 @@ def bi_presencas_periodo(data_inicio: str, data_fim: str) -> pd.DataFrame:
         return pd.DataFrame()
 
 
-@st.cache_data(ttl=120)
+@st.cache_data(ttl=120, show_spinner=False)
 def bi_dados_individuais(aluno_id):
     """
     Retorna dict com DataFrames e listas para o relatório BI individual do aluno.
@@ -1397,7 +1397,7 @@ def atualizar_turma_aluno(aluno_id, nova_turma):
         return False
 
 
-@st.cache_data(ttl=120)
+@st.cache_data(ttl=120, show_spinner=False)
 def get_estatisticas_frequencia_aluno(aluno_id):
     try:
         res = supabase.from_("frequencia").select("status").eq("aluno_id", str(aluno_id)).execute()
@@ -1411,7 +1411,7 @@ def get_estatisticas_frequencia_aluno(aluno_id):
         return {"total": 0, "presentes": 0, "faltas": 0, "percentual": 0.0}
 
 
-@st.cache_data(ttl=180)
+@st.cache_data(ttl=180, show_spinner=False)
 def get_ultima_presenca_batch(ids: tuple) -> dict:
     """
     Recebe uma tuple de aluno_ids e retorna {str(aluno_id): 'DD/MM/AA'}.
@@ -1455,7 +1455,7 @@ def excluir_avaliacao_prontuario(aval_id):
         return False, str(e)
 
 
-@st.cache_data(ttl=120)
+@st.cache_data(ttl=120, show_spinner=False)
 def get_historico_aulas_aluno(aluno_id):
     try:
         turma_aluno = supabase.from_("alunos").select("turma").eq("id", str(aluno_id)).execute().data[0]["turma"]
@@ -1486,7 +1486,7 @@ def get_historico_aulas_aluno(aluno_id):
         return []
 
 
-@st.cache_data(ttl=300)
+@st.cache_data(ttl=300, show_spinner=False)
 def get_crm_templates():
     try:
         return pd.DataFrame(supabase.from_("crm_templates").select("*").order("titulo").execute().data)
@@ -1517,7 +1517,7 @@ def salvar_atestado_temporario(aluno_id, data_registro, motivo, url_documento):
         return False, str(e)
 
 
-@st.cache_data(ttl=120)
+@st.cache_data(ttl=120, show_spinner=False)
 def get_atestados_temporarios(aluno_id):
     try:
         df = pd.DataFrame(
@@ -1551,7 +1551,7 @@ def salvar_anamnese_dores(aluno_id, data_avaliacao, regioes, intensidade, observ
         return False, str(e)
 
 
-@st.cache_data(ttl=120)
+@st.cache_data(ttl=120, show_spinner=False)
 def buscar_historico_dores(aluno_id):
     try:
         res = (

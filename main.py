@@ -342,7 +342,7 @@ if rota in ["inscricao", "pesquisa", "validar"]:
 # ==============================================================================
 # 📦 FUNÇÕES CACHED (nível de módulo — nunca dentro de condicionais)
 # ==============================================================================
-@st.cache_data(ttl=3600)
+@st.cache_data(ttl=3600, show_spinner=False)
 def load_niver_geral():
     try:
         from database import buscar_alunos_geral

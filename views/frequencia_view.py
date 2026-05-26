@@ -83,17 +83,17 @@ def verificar_dia_letivo(data):
     return True, "Dia Letivo Válido"
 
 
-@st.cache_data(ttl=300)
+@st.cache_data(ttl=300, show_spinner=False)
 def obter_todos_alunos_cache():
     return buscar_alunos_geral("")
 
 
-@st.cache_data(ttl=300)
+@st.cache_data(ttl=300, show_spinner=False)
 def obter_todos_alunos_com_inativos_cache():
     return buscar_alunos_geral("", incluir_inativos=True)
 
 
-@st.cache_data(ttl=300)
+@st.cache_data(ttl=300, show_spinner=False)
 def verificar_aniversariante_hoje_cache() -> bool:
     """Retorna True se há algum aluno aniversariando hoje. Cache de 5 min."""
     try:
