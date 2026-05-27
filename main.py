@@ -1023,8 +1023,8 @@ if st.session_state.menu_atual == "Principal":
                 _aluno_data = _ag.get("alunos") or {}
                 _nm  = (_aluno_data.get("nome") or _ag.get("nome_aluno") or "—")
                 _aid = _aluno_data.get("id") or _ag.get("aluno_id")
-                _hr  = (_ag.get("horario") or _ag.get("data_hora") or "—")
-                _dt  = str(_ag.get("data") or "")
+                _hr  = (_ag.get("horario") or "—")
+                _dt  = str(_ag.get("data_agendamento") or _ag.get("data") or "")
                 _dt_fmt = ""
                 if _dt and len(_dt) >= 10:
                     try:
