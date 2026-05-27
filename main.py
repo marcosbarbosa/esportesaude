@@ -985,10 +985,19 @@ if st.session_state.menu_atual == "Principal":
             "<p style='font-weight:800;color:#0A2540;font-size:1.05rem;margin:0;'>👥 Alunos Ativos</p>",
             unsafe_allow_html=True,
         )
-        _hg_busca = _hg_c_busca.text_input(
-            "Buscar:", placeholder="🔍 Nome ou turma…",
-            label_visibility="collapsed", key="hg_busca"
-        )
+        try:
+            from st_keyup import st_keyup as _st_keyup
+            with _hg_c_busca:
+                _hg_busca = _st_keyup(
+                    "Buscar:", placeholder="🔍 Nome ou turma…",
+                    label_visibility="collapsed", key="hg_busca",
+                    debounce=300,
+                )
+        except Exception:
+            _hg_busca = _hg_c_busca.text_input(
+                "Buscar:", placeholder="🔍 Nome ou turma…",
+                label_visibility="collapsed", key="hg_busca"
+            )
 
         # Carregar dados
         _df_alunos = buscar_alunos_geral("")
