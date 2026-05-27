@@ -28,6 +28,7 @@ from modulos_frequencia.tab_tablet import renderizar_aba_terminal
 from modulos_frequencia.tab_diario import renderizar_aba_diario
 from modulos_frequencia.tab_dossie import renderizar_aba_dossie
 from modulos_frequencia.tab_emergencia import renderizar_aba_emergencia
+from modulos_frequencia.tab_lgpd import renderizar_aba_lgpd
 from modulos_frequencia.tab_niver import renderizar_aba_niver
 from modulos_frequencia.tab_admin import renderizar_aba_admin
 from utils.texto import remover_acentos
@@ -433,7 +434,7 @@ def tela_frequencia():
     )
     eh_admin = email_atual == ADMIN_MASTER
 
-    nomes_abas = ["📱 Chamada Tablet", "📝 Diário", "🖨️ Dossiê", "🚨 Emergência", label_niver]
+    nomes_abas = ["📱 Chamada Tablet", "📝 Diário", "🖨️ Dossiê", "🚨 Emergência", "🔒 LGPD", label_niver]
     if eh_admin:
         nomes_abas.append("🗑️ Admin")
 
@@ -454,8 +455,11 @@ def tela_frequencia():
         renderizar_aba_emergencia(df_alunos, turma_selecionada)
 
     with abas[4]:
+        renderizar_aba_lgpd()
+
+    with abas[5]:
         renderizar_aba_niver()
 
     if eh_admin:
-        with abas[5]:
+        with abas[6]:
             renderizar_aba_admin()

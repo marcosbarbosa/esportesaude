@@ -743,6 +743,23 @@ def get_alunos_por_turma(turma_nome):
         return pd.DataFrame()
 
 
+@st.cache_data(ttl=120, show_spinner=False)
+def get_alunos_sem_autorizacao_imagem() -> pd.DataFrame:
+    """Retorna alunos ativos que NÃO autorizaram (ou não responderam) o uso de imagem."""
+    try:
+        res = (
+            supabase.from_("alunos")
+            .select("id,nome,url_foto,data_nascimento,turma,status,termo_imagem")
+            .neq("status", "Inativo")
+            .or_("termo_imagem.is.null,termo_imagem.eq.false")
+            .order("nome")
+            .execute()
+        )
+        return pd.DataFrame(res.data) if res.data else pd.DataFrame()
+    except Exception:
+        return pd.DataFrame()
+
+
 @st.cache_data(ttl=300, show_spinner=False)
 def listar_datas_aulas_registradas() -> pd.DataFrame:
     """
