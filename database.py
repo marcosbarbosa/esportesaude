@@ -657,7 +657,7 @@ def criar_agendamento(aluno_id, data, hora, tipo="Avaliação"):
             "aluno_id":         str(aluno_id),
             "data_agendamento": str(data),
             "horario":          str(hora),
-            "tipo":             str(tipo),
+            "motivo":           str(tipo),
             "status":           "Pendente",
         }).execute()
         _inv_agendamentos()
