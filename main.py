@@ -1058,6 +1058,22 @@ if st.session_state.menu_atual == "Principal":
     # COLUNA DIREITA — Próximas Avaliações (sempre visível)
     # ════════════════════════════════════════════════
     with _col_agenda:
+        # CSS: reduz fonte dos botões dos cards de agendamento em 35%
+        st.markdown("""<style>
+        div[data-testid="column"] + div[data-testid="column"]
+          div[data-testid="stVerticalBlockBorderWrapper"]
+          button p {
+            font-size: 9px !important;
+            line-height: 1.2 !important;
+        }
+        div[data-testid="column"] + div[data-testid="column"]
+          div[data-testid="stVerticalBlockBorderWrapper"]
+          button {
+            padding: 3px 6px !important;
+            min-height: unset !important;
+        }
+        </style>""", unsafe_allow_html=True)
+
         _ag_hd_col, _ag_add_col = st.columns([3, 1], vertical_alignment="center")
         _ag_hd_col.markdown(
             "<p style='font-weight:800;color:#0A2540;font-size:0.95rem;margin:0 0 6px;'>"
@@ -1087,7 +1103,7 @@ if st.session_state.menu_atual == "Principal":
                 _nm_curto = (_nm[:16] + "…") if len(_nm) > 16 else _nm
                 with st.container(border=True):
                     st.markdown(
-                        f"<div style='font-size:11px;color:#64748B;margin-bottom:2px;'>"
+                        f"<div style='font-size:7px;color:#64748B;margin-bottom:2px;'>"
                         f"🕒 <b>{_hr}</b>{(' · ' + _dt_fmt) if _dt_fmt else ''}</div>",
                         unsafe_allow_html=True,
                     )
@@ -1109,7 +1125,7 @@ if st.session_state.menu_atual == "Principal":
                             st.rerun()
                     else:
                         _c_nm.markdown(
-                            f"<div style='font-size:12px;font-weight:600;"
+                            f"<div style='font-size:8px;font-weight:600;"
                             f"color:#0F172A;'>{_nm_curto}</div>",
                             unsafe_allow_html=True,
                         )
