@@ -943,17 +943,27 @@ if st.session_state.menu_atual == "Principal":
     # COLUNA DIREITA — Próximas Avaliações (sempre visível)
     # ════════════════════════════════════════════════
     with _col_agenda:
-        st.markdown(
-            "<p style='font-weight:800;color:#0A2540;font-size:0.95rem;margin:0 0 8px;'>"
+        _ag_hd_col, _ag_add_col = st.columns([3, 1], vertical_alignment="center")
+        _ag_hd_col.markdown(
+            "<p style='font-weight:800;color:#0A2540;font-size:0.95rem;margin:0 0 6px;'>"
             "🗓️ Próximas Avaliações</p>",
             unsafe_allow_html=True,
         )
+        with _ag_add_col:
+            if st.button("➕", key="hg_nova_aval", help="Agendar Nova Avaliação",
+                         use_container_width=True):
+                st.session_state.aluno_prontuario = None
+                st.session_state.menu_atual = "Portal do Aluno"
+                st.rerun()
+
         _agendamentos = get_agendamentos_pendentes(limite=8)
         if _agendamentos:
             for _ag in _agendamentos:
-                _nm = ((_ag.get("alunos") or {}).get("nome") or _ag.get("nome_aluno") or "—")
-                _hr = _ag.get("horario") or _ag.get("data_hora") or "—"
-                _dt = str(_ag.get("data") or "")
+                _aluno_data = _ag.get("alunos") or {}
+                _nm  = (_aluno_data.get("nome") or _ag.get("nome_aluno") or "—")
+                _aid = _aluno_data.get("id") or _ag.get("aluno_id")
+                _hr  = _ag.get("horario") or _ag.get("data_hora") or "—"
+                _dt  = str(_ag.get("data") or "")
                 _dt_fmt = ""
                 if _dt and len(_dt) >= 10:
                     try:
@@ -961,15 +971,32 @@ if st.session_state.menu_atual == "Principal":
                         _dt_fmt = f"{_dp.day:02d}/{_dp.month:02d}"
                     except Exception:
                         _dt_fmt = _dt[:5]
+                _nm_curto = (_nm[:16] + "…") if len(_nm) > 16 else _nm
                 with st.container(border=True):
                     st.markdown(
-                        f"<div style='font-size:12px;line-height:1.4;'>"
-                        f"<span style='font-weight:700;color:#1E40AF;'>🕒 {_hr}"
-                        f"{(' · ' + _dt_fmt) if _dt_fmt else ''}</span><br>"
-                        f"<span style='color:#0F172A;'>{_nm}</span>"
-                        f"</div>",
+                        f"<div style='font-size:11px;color:#64748B;margin-bottom:2px;'>"
+                        f"🕒 <b>{_hr}</b>{(' · ' + _dt_fmt) if _dt_fmt else ''}</div>",
                         unsafe_allow_html=True,
                     )
+                    if _aid:
+                        if st.button(
+                            _nm_curto,
+                            key=f"hg_ag_{_ag.get('id', _nm)}",
+                            use_container_width=True,
+                            help=f"Abrir ficha de avaliação: {_nm}",
+                        ):
+                            from database import buscar_aluno_por_id
+                            _al = buscar_aluno_por_id(_aid) or _aluno_data
+                            st.session_state.aluno_prontuario = _al
+                            st.session_state.origem_prontuario = "Principal"
+                            st.session_state.menu_atual = "Portal do Aluno"
+                            st.rerun()
+                    else:
+                        st.markdown(
+                            f"<div style='font-size:12px;font-weight:600;"
+                            f"color:#0F172A;'>{_nm_curto}</div>",
+                            unsafe_allow_html=True,
+                        )
         else:
             st.info("Agenda livre ✅", icon=None)
 
