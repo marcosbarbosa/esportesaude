@@ -1058,17 +1058,15 @@ if st.session_state.menu_atual == "Principal":
     # COLUNA DIREITA — Próximas Avaliações (sempre visível)
     # ════════════════════════════════════════════════
     with _col_agenda:
-        # CSS: reduz fonte dos botões dos cards de agendamento em 35%
+        # CSS: reduz fonte do nome nos cards de agendamento em 35%
         st.markdown("""<style>
-        div[data-testid="column"] + div[data-testid="column"]
-          div[data-testid="stVerticalBlockBorderWrapper"]
-          button p {
+        div[data-testid="column"] + div[data-testid="column"] button p,
+        div[data-testid="column"] + div[data-testid="column"] button span {
             font-size: 9px !important;
-            line-height: 1.2 !important;
+            line-height: 1.3 !important;
         }
         div[data-testid="column"] + div[data-testid="column"]
-          div[data-testid="stVerticalBlockBorderWrapper"]
-          button {
+          div[data-testid="stVerticalBlockBorderWrapper"] button {
             padding: 3px 6px !important;
             min-height: unset !important;
         }
