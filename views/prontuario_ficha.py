@@ -1471,6 +1471,24 @@ def renderizar_ficha():
         with st.container(border=True):
             render_formulario_medicao(aluno, edit=edit)
     else:
+        # Pré-seleção de aba via session_state (ex: vindo de agendamento)
+        _aba_desejada = st.session_state.pop("prontuario_aba", None)
+        if _aba_desejada == "Nova Medição":
+            st.components.v1.html(
+                """<script>
+                (function tryClick() {
+                    var tabs = window.parent.document.querySelectorAll('[data-testid="stTab"] button, [data-baseweb="tab"]');
+                    for (var t of tabs) {
+                        if (t.innerText && t.innerText.includes('Nova Medi')) {
+                            t.click(); return;
+                        }
+                    }
+                    setTimeout(tryClick, 250);
+                })();
+                </script>""",
+                height=0,
+            )
+
         t1, t2, t3, t4, t5, t6 = st.tabs(
             [
                 "👤 Perfil e Contato",

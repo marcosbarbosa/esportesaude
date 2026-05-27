@@ -936,6 +936,52 @@ if st.session_state.menu_atual == "Principal":
 
     st.markdown("<hr style='margin:8px 0 10px;border-color:#E2E8F0;'/>", unsafe_allow_html=True)
 
+    # ── Dialog: Agendar Nova Avaliação ───────────────────────────────────────
+    @st.dialog("📅 Agendar Nova Avaliação")
+    def _dialog_nova_aval():
+        import datetime as _dt2
+        from database import buscar_alunos_geral as _bag, criar_agendamento as _cag
+        st.caption("Busque o aluno, confirme a data e o horário.")
+        _busca_d = st.text_input(
+            "Aluno:", placeholder="🔍 Digite pelo menos 3 letras do nome...",
+            key="dag_busca", label_visibility="collapsed"
+        )
+        _aluno_d = None
+        if _busca_d and len(_busca_d.strip()) >= 3:
+            _df_d = _bag("")
+            _df_d = _df_d[_df_d["nome"].str.contains(_busca_d.strip(), case=False, na=False)]
+            if _df_d.empty:
+                st.warning("Nenhum aluno encontrado.")
+            else:
+                _map_d = {
+                    f"{r['nome']}  ({str(r.get('turma',''))[:18]})": r.to_dict()
+                    for _, r in _df_d.head(10).iterrows()
+                }
+                _k_d = st.selectbox("Selecionar:", list(_map_d.keys()), key="dag_sel",
+                                    label_visibility="collapsed")
+                _aluno_d = _map_d[_k_d]
+        # Data — próximo dia útil como padrão
+        _hoje_d = _dt2.date.today()
+        _prox_d = _hoje_d + _dt2.timedelta(days=1)
+        while _prox_d.weekday() >= 5:
+            _prox_d += _dt2.timedelta(days=1)
+        _c1d, _c2d = st.columns(2)
+        _data_d = _c1d.date_input("📅 Data:", value=_prox_d,
+                                   min_value=_hoje_d, key="dag_data")
+        _hora_d = _c2d.time_input("🕐 Horário:", value=_dt2.time(11, 0), key="dag_hora",
+                                   step=1800)
+        st.divider()
+        if st.button("✅ Confirmar Agendamento", type="primary",
+                     use_container_width=True, disabled=(_aluno_d is None)):
+            _ok_d, _msg_d = _cag(
+                _aluno_d["id"], str(_data_d), str(_hora_d)[:5], "Avaliação"
+            )
+            if _ok_d:
+                get_agendamentos_pendentes.clear()
+                st.rerun()
+            else:
+                st.error(f"Erro: {_msg_d}")
+
     # ── Layout principal: Grid (esq) + Avaliações (dir) ─────────────────────
     _col_grid, _col_agenda = st.columns([3, 1], gap="large")
 
@@ -952,9 +998,7 @@ if st.session_state.menu_atual == "Principal":
         with _ag_add_col:
             if st.button("➕", key="hg_nova_aval", help="Agendar Nova Avaliação",
                          use_container_width=True):
-                st.session_state.aluno_prontuario = None
-                st.session_state.menu_atual = "Portal do Aluno"
-                st.rerun()
+                _dialog_nova_aval()
 
         _agendamentos = get_agendamentos_pendentes(limite=8)
         if _agendamentos:
@@ -962,8 +1006,10 @@ if st.session_state.menu_atual == "Principal":
                 _aluno_data = _ag.get("alunos") or {}
                 _nm  = (_aluno_data.get("nome") or _ag.get("nome_aluno") or "—")
                 _aid = _aluno_data.get("id") or _ag.get("aluno_id")
-                _hr  = _ag.get("horario") or _ag.get("data_hora") or "—"
-                _dt  = str(_ag.get("data") or "")
+                # Campos corretos da tabela agendamentos
+                _hr  = (_ag.get("hora_agendamento") or _ag.get("horario")
+                        or _ag.get("data_hora") or "—")
+                _dt  = str(_ag.get("data_agendamento") or _ag.get("data") or "")
                 _dt_fmt = ""
                 if _dt and len(_dt) >= 10:
                     try:
@@ -983,12 +1029,13 @@ if st.session_state.menu_atual == "Principal":
                             _nm_curto,
                             key=f"hg_ag_{_ag.get('id', _nm)}",
                             use_container_width=True,
-                            help=f"Abrir ficha de avaliação: {_nm}",
+                            help=f"Abrir prontuário: {_nm} → Nova Medição",
                         ):
                             from database import buscar_aluno_por_id
                             _al = buscar_aluno_por_id(_aid) or _aluno_data
                             st.session_state.aluno_prontuario = _al
                             st.session_state.origem_prontuario = "Principal"
+                            st.session_state.prontuario_aba = "Nova Medição"
                             st.session_state.menu_atual = "Portal do Aluno"
                             st.rerun()
                     else:
