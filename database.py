@@ -678,6 +678,19 @@ def concluir_ou_cancelar_agendamento(agendamento_id, status):
         return False, str(e)
 
 
+def atualizar_agendamento(agendamento_id, nova_data, novo_horario):
+    """Atualiza data e horário de um agendamento pendente. Retorna (bool, msg)."""
+    try:
+        supabase.from_("agendamentos").update({
+            "data_agendamento": str(nova_data),
+            "horario":          str(novo_horario),
+        }).eq("id", str(agendamento_id)).execute()
+        _inv_agendamentos()
+        return True, "Agendamento atualizado."
+    except Exception as e:
+        return False, str(e)
+
+
 def obter_dependencias_lote(ids: list) -> dict:
     """
     Retorna {aluno_id: {frequencias: N, avaliacoes: N, atestados: N}}

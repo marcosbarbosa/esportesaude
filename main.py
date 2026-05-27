@@ -942,20 +942,72 @@ if st.session_state.menu_atual == "Principal":
     st.markdown("<hr style='margin:8px 0 10px;border-color:#E2E8F0;'/>", unsafe_allow_html=True)
 
     # ── Dialog: Agendar Nova Avaliação ───────────────────────────────────────
-    @st.dialog("🗑️ Excluir Agendamento")
-    def _dialog_excluir_ag(ag_id, nome):
-        st.warning(f"Confirma excluir o agendamento de **{nome}**?")
-        _cx1, _cx2 = st.columns(2)
-        if _cx1.button("✅ Sim, excluir", type="primary", use_container_width=True):
-            from database import concluir_ou_cancelar_agendamento as _cca
-            _ok_x, _msg_x = _cca(ag_id, "Cancelado")
-            if _ok_x:
+    @st.dialog("✏️ Gerenciar Agendamento")
+    def _dialog_gerenciar_ag(ag_id, nome, data_atual, hora_atual):
+        import datetime as _dt3
+        from database import (
+            concluir_ou_cancelar_agendamento as _cca,
+            atualizar_agendamento as _uag,
+        )
+
+        st.markdown(
+            f"<div style='font-size:13px;color:#0A2540;font-weight:700;"
+            f"margin-bottom:12px;'>👤 {nome}</div>",
+            unsafe_allow_html=True,
+        )
+
+        # ── Editar data / hora ──────────────────────────────────────────
+        try:
+            _data_pre = _dt3.date.fromisoformat(str(data_atual)[:10])
+        except Exception:
+            _data_pre = _dt3.date.today() + _dt3.timedelta(days=1)
+        try:
+            _h, _m = str(hora_atual)[:5].split(":")
+            _hora_pre = _dt3.time(int(_h), int(_m))
+        except Exception:
+            _hora_pre = _dt3.time(11, 0)
+
+        _eg1, _eg2 = st.columns(2)
+        _nova_data = _eg1.date_input(
+            "📅 Data:", value=_data_pre,
+            min_value=_dt3.date.today(),
+            key="gag_data", format="DD/MM/YYYY",
+        )
+        _nova_hora = _eg2.time_input(
+            "🕐 Horário:", value=_hora_pre,
+            key="gag_hora", step=1800,
+        )
+
+        if st.button("💾 Salvar Alteração", type="primary", use_container_width=True):
+            _ok_u, _msg_u = _uag(ag_id, str(_nova_data), str(_nova_hora)[:5])
+            if _ok_u:
                 get_agendamentos_pendentes.clear()
                 st.rerun()
             else:
-                st.error(f"Erro: {_msg_x}")
-        if _cx2.button("↩️ Voltar", use_container_width=True):
-            st.rerun()
+                st.error(f"Erro: {_msg_u}")
+
+        st.divider()
+
+        # ── Exclusão com confirmação inline ────────────────────────────
+        _key_conf = f"gag_conf_{ag_id}"
+        if not st.session_state.get(_key_conf):
+            if st.button("🗑️ Excluir Agendamento", use_container_width=True):
+                st.session_state[_key_conf] = True
+                st.rerun()
+        else:
+            st.warning(f"Confirma excluir o agendamento de **{nome}**?")
+            _cd1, _cd2 = st.columns(2)
+            if _cd1.button("✅ Sim, excluir", type="primary", use_container_width=True):
+                _ok_x, _msg_x = _cca(ag_id, "Cancelado")
+                if _ok_x:
+                    st.session_state.pop(_key_conf, None)
+                    get_agendamentos_pendentes.clear()
+                    st.rerun()
+                else:
+                    st.error(f"Erro: {_msg_x}")
+            if _cd2.button("↩️ Não, voltar", use_container_width=True):
+                st.session_state.pop(_key_conf, None)
+                st.rerun()
 
     @st.dialog("📅 Agendar Nova Avaliação")
     def _dialog_nova_aval():
@@ -1062,10 +1114,10 @@ if st.session_state.menu_atual == "Principal":
                             unsafe_allow_html=True,
                         )
                     if _ag_id_str and _c_del.button(
-                        "🗑️", key=f"hg_ag_del_{_ag_id_str}",
-                        help="Excluir este agendamento",
+                        "✏️", key=f"hg_ag_del_{_ag_id_str}",
+                        help="Editar ou excluir este agendamento",
                     ):
-                        _dialog_excluir_ag(_ag_id_str, _nm)
+                        _dialog_gerenciar_ag(_ag_id_str, _nm, _dt, _hr)
         else:
             st.info("Agenda livre ✅", icon=None)
 
