@@ -9,6 +9,12 @@ import datetime
 import re
 from utils.texto import formatar_whatsapp_link as limpar_whatsapp_emergencia
 
+try:
+    from st_keyup import st_keyup
+    HAS_KEYUP = True
+except ImportError:
+    HAS_KEYUP = False
+
 def renderizar_aba_emergencia(df_alunos_tab, turma_selecionada):
     if df_alunos_tab.empty:
         st.warning("Selecione uma turma para carregar os alunos.")
@@ -26,7 +32,22 @@ def renderizar_aba_emergencia(df_alunos_tab, turma_selecionada):
     # ==========================================================================
     c_search, c_sort, c_export = st.columns([3, 1, 1], vertical_alignment="bottom")
 
-    busca = c_search.text_input("🔍 Buscar Aluno:", placeholder="Digite o nome do aluno...")
+    with c_search:
+        if HAS_KEYUP:
+            busca = st_keyup(
+                "🔍 Buscar Aluno:",
+                placeholder="🔍 Filtrar (mín. 3 letras)...",
+                label_visibility="collapsed",
+                key="busca_emergencia",
+                debounce=300,
+            )
+        else:
+            busca = st.text_input(
+                "🔍 Buscar Aluno:",
+                placeholder="Digite o nome do aluno...",
+                label_visibility="collapsed",
+                key="busca_emergencia",
+            )
     ordenacao = c_sort.selectbox("Ordenar:", ["A-Z", "Z-A"])
 
     if c_export.button("🖨️ Exportar PDF", use_container_width=True, type="primary"):

@@ -398,12 +398,21 @@ def renderizar_dashboard():
             st.success("Nenhum aluno no Arquivo Morto.")
         else:
             # --- BUSCA DENTRO DO ARQUIVO ---
-            busca_inativo = st.text_input(
-                "🔍 Buscar no Arquivo Morto:",
-                placeholder="Digite parte do nome...",
-                key="busca_arquivo_morto",
-                label_visibility="collapsed",
-            )
+            if HAS_KEYUP:
+                busca_inativo = st_keyup(
+                    "🔍 Buscar no Arquivo Morto:",
+                    placeholder="🔍 Filtrar (mín. 2 letras)...",
+                    key="busca_arquivo_morto",
+                    label_visibility="collapsed",
+                    debounce=300,
+                )
+            else:
+                busca_inativo = st.text_input(
+                    "🔍 Buscar no Arquivo Morto:",
+                    placeholder="Digite parte do nome...",
+                    key="busca_arquivo_morto",
+                    label_visibility="collapsed",
+                )
 
             df_exibir = df_inativos.copy()
             if busca_inativo and len(busca_inativo.strip()) >= 2:
