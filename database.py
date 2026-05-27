@@ -170,7 +170,7 @@ def get_agendamentos_pendentes(limite=8):
             supabase.from_("agendamentos")
             .select("*, alunos(*)")
             .eq("status", "Pendente")
-            .order("data_agendamento", desc=False)
+            .order("data", desc=False)
             .limit(limite)
             .execute()
         )
@@ -181,7 +181,7 @@ def get_agendamentos_pendentes(limite=8):
                 supabase.from_("agendamentos")
                 .select("*")
                 .eq("status", "Pendente")
-                .order("data_agendamento", desc=False)
+                .order("data", desc=False)
                 .limit(limite)
                 .execute()
             )
@@ -655,10 +655,10 @@ def criar_agendamento(aluno_id, data, hora, tipo="Avaliação"):
     try:
         supabase.from_("agendamentos").insert({
             "aluno_id": str(aluno_id),
-            "data_agendamento": str(data),
-            "hora_agendamento": str(hora),
-            "tipo": str(tipo),
-            "status": "Pendente",
+            "data":    str(data),
+            "horario": str(hora),
+            "tipo":    str(tipo),
+            "status":  "Pendente",
         }).execute()
         _inv_agendamentos()
         return True, "Agendamento criado."
