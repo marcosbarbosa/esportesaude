@@ -10,12 +10,7 @@ import datetime
 import time
 import re
 
-try:
-    from st_keyup import st_keyup
-
-    HAS_KEYUP = True
-except ImportError:
-    HAS_KEYUP = False
+from utils.busca_aluno import busca_aluno_widget as _baw_freq
 
 # Importação do motor e permissões
 from database import (
@@ -185,21 +180,12 @@ def tela_frequencia():
 
         chave_unica = f"{data_aula}_{turma_selecionada}"
 
-        with col_busca:
-            placeholder_texto = "🔍 Filtrar (mín. 3 letras)..."
-            if HAS_KEYUP:
-                busca_grid = st_keyup(
-                    "🔍 Busca Global:",
-                    placeholder=placeholder_texto,
-                    debounce=300,
-                    key=f"bg_{chave_unica}",
-                )
-            else:
-                busca_grid = st.text_input(
-                    "🔍 Busca Global:",
-                    placeholder=placeholder_texto,
-                    key=f"bg_{chave_unica}",
-                )
+        busca_grid = _baw_freq(
+            f"bg_{chave_unica}",
+            container=col_busca,
+            placeholder="🔍 Filtrar (mín. 3 letras)...",
+            label="🔍 Busca Global:",
+        )
 
     eh_valido, motivo_bloqueio = verificar_dia_letivo(data_aula)
 

@@ -8,12 +8,7 @@ import pandas as pd
 import datetime
 import re
 from utils.texto import formatar_whatsapp_link as limpar_whatsapp_emergencia
-
-try:
-    from st_keyup import st_keyup
-    HAS_KEYUP = True
-except ImportError:
-    HAS_KEYUP = False
+from utils.busca_aluno import busca_aluno_widget, filtrar_alunos_df
 
 def renderizar_aba_emergencia(df_alunos_tab, turma_selecionada):
     if df_alunos_tab.empty:
@@ -32,22 +27,11 @@ def renderizar_aba_emergencia(df_alunos_tab, turma_selecionada):
     # ==========================================================================
     c_search, c_sort, c_export = st.columns([3, 1, 1], vertical_alignment="bottom")
 
-    with c_search:
-        if HAS_KEYUP:
-            busca = st_keyup(
-                "🔍 Buscar Aluno:",
-                placeholder="🔍 Filtrar (mín. 3 letras)...",
-                label_visibility="collapsed",
-                key="busca_emergencia",
-                debounce=300,
-            )
-        else:
-            busca = st.text_input(
-                "🔍 Buscar Aluno:",
-                placeholder="Digite o nome do aluno...",
-                label_visibility="collapsed",
-                key="busca_emergencia",
-            )
+    busca = busca_aluno_widget(
+        "busca_emergencia",
+        container=c_search,
+        placeholder="🔍 Filtrar (mín. 3 letras)...",
+    )
     ordenacao = c_sort.selectbox("Ordenar:", ["A-Z", "Z-A"])
 
     if c_export.button("🖨️ Exportar PDF", use_container_width=True, type="primary"):
@@ -58,10 +42,7 @@ def renderizar_aba_emergencia(df_alunos_tab, turma_selecionada):
     # ==========================================================================
     # 🧠 LÓGICA DE FILTRAGEM
     # ==========================================================================
-    df_exibir = df_alunos_tab.copy()
-
-    if busca:
-        df_exibir = df_exibir[df_exibir['nome'].str.contains(busca, case=False, na=False)]
+    df_exibir = filtrar_alunos_df(df_alunos_tab.copy(), busca, cols=["nome"])
 
     if ordenacao == "Z-A":
         df_exibir = df_exibir.sort_values("nome", ascending=False)

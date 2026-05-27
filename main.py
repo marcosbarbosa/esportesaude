@@ -941,15 +941,12 @@ if st.session_state.menu_atual == "Principal":
     def _dialog_nova_aval():
         import datetime as _dt2
         from database import buscar_alunos_geral as _bag, criar_agendamento as _cag
+        from utils.busca_aluno import busca_aluno_widget as _baw, filtrar_alunos_df as _faf
         st.caption("Busque o aluno, confirme a data e o horário.")
-        _busca_d = st.text_input(
-            "Aluno:", placeholder="🔍 Digite pelo menos 3 letras do nome...",
-            key="dag_busca", label_visibility="collapsed"
-        )
+        _busca_d = _baw("dag_busca", placeholder="🔍 Digite pelo menos 3 letras do nome...")
         _aluno_d = None
         if _busca_d and len(_busca_d.strip()) >= 3:
-            _df_d = _bag("")
-            _df_d = _df_d[_df_d["nome"].str.contains(_busca_d.strip(), case=False, na=False)]
+            _df_d = _faf(_bag(""), _busca_d, cols=["nome", "turma"])
             if _df_d.empty:
                 st.warning("Nenhum aluno encontrado.")
             else:
@@ -966,8 +963,8 @@ if st.session_state.menu_atual == "Principal":
         while _prox_d.weekday() >= 5:
             _prox_d += _dt2.timedelta(days=1)
         _c1d, _c2d = st.columns(2)
-        _data_d = _c1d.date_input("📅 Data:", value=_prox_d,
-                                   min_value=_hoje_d, key="dag_data")
+        _data_d = _c1d.date_input("📅 Data:", value=_prox_d, min_value=_hoje_d,
+                                   key="dag_data", format="DD/MM/YYYY")
         _hora_d = _c2d.time_input("🕐 Horário:", value=_dt2.time(11, 0), key="dag_hora",
                                    step=1800)
         st.divider()
@@ -1059,19 +1056,12 @@ if st.session_state.menu_atual == "Principal":
             "<p style='font-weight:800;color:#0A2540;font-size:1.05rem;margin:0;'>👥 Alunos Ativos</p>",
             unsafe_allow_html=True,
         )
-        try:
-            from st_keyup import st_keyup as _st_keyup
-            with _hg_c_busca:
-                _hg_busca = _st_keyup(
-                    "Buscar:", placeholder="🔍 Nome ou turma…",
-                    label_visibility="collapsed", key="hg_busca",
-                    debounce=300,
-                )
-        except Exception:
-            _hg_busca = _hg_c_busca.text_input(
-                "Buscar:", placeholder="🔍 Nome ou turma…",
-                label_visibility="collapsed", key="hg_busca"
-            )
+        from utils.busca_aluno import busca_aluno_widget as _baw_hg
+        _hg_busca = _baw_hg(
+            "hg_busca",
+            container=_hg_c_busca,
+            placeholder="🔍 Nome ou turma…",
+        )
 
         # Carregar dados
         _df_alunos = buscar_alunos_geral("")
