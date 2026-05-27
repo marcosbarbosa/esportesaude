@@ -588,6 +588,54 @@ def atualizar_aluno_completo(aluno_id, dados: dict):
         return False, str(e)
 
 
+def atualizar_termo_imagem(aluno_id: str, novo_valor: bool, operador: str = "", aluno_nome: str = "") -> tuple:
+    """Atualiza termo_imagem do aluno, registra log e invalida cache. Retorna (bool, msg)."""
+    import json, datetime as _dt
+    try:
+        supabase.from_("alunos").update({"termo_imagem": novo_valor}).eq("id", str(aluno_id)).execute()
+        _inv_alunos()
+        ts = _dt.datetime.now().isoformat(timespec="seconds")
+        chave = f"lgpd_log_{ts}_{aluno_id}"
+        valor = json.dumps({
+            "aluno_id": aluno_id,
+            "aluno_nome": aluno_nome,
+            "status": "Autorizado" if novo_valor else "Revogado",
+            "operador": operador or "—",
+            "timestamp": ts,
+        }, ensure_ascii=False)
+        supabase.table("configuracoes_sistema").upsert(
+            {"chave": chave, "valor": valor}, on_conflict="chave"
+        ).execute()
+        get_logs_lgpd.clear()
+        return True, "Autorização atualizada."
+    except Exception as e:
+        return False, str(e)
+
+
+@st.cache_data(ttl=60, show_spinner=False)
+def get_logs_lgpd(limit: int = 300) -> list:
+    """Retorna logs de alteração LGPD (mais recente primeiro)."""
+    import json
+    try:
+        res = (
+            supabase.table("configuracoes_sistema")
+            .select("chave,valor")
+            .like("chave", "lgpd_log_%")
+            .order("chave", desc=True)
+            .limit(limit)
+            .execute()
+        )
+        logs = []
+        for r in (res.data or []):
+            try:
+                logs.append(json.loads(r["valor"]))
+            except Exception:
+                pass
+        return logs
+    except Exception:
+        return []
+
+
 def atualizar_data_nascimento(aluno_id, data_nascimento):
     """Atualiza somente a data de nascimento do aluno. Retorna (bool, msg)."""
     try:

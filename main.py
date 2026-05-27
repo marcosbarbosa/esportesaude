@@ -1399,7 +1399,7 @@ elif st.session_state.menu_atual in (
         tela_conferencia_facial()
     else:
         _aba_cfg = st.tabs(
-            ["🏫 Turmas", "💬 Mensagens", "🎂 Aniversários", "🎨 Identidade Visual", "🛠️ Admin", "🔀 Mesclar Fichas"]
+            ["🏫 Turmas", "💬 Mensagens", "🎂 Aniversários", "🎨 Identidade Visual", "🛠️ Admin", "🔀 Mesclar Fichas", "🔒 LGPD"]
         )
         with _aba_cfg[0]:
             from views.turmas_view import tela_gestao_turmas
@@ -1422,6 +1422,40 @@ elif st.session_state.menu_atual in (
         with _aba_cfg[5]:
             from views.merge_alunos_view import tela_merge_alunos
             tela_merge_alunos()
+        with _aba_cfg[6]:
+            from database import get_logs_lgpd
+            st.markdown(
+                "<p style='font-weight:800;color:#0A2540;font-size:1rem;margin-bottom:4px;'>"
+                "🔒 Histórico de Alterações — Autorização de Imagem (LGPD)</p>",
+                unsafe_allow_html=True,
+            )
+            st.caption("Cada alteração do campo 'Uso de Imagem e Voz' registra automaticamente data/hora, operador e novo status.")
+            _logs_lgpd = get_logs_lgpd()
+            if not _logs_lgpd:
+                st.info("Nenhuma alteração registrada ainda.")
+            else:
+                if st.button("🔄 Atualizar", key="lgpd_log_refresh"):
+                    get_logs_lgpd.clear()
+                    st.rerun()
+                for _lg in _logs_lgpd:
+                    _ts_fmt = str(_lg.get("timestamp", ""))[:16].replace("T", " ")
+                    _status_color = "#065F46" if _lg.get("status") == "Autorizado" else "#7F1D1D"
+                    _status_bg = "#D1FAE5" if _lg.get("status") == "Autorizado" else "#FEE2E2"
+                    _status_icon = "✅" if _lg.get("status") == "Autorizado" else "🚫"
+                    st.markdown(
+                        f"<div style='padding:8px 12px;border-radius:6px;margin-bottom:6px;"
+                        f"background:#F8FAFC;border:1px solid #E2E8F0;display:flex;align-items:center;gap:12px;'>"
+                        f"<span style='font-size:12px;color:#64748B;min-width:120px;'>🕒 {_ts_fmt}</span>"
+                        f"<span style='font-size:13px;font-weight:700;color:#0F172A;flex:1;'>"
+                        f"{_lg.get('aluno_nome', '—').upper()}</span>"
+                        f"<span style='padding:2px 10px;border-radius:12px;font-size:12px;font-weight:700;"
+                        f"background:{_status_bg};color:{_status_color};'>"
+                        f"{_status_icon} {_lg.get('status', '—')}</span>"
+                        f"<span style='font-size:11px;color:#94A3B8;min-width:100px;text-align:right;'>"
+                        f"op: {_lg.get('operador', '—')}</span>"
+                        f"</div>",
+                        unsafe_allow_html=True,
+                    )
 
 # ── Rodapé Fixo ─────────────────────────────────────────────────────────────
 from utils.identidade import get_config as _gcfg_rodape

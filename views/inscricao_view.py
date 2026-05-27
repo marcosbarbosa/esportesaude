@@ -291,13 +291,18 @@ def tela_inscricao_publica_move_right():
             <div class="caixa-lgpd">
                 <strong>TERMO DE CONSENTIMENTO LIVRE (LGPD - LEI Nº 13.709/2018) E DIREITO DE IMAGEM</strong><br><br>
                 1. Autorizo a coleta e tratamento dos meus dados de saúde para fins de segurança e adequação física.<br>
-                2. Autorizo o uso da minha imagem e voz para fins de divulgação do projeto de forma gratuita.
+                2. Autorizo o uso da minha imagem e voz para fins de divulgação do projeto de forma gratuita (opcional).
             </div>
             """,
                 unsafe_allow_html=True,
             )
-            termo = st.checkbox(
-                "Li e aceito os Termos da LGPD, Uso de Imagem e assumo a veracidade das informações médicas. *"
+            termo_lgpd = st.checkbox(
+                "✅ Li e aceito os Termos da LGPD e assumo a veracidade das informações médicas. *",
+                help="Obrigatório — autoriza a coleta e tratamento dos dados de saúde para adequação física.",
+            )
+            termo_imagem = st.checkbox(
+                "📸 Autorizo o uso da minha imagem e voz para fins de divulgação do projeto de forma gratuita.",
+                help="Opcional — pode ser alterado a qualquer momento pelo operador no Portal do Aluno.",
             )
 
             st.markdown("<br>", unsafe_allow_html=True)
@@ -326,8 +331,8 @@ def tela_inscricao_publica_move_right():
                     st.error(
                         "⚠️ O Atestado Médico é obrigatório para concluir a inscrição."
                     )
-                elif not termo:
-                    st.error("⚠️ O consentimento da LGPD é obrigatório pela lei.")
+                elif not termo_lgpd:
+                    st.error("⚠️ O consentimento da LGPD (item 1) é obrigatório pela lei.")
                 else:
                     with st.spinner(
                         "A processar documentos e a registar assinatura digital..."
@@ -395,7 +400,7 @@ def tela_inscricao_publica_move_right():
                             "dias_preferenciais": dias_pref,
                             "horario_preferencial": hora_pref,
                             "horario_preferencial_2": hora_pref_2,
-                            "termo_imagem": termo,
+                            "termo_imagem": termo_imagem,
                             "url_rg": url_rg,
                             "url_receituario": url_receita,
                             "url_atestado_medico": url_atestado,

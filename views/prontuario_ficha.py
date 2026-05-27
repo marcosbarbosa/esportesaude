@@ -616,27 +616,57 @@ def render_cabecalho_aluno(aluno):
             st.rerun()
     st.divider()
 
-    # 🔒 Banner LGPD — Autorização de Imagem
+    # 🔒 Banner LGPD — Autorização de Imagem (com botão de alteração)
     _ti = aluno.get("termo_imagem")
     _nao_autoriza_img = (_ti is False) or (_ti == 0) or (str(_ti).lower() in ["false", "0", ""])
-    if _nao_autoriza_img:
-        st.markdown(
-            "<div style='background:#1E293B;border-left:5px solid #F59E0B;padding:10px 16px;"
-            "border-radius:6px;margin-bottom:12px;display:flex;align-items:center;gap:10px;'>"
-            "<span style='font-size:20px;'>🚨🚫</span>"
-            "<span style='color:#FEF3C7;font-weight:700;font-size:14px;'>"
-            "ATENÇÃO LGPD: ESTE ALUNO NÃO AUTORIZA O USO DE IMAGEM OU VOZ</span></div>",
-            unsafe_allow_html=True,
-        )
-    else:
-        st.markdown(
-            "<div style='background:#F0FDF4;border-left:5px solid #22C55E;padding:8px 14px;"
-            "border-radius:6px;margin-bottom:12px;display:flex;align-items:center;gap:8px;'>"
-            "<span style='font-size:16px;'>🟢</span>"
-            "<span style='color:#166534;font-weight:600;font-size:13px;'>"
-            "Uso de Imagem e Voz Autorizado — LGPD</span></div>",
-            unsafe_allow_html=True,
-        )
+    _lgpd_col_banner, _lgpd_col_btn = st.columns([5, 1], vertical_alignment="center")
+    with _lgpd_col_banner:
+        if _nao_autoriza_img:
+            st.markdown(
+                "<div style='background:#1E293B;border-left:5px solid #F59E0B;padding:10px 16px;"
+                "border-radius:6px;display:flex;align-items:center;gap:10px;'>"
+                "<span style='font-size:20px;'>🚨🚫</span>"
+                "<span style='color:#FEF3C7;font-weight:700;font-size:14px;'>"
+                "ATENÇÃO LGPD: ESTE ALUNO NÃO AUTORIZA O USO DE IMAGEM OU VOZ</span></div>",
+                unsafe_allow_html=True,
+            )
+        else:
+            st.markdown(
+                "<div style='background:#F0FDF4;border-left:5px solid #22C55E;padding:8px 14px;"
+                "border-radius:6px;display:flex;align-items:center;gap:8px;'>"
+                "<span style='font-size:16px;'>🟢</span>"
+                "<span style='color:#166534;font-weight:600;font-size:13px;'>"
+                "Uso de Imagem e Voz Autorizado — LGPD</span></div>",
+                unsafe_allow_html=True,
+            )
+    with _lgpd_col_btn:
+        if _nao_autoriza_img:
+            if st.button("✅ Autorizar", key="lgpd_toggle_ficha",
+                         use_container_width=True, help="Registrar autorização de uso de imagem e voz"):
+                from database import atualizar_termo_imagem, buscar_aluno_por_id
+                _op = st.session_state.get("usuario_nome", "")
+                _ok, _msg = atualizar_termo_imagem(aluno["id"], True, _op, aluno.get("nome", ""))
+                if _ok:
+                    _fresh = buscar_aluno_por_id(aluno["id"])
+                    if _fresh:
+                        st.session_state.aluno_prontuario = _fresh
+                    st.rerun()
+                else:
+                    st.error(_msg)
+        else:
+            if st.button("🚫 Revogar", key="lgpd_toggle_ficha",
+                         use_container_width=True, help="Revogar autorização de uso de imagem e voz"):
+                from database import atualizar_termo_imagem, buscar_aluno_por_id
+                _op = st.session_state.get("usuario_nome", "")
+                _ok, _msg = atualizar_termo_imagem(aluno["id"], False, _op, aluno.get("nome", ""))
+                if _ok:
+                    _fresh = buscar_aluno_por_id(aluno["id"])
+                    if _fresh:
+                        st.session_state.aluno_prontuario = _fresh
+                    st.rerun()
+                else:
+                    st.error(_msg)
+    st.markdown("<div style='margin-bottom:10px;'></div>", unsafe_allow_html=True)
 
     u_v = aluno.get("url_foto")
     cp_f, cp_i, cp_pdf, cp_word = st.columns(
