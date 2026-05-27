@@ -937,6 +937,21 @@ if st.session_state.menu_atual == "Principal":
     st.markdown("<hr style='margin:8px 0 10px;border-color:#E2E8F0;'/>", unsafe_allow_html=True)
 
     # ── Dialog: Agendar Nova Avaliação ───────────────────────────────────────
+    @st.dialog("🗑️ Excluir Agendamento")
+    def _dialog_excluir_ag(ag_id, nome):
+        st.warning(f"Confirma excluir o agendamento de **{nome}**?")
+        _cx1, _cx2 = st.columns(2)
+        if _cx1.button("✅ Sim, excluir", type="primary", use_container_width=True):
+            from database import concluir_ou_cancelar_agendamento as _cca
+            _ok_x, _msg_x = _cca(ag_id, "Cancelado")
+            if _ok_x:
+                get_agendamentos_pendentes.clear()
+                st.rerun()
+            else:
+                st.error(f"Erro: {_msg_x}")
+        if _cx2.button("↩️ Voltar", use_container_width=True):
+            st.rerun()
+
     @st.dialog("📅 Agendar Nova Avaliação")
     def _dialog_nova_aval():
         import datetime as _dt2
@@ -1021,10 +1036,12 @@ if st.session_state.menu_atual == "Principal":
                         f"🕒 <b>{_hr}</b>{(' · ' + _dt_fmt) if _dt_fmt else ''}</div>",
                         unsafe_allow_html=True,
                     )
+                    _ag_id_str = _ag.get("id", "")
+                    _c_nm, _c_del = st.columns([4, 1], vertical_alignment="center")
                     if _aid:
-                        if st.button(
+                        if _c_nm.button(
                             _nm_curto,
-                            key=f"hg_ag_{_ag.get('id', _nm)}",
+                            key=f"hg_ag_{_ag_id_str}",
                             use_container_width=True,
                             help=f"Abrir prontuário: {_nm} → Nova Medição",
                         ):
@@ -1036,11 +1053,16 @@ if st.session_state.menu_atual == "Principal":
                             st.session_state.menu_atual = "Portal do Aluno"
                             st.rerun()
                     else:
-                        st.markdown(
+                        _c_nm.markdown(
                             f"<div style='font-size:12px;font-weight:600;"
                             f"color:#0F172A;'>{_nm_curto}</div>",
                             unsafe_allow_html=True,
                         )
+                    if _ag_id_str and _c_del.button(
+                        "🗑️", key=f"hg_ag_del_{_ag_id_str}",
+                        help="Excluir este agendamento",
+                    ):
+                        _dialog_excluir_ag(_ag_id_str, _nm)
         else:
             st.info("Agenda livre ✅", icon=None)
 
