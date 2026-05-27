@@ -1101,7 +1101,7 @@ if st.session_state.menu_atual == "Principal":
                 _nm_curto = (_nm[:16] + "…") if len(_nm) > 16 else _nm
                 with st.container(border=True):
                     st.markdown(
-                        f"<div style='font-size:7px;color:#64748B;margin-bottom:2px;'>"
+                        f"<div style='font-size:11px;color:#64748B;margin-bottom:2px;'>"
                         f"🕒 <b>{_hr}</b>{(' · ' + _dt_fmt) if _dt_fmt else ''}</div>",
                         unsafe_allow_html=True,
                     )
