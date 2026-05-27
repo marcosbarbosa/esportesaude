@@ -1312,9 +1312,19 @@ if st.session_state.menu_atual == "Principal":
                         st.markdown(_av_html, unsafe_allow_html=True)
 
                     # Nome
+                    _sem_img = not _r.get("termo_imagem")
+                    _badge_img = (
+                        "<abbr title='Não autoriza uso de imagem e voz (LGPD)' "
+                        "style='text-decoration:none;cursor:help;"
+                        "background:#FEE2E2;color:#DC2626;"
+                        "border:1px solid #FECACA;"
+                        "border-radius:3px;padding:1px 5px;"
+                        "font-size:10px;font-weight:800;"
+                        "margin-right:5px;white-space:nowrap;'>📷✕</abbr>"
+                    ) if _sem_img else ""
                     _cb.markdown(
                         f"<span style='font-size:13.5px;font-weight:700;color:#0F172A;'>"
-                        f"{_r['nome']}</span>",
+                        f"{_badge_img}{_r['nome']}</span>",
                         unsafe_allow_html=True,
                     )
 
