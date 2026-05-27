@@ -803,56 +803,111 @@ def tela_impressao_ficha():
 
             st.success(f"✅ Ficha gerada para: **{nome_aluno}**")
 
+            # ── Validação de campos obrigatórios para impressão ──────────────
+            def _vazio(v):
+                return not v or str(v).strip().upper() in [
+                    "", "NAN", "NONE", "N/A", "NÃO INFORMADO", "0", "0.0"
+                ]
+
+            _campos_faltando = []
+            if _vazio(aluno_dados.get("cpf")) and _vazio(aluno_dados.get("rg")):
+                _campos_faltando.append("Documento oficial (CPF ou RG)")
+            if _vazio(aluno_dados.get("data_nascimento")):
+                _campos_faltando.append("Data de Nascimento")
+            if _vazio(aluno_dados.get("endereco")):
+                _campos_faltando.append("Endereço Residencial")
+            if _vazio(aluno_dados.get("email")):
+                _campos_faltando.append("E-mail de Contato")
+            if _vazio(aluno_dados.get("celular")) and _vazio(aluno_dados.get("whatsapp")):
+                _campos_faltando.append("Telefone / WhatsApp")
+
+            _bloqueado = len(_campos_faltando) > 0
+
+            if _bloqueado:
+                _lista_html = "".join(
+                    f"<li style='margin-bottom:3px;'><b>{c}</b></li>"
+                    for c in _campos_faltando
+                )
+                st.markdown(
+                    f"<div style='background:#FEF3C7;border-left:5px solid #F59E0B;"
+                    f"padding:12px 16px;border-radius:6px;margin-bottom:12px;'>"
+                    f"<div style='font-weight:800;color:#92400E;font-size:14px;margin-bottom:6px;'>"
+                    f"⚠️ IMPRESSÃO BLOQUEADA — Cadastro Incompleto</div>"
+                    f"<div style='color:#78350F;font-size:13px;'>Os campos abaixo estão vazios "
+                    f"ou com \"NÃO INFORMADO\". Complete o cadastro do aluno antes de imprimir:</div>"
+                    f"<ul style='color:#78350F;font-size:13px;margin:8px 0 0 16px;'>{_lista_html}</ul>"
+                    f"</div>",
+                    unsafe_allow_html=True,
+                )
+
             html_gerado = gerar_html_fichas([aluno_dados], host)
 
             col_pdf, col_word, col_html = st.columns(3)
 
             with col_pdf:
                 if XHTML_DISPONIVEL:
-                    with st.spinner("Gerando PDF…"):
-                        pdf_bytes = gerar_pdf_fichas_bytes([aluno_dados], host)
-                    if pdf_bytes:
-                        st.download_button(
-                            label="📄 Baixar PDF",
-                            data=pdf_bytes,
-                            file_name=f"Ficha_{id_aluno}.pdf",
-                            mime="application/pdf",
-                            type="primary",
-                            use_container_width=True,
-                        )
+                    if not _bloqueado:
+                        with st.spinner("Gerando PDF…"):
+                            pdf_bytes = gerar_pdf_fichas_bytes([aluno_dados], host)
+                        if pdf_bytes:
+                            st.download_button(
+                                label="📄 Baixar PDF",
+                                data=pdf_bytes,
+                                file_name=f"Ficha_{id_aluno}.pdf",
+                                mime="application/pdf",
+                                type="primary",
+                                use_container_width=True,
+                            )
+                        else:
+                            st.error("Erro ao gerar PDF.")
                     else:
-                        st.error("Erro ao gerar PDF.")
+                        st.button("📄 Baixar PDF", disabled=True,
+                                  use_container_width=True,
+                                  help="Complete o cadastro para habilitar o download")
                 else:
                     st.warning("PDF indisponível.")
 
             with col_word:
                 if DOCX_FICHA_OK:
-                    word_bytes = gerar_word_ficha_bytes(aluno_dados)
-                    if word_bytes:
-                        st.download_button(
-                            label="📝 Baixar Word",
-                            data=word_bytes,
-                            file_name=f"Ficha_{id_aluno}.docx",
-                            mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                            use_container_width=True,
-                        )
+                    if not _bloqueado:
+                        word_bytes = gerar_word_ficha_bytes(aluno_dados)
+                        if word_bytes:
+                            st.download_button(
+                                label="📝 Baixar Word",
+                                data=word_bytes,
+                                file_name=f"Ficha_{id_aluno}.docx",
+                                mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                                use_container_width=True,
+                            )
+                        else:
+                            st.warning("Erro ao gerar Word.")
                     else:
-                        st.warning("Erro ao gerar Word.")
+                        st.button("📝 Baixar Word", disabled=True,
+                                  use_container_width=True,
+                                  help="Complete o cadastro para habilitar o download")
                 else:
                     st.warning("Word indisponível.")
 
             with col_html:
-                st.download_button(
-                    label="🌐 Baixar HTML",
-                    data=html_gerado,
-                    file_name=f"Ficha_{id_aluno}.html",
-                    mime="text/html",
-                    use_container_width=True,
-                    help="Abra no navegador e use Ctrl+P para imprimir/salvar como PDF.",
-                )
+                if not _bloqueado:
+                    st.download_button(
+                        label="🌐 Baixar HTML",
+                        data=html_gerado,
+                        file_name=f"Ficha_{id_aluno}.html",
+                        mime="text/html",
+                        use_container_width=True,
+                        help="Abra no navegador e use Ctrl+P para imprimir/salvar como PDF.",
+                    )
+                else:
+                    st.button("🌐 Baixar HTML", disabled=True,
+                              use_container_width=True,
+                              help="Complete o cadastro para habilitar o download")
 
             with st.expander("👀 Pré-visualização da Ficha", expanded=True):
-                st.info("💡 **Dica:** Use os botões acima para baixar. Para imprimir direto, baixe o HTML e pressione Ctrl+P no navegador.")
+                if _bloqueado:
+                    st.warning("⚠️ Visualização disponível, mas os downloads estão bloqueados até o cadastro ser completado.")
+                else:
+                    st.info("💡 **Dica:** Use os botões acima para baixar. Para imprimir direto, baixe o HTML e pressione Ctrl+P no navegador.")
                 st.components.v1.html(html_gerado, height=950, scrolling=True)
 
     with tab_lote:
