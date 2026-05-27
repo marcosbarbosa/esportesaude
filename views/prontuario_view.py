@@ -10,6 +10,7 @@ import plotly.express as px
 import io
 import time
 import uuid
+import math
 import requests
 from PIL import Image, ImageOps
 from views.utils_docs import url_eh_imagem, renderizar_documento_com_rotacao
@@ -46,9 +47,22 @@ def alterar_status_aluno_local(aluno_id, novo_status):
         return False, str(e)
 
 
+def _sanitize_payload(d: dict) -> dict:
+    """Converte NaN/Inf/string-none para None para que o Supabase JSON seja válido."""
+    out = {}
+    for k, v in d.items():
+        if isinstance(v, float) and (math.isnan(v) or math.isinf(v)):
+            out[k] = None
+        elif isinstance(v, str) and v.strip().lower() in ("nan", "none", "null", ""):
+            out[k] = None
+        else:
+            out[k] = v
+    return out
+
+
 def atualizar_perfil_aluno_dict_seguro(aluno_id, dados_atualizados):
     try:
-        supabase.from_("alunos").update(dados_atualizados).eq("id", str(aluno_id)).execute()
+        supabase.from_("alunos").update(_sanitize_payload(dados_atualizados)).eq("id", str(aluno_id)).execute()
         from database import buscar_aluno_por_id, buscar_alunos_geral, get_alunos_por_turma
         for fn in (buscar_aluno_por_id, buscar_alunos_geral, get_alunos_por_turma):
             try:
