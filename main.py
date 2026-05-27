@@ -1095,7 +1095,9 @@ if st.session_state.menu_atual == "Principal":
                 if _dt and len(_dt) >= 10:
                     try:
                         _dp = datetime.date.fromisoformat(_dt[:10])
-                        _dt_fmt = f"{_dp.day:02d}/{_dp.month:02d}"
+                        _dias_sem = ["seg","ter","qua","qui","sex","sáb","dom"]
+                        _dia_sem = _dias_sem[_dp.weekday()]
+                        _dt_fmt = f"{_dia_sem} {_dp.day:02d}/{_dp.month:02d}"
                     except Exception:
                         _dt_fmt = _dt[:5]
                 _nm_curto = (_nm[:16] + "…") if len(_nm) > 16 else _nm
