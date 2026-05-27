@@ -1032,13 +1032,15 @@ if st.session_state.menu_atual == "Principal":
 
         # Templates WhatsApp (carregados uma vez, fora do loop)
         try:
-            from utils.niver_automatico import montar_link_whatsapp, personalizar_mensagem
+            from utils.niver_automatico import montar_link_whatsapp, personalizar_mensagem, get_parabenizados_dict
             from database import get_crm_templates
             _df_tpl = get_crm_templates()
             _tpl_niver = _df_tpl[_df_tpl["gatilho"].str.contains("niver", na=False)]["mensagem"].iloc[0] if not _df_tpl.empty else "{nome}, parabéns pelo seu aniversário! 🎂"
             _tpl_evasao = _df_tpl[_df_tpl["gatilho"].str.contains("evasao", na=False)]["mensagem"].iloc[0] if not _df_tpl.empty else "Olá {nome}, sentimos sua falta! Quando nos visita?"
+            _parab_dict = get_parabenizados_dict()
             _wapp_ok = True
         except Exception:
+            _parab_dict = {}
             _wapp_ok = False
 
         if not _df_alunos.empty:
@@ -1207,16 +1209,27 @@ if st.session_state.menu_atual == "Principal":
                             _niver_html = f"<span class='hg-niver-passou'>🎈 {_nasc_str}</span>"
                         # Link WhatsApp de parabéns — aparece apenas no mês do aniversário
                         if _wapp_ok and _mes_n == _hoje_mes:
-                            _wap_n = str(_r.get("whatsapp") or "").strip()
-                            if _wap_n:
-                                _msg_n = personalizar_mensagem(_tpl_niver, str(_r.get("nome", "")))
-                                _link_n = montar_link_whatsapp(_wap_n, _msg_n)
-                                if _link_n:
-                                    _niver_html += (
-                                        f"<br><a href='{_link_n}' target='_blank' "
-                                        f"style='font-size:10px;color:#25D366;text-decoration:none;"
-                                        f"font-weight:600;'>📱 Parabéns</a>"
-                                    )
+                            _ja_parab_hg = str(_r.get("id", "")) in _parab_dict
+                            if _ja_parab_hg:
+                                _ts_hg = _parab_dict.get(str(_r.get("id", "")), "")
+                                _ts_hg = _ts_hg.split("|")[0][:10].replace("T", " ") if _ts_hg else ""
+                                _niver_html += (
+                                    f"<br><span style='font-size:10px;color:#065F46;"
+                                    f"font-weight:800;background:#D1FAE5;padding:1px 5px;"
+                                    f"border-radius:4px;'>✅ Parabenizado</span>"
+                                    + (f"<br><span style='font-size:9px;color:#94A3B8;'>{_ts_hg}</span>" if _ts_hg else "")
+                                )
+                            else:
+                                _wap_n = str(_r.get("whatsapp") or "").strip()
+                                if _wap_n:
+                                    _msg_n = personalizar_mensagem(_tpl_niver, str(_r.get("nome", "")))
+                                    _link_n = montar_link_whatsapp(_wap_n, _msg_n)
+                                    if _link_n:
+                                        _niver_html += (
+                                            f"<br><a href='{_link_n}' target='_blank' "
+                                            f"style='font-size:10px;color:#25D366;text-decoration:none;"
+                                            f"font-weight:600;'>📱 Parabéns</a>"
+                                        )
                     else:
                         _niver_html = "<span style='color:#CBD5E1;'>—</span>"
                     _cd.markdown(

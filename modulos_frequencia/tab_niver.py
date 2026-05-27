@@ -577,34 +577,48 @@ def renderizar_aba_niver():
                     st.markdown(f"<span style='font-size:12px;color:#475569;font-weight:600;'>📍 {_turma}</span>", unsafe_allow_html=True)
 
             with c_whats:
-                msg_pessoal = personalizar_mensagem(template_msg, str(r.get("nome", "")))
-                link_w = montar_link_whatsapp(str(r.get("whatsapp", "") or ""), msg_pessoal)
-                if link_w:
+                if ja_parab:
+                    # Já parabenizado — ícone apagado, sem link
                     st.markdown(
-                        f'<a href="{link_w}" target="_blank" title="Enviar parabéns via WhatsApp" '
-                        f'style="font-size:20px;text-decoration:none;">💬</a>',
+                        '<span title="Já parabenizado" '
+                        'style="font-size:20px;opacity:0.22;cursor:default;">💬</span>',
                         unsafe_allow_html=True,
                     )
+                else:
+                    msg_pessoal = personalizar_mensagem(template_msg, str(r.get("nome", "")))
+                    link_w = montar_link_whatsapp(str(r.get("whatsapp", "") or ""), msg_pessoal)
+                    if link_w:
+                        st.markdown(
+                            f'<a href="{link_w}" target="_blank" title="Enviar parabéns via WhatsApp" '
+                            f'style="font-size:20px;text-decoration:none;">💬</a>',
+                            unsafe_allow_html=True,
+                        )
 
             with c_parab:
                 if ja_parab:
-                    # Mostrar quando foi parabenizado
                     ts_raw = parab_dict.get(aluno_id, "")
                     ts_parte = ts_raw.split("|")[0][:16].replace("T", " ") if ts_raw else ""
-                    _ts_html = f'<br><span style="font-size:10px;color:#64748B;">{ts_parte}</span>' if ts_parte else ""
+                    _ts_html = (
+                        f'<br><span style="font-size:10px;color:#64748B;">{ts_parte}</span>'
+                        if ts_parte else ""
+                    )
                     st.markdown(
-                        f'<span class="badge-parab">✅ Parabenizado</span>{_ts_html}',
+                        f'<div style="background:#D1FAE5;border:1px solid #6EE7B7;border-radius:8px;'
+                        f'padding:4px 8px;text-align:center;">'
+                        f'<span style="font-size:12px;font-weight:800;color:#065F46;">✅ Parabenizado</span>'
+                        f'{_ts_html}</div>',
                         unsafe_allow_html=True,
                     )
-                    if st.button("↩️", key=f"desparab_{aluno_id}", help="Desfazer marcação"):
+                    if st.button("↩️", key=f"desparab_{aluno_id}",
+                                 help="Desfazer marcação de parabenizado"):
                         desmarcar_parabenizado(aluno_id)
                         st.rerun()
                 else:
                     if st.button(
-                        "✅ Parabenizei",
+                        "🎉 Parabenizei",
                         key=f"parab_{aluno_id}",
                         use_container_width=True,
-                        help="Marcar como parabenizado",
+                        help="Clique após enviar os parabéns — registra e desativa o link do WhatsApp",
                     ):
                         nome_op = st.session_state.get("usuario_nome", "")
                         marcar_parabenizado(aluno_id, nome_op)
