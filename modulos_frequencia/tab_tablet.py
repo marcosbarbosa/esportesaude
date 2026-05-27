@@ -126,6 +126,23 @@ def renderizar_aba_terminal(df_alunos_tab, data_aula, presencas_turma_geral, blo
         z-index: 100;
     }
 
+    /* 🚫 LGPD — SEM AUTORIZAÇÃO DE IMAGEM */
+    .lgpd-proibido {
+        position: absolute;
+        top: -5px;
+        left: -5px;
+        background: #1E293B;
+        border: 2px solid #F59E0B;
+        border-radius: 50%;
+        width: 26px;
+        height: 26px;
+        display: flex; align-items: center; justify-content: center;
+        box-shadow: 0 3px 6px rgba(0,0,0,0.3);
+        font-size: 11px;
+        z-index: 100;
+        title: "LGPD: Não autoriza uso de imagem";
+    }
+
     /* DISTINTIVO CLEAN */
     .badge-status {
         position: absolute;
@@ -260,6 +277,11 @@ def renderizar_aba_terminal(df_alunos_tab, data_aula, presencas_turma_geral, blo
 
                 cadeado_html = "<div class='lock-badge'>🔒</div>" if bloqueio_ativo else ""
 
+                # 🚫 LGPD — badge no canto superior esquerdo se não autorizou imagem
+                _termo_img = row.get("termo_imagem")
+                _nao_autoriza = (_termo_img is False) or (_termo_img == 0) or (str(_termo_img).lower() in ["false", "0", ""])
+                lgpd_html = "<div class='lgpd-proibido' title='LGPD: Não autoriza uso de imagem'>🚫</div>" if _nao_autoriza else ""
+
                 if not bloqueio_ativo:
                     if st.button(" ", key=f"tbt_prod_{row['id']}", use_container_width=True):
                         cycle_presence_btn(row["id"], data_aula, status_atual, row["nome"])
@@ -271,6 +293,6 @@ def renderizar_aba_terminal(df_alunos_tab, data_aula, presencas_turma_geral, blo
                     avatar_html = f'<div class="avatar-visual-text">{nome_formatado}</div>'
 
                 # HTML inline para evitar falhas no Markdown
-                cartao_html_seguro = f'<div class="celula-tablet {status_class}"><div class="avatar-visual">{avatar_html}{cadeado_html}</div><div class="badge-status">{indicador}</div><div class="nome-aluno">{nome_formatado}</div></div>'
+                cartao_html_seguro = f'<div class="celula-tablet {status_class}"><div class="avatar-visual">{avatar_html}{cadeado_html}{lgpd_html}</div><div class="badge-status">{indicador}</div><div class="nome-aluno">{nome_formatado}</div></div>'
 
                 st.markdown(cartao_html_seguro, unsafe_allow_html=True)

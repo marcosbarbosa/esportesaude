@@ -1,0 +1,32 @@
+📝 Prompt Unificado e Definitivo (Versão 3 em 1)
+Copie o bloco de texto abaixo e envie diretamente para a IA do seu Replit:
+
+Copie e cole no Replit:
+
+"Replit, preciso de uma atualização tripla focada em Compliance, Visibilidade e Migração de Dados da LGPD (Direitos de Imagem). A informação se o aluno autorizou ou não o uso da sua imagem (termo_imagem: True/False) precisa de ser tratada na base de dados e exibida de forma inteligente.
+
+Por favor, execute as três partes abaixo e retorne os códigos integrais atualizados com os cabeçalhos de documentação padrão do sistema:
+
+PARTE 1: Atualização no Tablet de Chamada (modulos_frequencia/tab_tablet.py)
+
+Certifique-se de que o campo termo_imagem é extraído na query do Supabase que lista os alunos no grid do tablet.
+
+Na construção do HTML de cada cartão de aluno (cartao_html_seguro), verifique o valor de row.get("termo_imagem"). Trate valores nulos ou vazios como False.
+
+Se for False (não permite imagem), injete um ícone flutuante 🚫📸 (ou uma badge vermelha com a classe .lgpd-proibido) no canto superior do avatar daquele aluno, alertando o professor visualmente na hora da chamada.
+
+Adicione o CSS correspondente para que este aviso fique perfeitamente posicionado sobre a foto.
+
+PARTE 2: Atualização no Portal do Aluno/Prontuário (Verifique se o seu ficheiro é views/portal_aluno_view.py ou views/prontuario_view.py)
+
+Na área que renderiza o cabeçalho do perfil do aluno (Nome, Foto, etc., vindos de st.session_state.aluno_prontuario), capture a chave termo_imagem.
+
+Se o valor for False (não autorizou), exiba um banner/badge em HTML ou um st.error() de alto contraste bem no topo da ficha dizendo: 🚨 🚫 ATENÇÃO LGPD: ESTE ALUNO NÃO AUTORIZA O USO DE IMAGEM.
+
+Se o valor for True, exiba uma badge verde discreta ou um st.success() dizendo: 🟢 Uso de Imagem Autorizado (LGPD).
+
+PARTE 3: Script de Migração em Massa para Linha de Base (Supabase / SQL)
+
+Forneça o comando SQL exato para eu rodar no SQL Editor do Supabase que atualize todos os registros existentes nas tabelas alunos e pre_cadastros, definindo a coluna termo_imagem = true por padrão para todos os registros antigos. Isso criará a nossa linha de base para que a secretaria configure manualmente apenas os que não precisam/não autorizam.
+
+Execute estas tarefas garantindo a total estabilidade do ecossistema.

@@ -414,6 +414,28 @@ def renderizar_ficha():
 
     st.divider()
 
+    # 🔒 Banner LGPD — Autorização de Imagem
+    _ti = aluno.get("termo_imagem")
+    _nao_autoriza_img = (_ti is False) or (_ti == 0) or (str(_ti).lower() in ["false", "0", ""])
+    if _nao_autoriza_img:
+        st.markdown(
+            "<div style='background:#1E293B;border-left:5px solid #F59E0B;padding:10px 16px;"
+            "border-radius:6px;margin-bottom:12px;display:flex;align-items:center;gap:10px;'>"
+            "<span style='font-size:20px;'>🚨🚫</span>"
+            "<span style='color:#FEF3C7;font-weight:700;font-size:14px;'>"
+            "ATENÇÃO LGPD: ESTE ALUNO NÃO AUTORIZA O USO DE IMAGEM OU VOZ</span></div>",
+            unsafe_allow_html=True,
+        )
+    else:
+        st.markdown(
+            "<div style='background:#F0FDF4;border-left:5px solid #22C55E;padding:8px 14px;"
+            "border-radius:6px;margin-bottom:12px;display:flex;align-items:center;gap:8px;'>"
+            "<span style='font-size:16px;'>🟢</span>"
+            "<span style='color:#166534;font-weight:600;font-size:13px;'>"
+            "Uso de Imagem e Voz Autorizado — LGPD</span></div>",
+            unsafe_allow_html=True,
+        )
+
     u_v = aluno.get("url_foto")
     cp_f, cp_i, cp_pdf = st.columns([1, 4.5, 1.5], vertical_alignment="center")
 
