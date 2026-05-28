@@ -769,6 +769,52 @@ def get_alunos_sem_autorizacao_imagem() -> pd.DataFrame:
         return pd.DataFrame()
 
 
+@st.cache_data(ttl=60, show_spinner=False)
+def get_alunos_com_atestado_bloqueado() -> pd.DataFrame:
+    """Retorna alunos ativos com atestado_bloqueado=true."""
+    try:
+        res = (
+            supabase.from_("alunos")
+            .select("id,nome,url_foto,data_nascimento,turma,status,atestado_bloqueado,obs_atestado_bloqueio")
+            .neq("status", "Inativo")
+            .eq("atestado_bloqueado", True)
+            .order("nome")
+            .execute()
+        )
+        return pd.DataFrame(res.data) if res.data else pd.DataFrame()
+    except Exception:
+        return pd.DataFrame()
+
+
+def atualizar_atestado_bloqueio(aluno_id: str, bloqueado: bool, obs: str = "",
+                                 operador: str = "", aluno_nome: str = "") -> tuple:
+    """Ativa ou desativa o bloqueio de atestado médico. Retorna (bool, msg)."""
+    import json, datetime as _dt
+    try:
+        supabase.from_("alunos").update({
+            "atestado_bloqueado": bloqueado,
+            "obs_atestado_bloqueio": obs.strip() if obs else None,
+        }).eq("id", str(aluno_id)).execute()
+        _inv_alunos()
+        ts = _dt.datetime.now().isoformat(timespec="seconds")
+        chave = f"atestado_log_{ts}_{aluno_id}"
+        valor = json.dumps({
+            "aluno_id": aluno_id,
+            "aluno_nome": aluno_nome,
+            "status": "Bloqueado" if bloqueado else "Liberado",
+            "obs": obs or "—",
+            "operador": operador or "—",
+            "timestamp": ts,
+        }, ensure_ascii=False)
+        supabase.table("configuracoes_sistema").upsert(
+            {"chave": chave, "valor": valor}, on_conflict="chave"
+        ).execute()
+        get_alunos_com_atestado_bloqueado.clear()
+        return True, "Situação de atestado atualizada."
+    except Exception as e:
+        return False, str(e)
+
+
 @st.cache_data(ttl=300, show_spinner=False)
 def listar_datas_aulas_registradas() -> pd.DataFrame:
     """

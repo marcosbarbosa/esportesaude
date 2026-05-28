@@ -679,6 +679,84 @@ def render_cabecalho_aluno(aluno):
                     st.rerun()
                 else:
                     st.error(_msg)
+    st.markdown("<div style='margin-bottom:8px;'></div>", unsafe_allow_html=True)
+
+    # 🏥 Banner Atestado Médico — Bloqueio de Atividade
+    _ab = aluno.get("atestado_bloqueado")
+    _bloqueado_atestado = bool(_ab)
+    _obs_atestado = str(aluno.get("obs_atestado_bloqueio") or "").strip()
+    _at_col_banner, _at_col_btn = st.columns([5, 1], vertical_alignment="center")
+    with _at_col_banner:
+        if _bloqueado_atestado:
+            _obs_linha = f" — <em>{_obs_atestado}</em>" if _obs_atestado else ""
+            st.markdown(
+                "<div style='background:#7C2D12;border-left:5px solid #F97316;"
+                "padding:10px 16px;border-radius:6px;display:flex;align-items:center;gap:10px;'>"
+                "<span style='font-size:20px;'>🏥🚫</span>"
+                f"<span style='color:#FEF3C7;font-weight:700;font-size:14px;'>"
+                f"ATENÇÃO: ATESTADO MÉDICO PENDENTE — PARTICIPAÇÃO BLOQUEADA{_obs_linha}</span></div>",
+                unsafe_allow_html=True,
+            )
+        else:
+            st.markdown(
+                "<div style='background:#F0FDF4;border-left:5px solid #22C55E;"
+                "padding:8px 14px;border-radius:6px;display:flex;align-items:center;gap:8px;'>"
+                "<span style='font-size:16px;'>🟢</span>"
+                "<span style='color:#166534;font-weight:600;font-size:13px;'>"
+                "Atestado Médico OK — Liberado para Atividades</span></div>",
+                unsafe_allow_html=True,
+            )
+    with _at_col_btn:
+        if _bloqueado_atestado:
+            if st.button("✅ Liberar", key="atestado_toggle_liberar",
+                         use_container_width=True,
+                         help="Liberar aluno para atividades após receber atestado"):
+                from database import atualizar_atestado_bloqueio, buscar_aluno_por_id
+                _op = st.session_state.get("usuario_nome", "")
+                _ok, _msg = atualizar_atestado_bloqueio(aluno["id"], False, "", _op, aluno.get("nome", ""))
+                if _ok:
+                    _fresh = buscar_aluno_por_id(aluno["id"])
+                    if _fresh:
+                        st.session_state.aluno_prontuario = _fresh
+                    st.rerun()
+                else:
+                    st.error(_msg)
+        else:
+            if st.button("🏥 Bloquear", key="atestado_toggle_bloquear",
+                         use_container_width=True,
+                         help="Exigir novo atestado médico e bloquear participação"):
+                st.session_state["_atestado_bloquear_id"] = aluno["id"]
+                st.session_state["_atestado_bloquear_nome"] = aluno.get("nome", "")
+
+    if st.session_state.get("_atestado_bloquear_id") == aluno.get("id"):
+        with st.form("form_bloquear_atestado", clear_on_submit=True):
+            _obs_inp = st.text_input(
+                "Tipo de atestado exigido (opcional):",
+                placeholder="Ex: Atestado cardiológico, ortopédico, geral...",
+                key="atestado_obs_inp"
+            )
+            c_ok, c_cancel = st.columns(2)
+            if c_ok.form_submit_button("🚫 Confirmar Bloqueio", type="primary",
+                                        use_container_width=True):
+                from database import atualizar_atestado_bloqueio, buscar_aluno_por_id
+                _op = st.session_state.get("usuario_nome", "")
+                _ok, _msg = atualizar_atestado_bloqueio(
+                    aluno["id"], True, _obs_inp, _op, aluno.get("nome", "")
+                )
+                if _ok:
+                    del st.session_state["_atestado_bloquear_id"]
+                    del st.session_state["_atestado_bloquear_nome"]
+                    _fresh = buscar_aluno_por_id(aluno["id"])
+                    if _fresh:
+                        st.session_state.aluno_prontuario = _fresh
+                    st.rerun()
+                else:
+                    st.error(_msg)
+            if c_cancel.form_submit_button("Cancelar", use_container_width=True):
+                del st.session_state["_atestado_bloquear_id"]
+                del st.session_state["_atestado_bloquear_nome"]
+                st.rerun()
+
     st.markdown("<div style='margin-bottom:10px;'></div>", unsafe_allow_html=True)
 
     u_v = aluno.get("url_foto")

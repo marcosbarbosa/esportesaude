@@ -1322,9 +1322,19 @@ if st.session_state.menu_atual == "Principal":
                         "font-size:10px;font-weight:800;"
                         "margin-right:5px;white-space:nowrap;'>📷✕</abbr>"
                     ) if _sem_img else ""
+                    _atestado_bloq = bool(_r.get("atestado_bloqueado"))
+                    _badge_atestado = (
+                        "<abbr title='Atestado médico pendente — Participação bloqueada' "
+                        "style='text-decoration:none;cursor:help;"
+                        "background:#FFF7ED;color:#C2410C;"
+                        "border:1px solid #FED7AA;"
+                        "border-radius:3px;padding:1px 5px;"
+                        "font-size:10px;font-weight:800;"
+                        "margin-right:5px;white-space:nowrap;'>🏥⚠</abbr>"
+                    ) if _atestado_bloq else ""
                     _cb.markdown(
                         f"<span style='font-size:13.5px;font-weight:700;color:#0F172A;'>"
-                        f"{_badge_img}{_r['nome']}</span>",
+                        f"{_badge_img}{_badge_atestado}{_r['nome']}</span>",
                         unsafe_allow_html=True,
                     )
 
