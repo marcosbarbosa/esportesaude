@@ -815,6 +815,103 @@ def atualizar_atestado_bloqueio(aluno_id: str, bloqueado: bool, obs: str = "",
         return False, str(e)
 
 
+# ==============================================================================
+# 🧪 AVALIAÇÃO PENDENTE — funções para identificar e bloquear alunos sem avaliação
+# ==============================================================================
+
+@st.cache_data(ttl=60, show_spinner=False)
+def get_ids_alunos_avaliados() -> set:
+    """Retorna set de aluno_ids que possuem ao menos 1 registro em prontuario_avaliacoes."""
+    try:
+        inicio = 0
+        ids: set = set()
+        while True:
+            res = (
+                supabase.from_("prontuario_avaliacoes")
+                .select("aluno_id")
+                .range(inicio, inicio + 999)
+                .execute()
+            )
+            for row in (res.data or []):
+                if row.get("aluno_id"):
+                    ids.add(str(row["aluno_id"]))
+            if len(res.data or []) < 1000:
+                break
+            inicio += 1000
+        return ids
+    except Exception:
+        return set()
+
+
+@st.cache_data(ttl=60, show_spinner=False)
+def get_alunos_sem_avaliacao() -> pd.DataFrame:
+    """Retorna alunos ativos que nunca tiveram uma avaliação em prontuario_avaliacoes."""
+    try:
+        ids_avaliados = get_ids_alunos_avaliados()
+        res = (
+            supabase.from_("alunos")
+            .select("id,nome,url_foto,data_nascimento,turma,status,whatsapp,avaliacao_pendente,obs_avaliacao_pendente")
+            .neq("status", "Inativo")
+            .order("nome")
+            .execute()
+        )
+        if not res.data:
+            return pd.DataFrame()
+        df = pd.DataFrame(res.data)
+        df["id"] = df["id"].astype(str)
+        return df[~df["id"].isin(ids_avaliados)].reset_index(drop=True)
+    except Exception:
+        return pd.DataFrame()
+
+
+@st.cache_data(ttl=60, show_spinner=False)
+def get_alunos_com_avaliacao_pendente() -> pd.DataFrame:
+    """Retorna alunos ativos com avaliacao_pendente=true (bloqueados até reavaliação)."""
+    try:
+        res = (
+            supabase.from_("alunos")
+            .select("id,nome,url_foto,data_nascimento,turma,status,avaliacao_pendente,obs_avaliacao_pendente")
+            .neq("status", "Inativo")
+            .eq("avaliacao_pendente", True)
+            .order("nome")
+            .execute()
+        )
+        return pd.DataFrame(res.data) if res.data else pd.DataFrame()
+    except Exception:
+        return pd.DataFrame()
+
+
+def atualizar_avaliacao_pendente(aluno_id: str, pendente: bool, obs: str = "",
+                                  operador: str = "", aluno_nome: str = "") -> tuple:
+    """Ativa ou desativa o bloqueio por avaliação/reavaliação pendente. Retorna (bool, msg)."""
+    import json, datetime as _dt
+    try:
+        supabase.from_("alunos").update({
+            "avaliacao_pendente": pendente,
+            "obs_avaliacao_pendente": obs.strip() if obs else None,
+        }).eq("id", str(aluno_id)).execute()
+        _inv_alunos()
+        ts = _dt.datetime.now().isoformat(timespec="seconds")
+        chave = f"aval_pend_log_{ts}_{aluno_id}"
+        valor = json.dumps({
+            "aluno_id": aluno_id,
+            "aluno_nome": aluno_nome,
+            "status": "Bloqueado" if pendente else "Liberado",
+            "obs": obs or "—",
+            "operador": operador or "—",
+            "timestamp": ts,
+        }, ensure_ascii=False)
+        supabase.table("configuracoes_sistema").upsert(
+            {"chave": chave, "valor": valor}, on_conflict="chave"
+        ).execute()
+        get_alunos_com_avaliacao_pendente.clear()
+        get_alunos_sem_avaliacao.clear()
+        get_ids_alunos_avaliados.clear()
+        return True, "Situação de avaliação atualizada."
+    except Exception as e:
+        return False, str(e)
+
+
 @st.cache_data(ttl=300, show_spinner=False)
 def listar_datas_aulas_registradas() -> pd.DataFrame:
     """
