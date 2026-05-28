@@ -706,3 +706,58 @@ def criar_lista_acao_evasao_pdf(df, categoria, data_inicio, data_fim, turma):
         return pdf.output(dest='S').encode('latin-1')
     except:
         return bytes(pdf.output())
+
+
+# ==============================================================================
+# RELATÓRIO: PRESTAÇÃO DE CONTAS DIÁRIA — Lista de Presença por Dia
+# ==============================================================================
+def criar_prestacao_diaria_pdf(data_fmt: str, nomes: list) -> bytes:
+    """
+    Gera PDF da lista de alunos presentes num determinado dia.
+    Usa o mesmo cabeçalho padrão (logos + título).
+    Retorna bytes prontos para st.download_button.
+    """
+    pdf = PDF()
+    pdf.add_page()
+    _cabecalho_padrao(pdf, subtitulo="PLANILHA DE FREQUÊNCIA DIÁRIA")
+
+    # ── Título do relatório ───────────────────────────────────────────────────
+    pdf.set_font("Arial", "B", 11)
+    pdf.set_fill_color(30, 58, 95)
+    pdf.set_text_color(255, 255, 255)
+    pdf.cell(0, 8, limpar_texto(f"  Lista de Presenca - {data_fmt}"), fill=True, ln=1)
+    pdf.ln(2)
+
+    # ── Sub-header: total ─────────────────────────────────────────────────────
+    pdf.set_font("Arial", "B", 9)
+    pdf.set_text_color(30, 58, 95)
+    pdf.cell(0, 6, limpar_texto(f"Total de alunos presentes: {len(nomes)}"), ln=1)
+    pdf.ln(3)
+
+    # ── Cabeçalho da tabela ───────────────────────────────────────────────────
+    pdf.set_fill_color(30, 58, 95)
+    pdf.set_text_color(255, 255, 255)
+    pdf.set_font("Arial", "B", 9)
+    pdf.cell(14, 7, "#", border=1, fill=True, align="C")
+    pdf.cell(176, 7, limpar_texto("NOME DO ALUNO"), border=1, fill=True, align="L")
+    pdf.ln()
+
+    # ── Linhas ────────────────────────────────────────────────────────────────
+    pdf.set_text_color(0, 0, 0)
+    for i, nome in enumerate(nomes, 1):
+        fill = (i % 2 == 0)
+        if fill:
+            pdf.set_fill_color(248, 250, 252)
+        else:
+            pdf.set_fill_color(255, 255, 255)
+        pdf.set_font("Arial", "B", 8)
+        pdf.cell(14, 6.5, str(i), border=1, fill=True, align="C")
+        pdf.set_font("Arial", "", 9)
+        pdf.cell(176, 6.5, limpar_texto(nome.upper()), border=1, fill=True, align="L")
+        pdf.ln()
+
+    # Saída
+    try:
+        return pdf.output(dest='S').encode('latin-1')
+    except Exception:
+        return bytes(pdf.output())
