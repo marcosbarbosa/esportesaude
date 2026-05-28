@@ -202,14 +202,7 @@ def tela_frequencia():
         )
         return
 
-    dias_passados = (hoje_check - data_aula).days
     bloqueio_ativo = False
-
-    if dias_passados > 10 and st.session_state.get("usuario_email") != ADMIN_MASTER:
-        bloqueio_ativo = True
-        st.error(
-            "🔒 **Edição Bloqueada:** Esta aula ocorreu há mais de 10 dias. O registo de frequência encontra-se selado por segurança. Apenas o Administrador Mestre pode efetuar alterações."
-        )
 
     busca_limpa = remover_acentos(busca_grid).strip() if busca_grid else ""
     mostrar_todos_horario = False
