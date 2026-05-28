@@ -818,15 +818,21 @@ def _gerar_pdf_relatorio_prime(
         # ── Gráfico: presença diária ──────────────────────────────────
         tl_dados = []
         wd_acc   = {}
+        _dt_map  = {}   # guarda dt parseado para ordenação
         for col in cols_datas:
             pres = int((df_mat[col] == "P").sum())
             dt   = _parse_dt(col, d_i, d_f)
             wd   = _DIAS_PT_PDF.get(dt.strftime("%A"), "?") if dt else "?"
-            tl_dados.append((f"{col} {wd[:3]}", pres))
+            label = f"{col} {wd[:3]}"
+            tl_dados.append((label, pres))
+            _dt_map[label] = dt or datetime.date.max
             if wd != "?":
                 acc = wd_acc.setdefault(wd, [0, 0])
                 acc[0] += pres
                 acc[1] += 1
+
+        # Garante ordem cronológica independente da ordem de cols_datas
+        tl_dados.sort(key=lambda x: _dt_map.get(x[0], datetime.date.max))
 
         chart_diario = _html_barras_rel(
             tl_dados, "Presencas por Dia de Aula", cor="#0056b3"
@@ -1247,6 +1253,19 @@ def tela_relatorio():
                     if c not in _META
                     and df_matriz[c].isin(["P", "F", "J"]).any()
                 ]
+
+                # Ordena cronologicamente (evita datas fora de ordem no PDF/Excel)
+                def _parse_col_dt(col, _di=d_i, _df=d_f):
+                    for yr in sorted({_di.year, _df.year}):
+                        try:
+                            dt = datetime.datetime.strptime(f"{col}/{yr}", "%d/%m/%Y").date()
+                            if _di <= dt <= _df:
+                                return dt
+                        except Exception:
+                            pass
+                    return datetime.date.max
+
+                cols_data_reais = sorted(cols_data_reais, key=_parse_col_dt)
 
                 # Totais globais
                 tp_geral = int(df_matriz["Total P"].sum())
