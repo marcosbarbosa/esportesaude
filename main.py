@@ -1283,6 +1283,13 @@ if st.session_state.menu_atual == "Principal":
             _sort_btn(_h3, "🎂 Aniversário", "aniversario")
             _sort_btn(_h4, "⏱ Última Pres.", "ultima_presenca")
 
+            # Pré-carregar IDs avaliados (1 query, sem N+1 no loop)
+            try:
+                from database import get_ids_alunos_avaliados
+                _ids_avaliados_hg = get_ids_alunos_avaliados()
+            except Exception:
+                _ids_avaliados_hg = set()
+
             # ── Linhas do Grid ─────────────────────────────────────────
             _hoje_hg   = datetime.date.today()
             _hoje_dia  = _hoje_hg.day
