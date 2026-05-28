@@ -23,6 +23,7 @@ from database import (
     get_avaliacoes_aluno,
     get_midias_diario,
     get_ultima_presenca_batch,
+    get_presentes_dia_todos,
 )
 
 # 🚀 IMPORTAÇÃO DO MOTOR NATIVO DO WORD
@@ -1019,6 +1020,214 @@ def _gerar_pdf_relatorio_prime(
 
 
 # ==============================================================================
+# 📋 PRESTAÇÃO DIÁRIA — Lista de Presença por Dia (PDF)
+# ==============================================================================
+def _gerar_html_prestacao_diaria(data_fmt: str, alunos: list, cfg: dict) -> str:
+    """Gera HTML completo para impressão/PDF da lista de presença diária."""
+    import base64, os
+    from utils.imagem import get_base64_image
+
+    total = len(alunos)
+
+    # Logos em base64 para o cabeçalho
+    logo_p = get_base64_image(cfg.get("logo_principal", "logo-imbra.png"))
+    logo_s = get_base64_image(cfg.get("logo_secundaria", "logo-secretaria.png"))
+    img_p = f"<img src='data:image/png;base64,{logo_p}' style='height:60px;'>" if logo_p else ""
+    img_s = f"<img src='data:image/png;base64,{logo_s}' style='height:60px;'>" if logo_s else ""
+
+    nome_org    = cfg.get("nome_organizacao", "Instituto Muda Brasil").upper()
+    titulo_proj = cfg.get("titulo_projeto", "ESPORTE E SAÚDE NA COMUNIDADE - FASE 2")
+
+    linhas = ""
+    for i, nome in enumerate(alunos, 1):
+        bg = "#F8FAFC" if i % 2 == 0 else "#FFFFFF"
+        linhas += f"""
+        <tr style='background:{bg};'>
+          <td style='padding:6px 10px;text-align:center;width:50px;
+                     font-weight:700;color:#475569;font-size:12px;'>{i}</td>
+          <td style='padding:6px 10px;font-size:13px;font-weight:600;
+                     color:#0F172A;text-transform:uppercase;'>{nome}</td>
+        </tr>"""
+
+    return f"""<!DOCTYPE html>
+<html lang='pt-BR'>
+<head>
+<meta charset='UTF-8'>
+<title>Lista de Presença — {data_fmt}</title>
+<style>
+  * {{ box-sizing:border-box; margin:0; padding:0; }}
+  body {{ font-family:'Segoe UI',Arial,sans-serif; color:#1E293B; padding:20px 28px; }}
+  .header {{
+    display:grid; grid-template-columns:120px 1fr 120px;
+    align-items:center; gap:10px;
+    border-bottom:3px solid #1E88E5; padding-bottom:12px; margin-bottom:16px;
+  }}
+  .header-logo {{ text-align:center; }}
+  .header-center {{ text-align:center; }}
+  .header-title {{
+    font-size:13px; font-weight:900; color:#0A2540; line-height:1.4;
+    text-transform:uppercase; letter-spacing:.3px;
+  }}
+  .header-sub {{ font-size:11px; color:#64748B; margin-top:3px; font-weight:600; }}
+  .meta-box {{
+    background:#EFF6FF; border:1px solid #BFDBFE; border-radius:6px;
+    padding:10px 14px; margin-bottom:14px; display:flex;
+    justify-content:space-between; align-items:center;
+  }}
+  .meta-title {{
+    font-size:14px; font-weight:900; color:#1E40AF; text-transform:uppercase;
+  }}
+  .meta-sub {{ font-size:11px; color:#3B82F6; margin-top:2px; }}
+  .badge-total {{
+    background:#1E88E5; color:#fff; font-size:13px; font-weight:800;
+    padding:6px 14px; border-radius:20px; white-space:nowrap;
+  }}
+  table {{ width:100%; border-collapse:collapse; }}
+  thead tr {{ background:#1E3A5F; }}
+  thead th {{
+    padding:8px 10px; text-align:left; font-size:11px; font-weight:800;
+    color:#fff; text-transform:uppercase; letter-spacing:.5px;
+  }}
+  thead th:first-child {{ text-align:center; width:50px; }}
+  tbody tr:hover {{ background:#EFF6FF; }}
+  td {{ border-bottom:1px solid #E2E8F0; vertical-align:middle; }}
+  .footer {{
+    margin-top:20px; text-align:center;
+    font-size:9px; color:#94A3B8;
+    border-top:1px solid #E2E8F0; padding-top:10px;
+  }}
+  @media print {{
+    body {{ padding:12px 18px; }}
+    .no-print {{ display:none !important; }}
+  }}
+</style>
+</head>
+<body>
+
+<div class='header'>
+  <div class='header-logo'>{img_s}</div>
+  <div class='header-center'>
+    <div class='header-title'>{nome_org}<br>{titulo_proj}</div>
+    <div class='header-sub'>PLANILHA DE FREQUÊNCIA DIÁRIA</div>
+  </div>
+  <div class='header-logo'>{img_p}</div>
+</div>
+
+<div class='meta-box'>
+  <div>
+    <div class='meta-title'>📋 Lista de Presença — {data_fmt}</div>
+    <div class='meta-sub'>Alunos presentes em todas as turmas neste dia</div>
+  </div>
+  <div class='badge-total'>Total: {total} aluno(s)</div>
+</div>
+
+<table>
+  <thead>
+    <tr>
+      <th>#</th>
+      <th>TOTAL PRESENÇAS / DIA — Nome do Aluno</th>
+    </tr>
+  </thead>
+  <tbody>
+    {linhas}
+  </tbody>
+</table>
+
+<div class='footer'>
+  Sistema Esporte e Saúde — Gestão Inteligente MoveRight™ &nbsp;|&nbsp;
+  Emitido em: {datetime.date.today().strftime("%d/%m/%Y")} &nbsp;|&nbsp;
+  Data de referência: {data_fmt}
+</div>
+
+<script>window.onload = function(){{ window.print(); }}</script>
+</body>
+</html>"""
+
+
+def _renderizar_aba_prestacao_diaria():
+    from utils.identidade import get_config as _gcfg
+    import base64
+
+    st.markdown("""
+        <div style='background:#EFF6FF;border-left:4px solid #1E88E5;
+                    padding:12px 16px;border-radius:6px;margin-bottom:18px;'>
+            <strong style='color:#1E3A5F;'>📋 Prestação de Contas Diária</strong><br>
+            <span style='color:#1D4ED8;font-size:13px;'>
+                Selecione um dia para gerar a lista numerada e em ordem alfabética
+                de todos os alunos presentes, com cabeçalho oficial para PDF.
+            </span>
+        </div>
+    """, unsafe_allow_html=True)
+
+    c_data, c_btn = st.columns([2, 1], vertical_alignment="bottom")
+    data_sel = c_data.date_input(
+        "📅 Dia da Aula:", value=datetime.date.today(), format="DD/MM/YYYY",
+        key="pd_data_sel"
+    )
+    gerar = c_btn.button("🔍 Buscar Presenças", type="primary",
+                         use_container_width=True, key="pd_buscar")
+
+    if not gerar:
+        st.caption("Selecione o dia e clique em **Buscar Presenças**.")
+        return
+
+    data_iso = str(data_sel)
+    data_fmt = data_sel.strftime("%d/%m/%Y")
+
+    with st.spinner("Consultando registros..."):
+        registros = get_presentes_dia_todos(data_iso)
+
+    if not registros:
+        st.warning(f"Nenhum aluno registrado como presente em **{data_fmt}**.")
+        return
+
+    # Extrai e ordena nomes alfabeticamente
+    nomes = sorted(set(
+        str(r.get("alunos", {}).get("nome", "") or r.get("nome", "")).strip()
+        for r in registros
+        if (r.get("alunos", {}) or {}).get("nome") or r.get("nome")
+    ))
+
+    total = len(nomes)
+    st.success(f"✅ {total} aluno(s) presentes em {data_fmt}")
+
+    # Preview na tela
+    st.markdown(f"""
+        <div style='background:#fff;border:1px solid #E2E8F0;border-radius:8px;
+                    padding:14px 18px;margin:10px 0;'>
+            <p style='font-weight:900;color:#0A2540;font-size:14px;margin-bottom:8px;'>
+                📋 Lista de Presença — {data_fmt} &nbsp;
+                <span style='background:#1E88E5;color:#fff;font-size:11px;
+                             padding:2px 8px;border-radius:10px;'>{total} aluno(s)</span>
+            </p>
+        </div>
+    """, unsafe_allow_html=True)
+
+    for i, nome in enumerate(nomes, 1):
+        st.markdown(
+            f"<span style='font-size:13px;color:#374151;'>"
+            f"<b>{i:02d}.</b> {nome.upper()}</span>",
+            unsafe_allow_html=True,
+        )
+
+    st.markdown("<br>", unsafe_allow_html=True)
+
+    # Botão PDF
+    if st.button("🖨️ Gerar PDF para Impressão", type="primary",
+                 use_container_width=True, key="pd_pdf"):
+        cfg = _gcfg()
+        html = _gerar_html_prestacao_diaria(data_fmt, nomes, cfg)
+        b64 = base64.b64encode(html.encode("utf-8")).decode()
+        js = f"""<script>
+        var w = window.open('', '_blank');
+        var h = atob('{b64}');
+        w.document.open(); w.document.write(h); w.document.close();
+        </script>"""
+        st.components.v1.html(js, height=0)
+        st.caption("📄 A janela de impressão foi aberta. Use **Ctrl+P** ou o botão de impressão do browser para salvar como PDF.")
+
+
+# ==============================================================================
 # RENDERIZAÇÃO DA INTERFACE PRINCIPAL (ST)
 # ==============================================================================
 def tela_relatorio():
@@ -1027,12 +1236,13 @@ def tela_relatorio():
         unsafe_allow_html=True,
     )
 
-    tab_f, tab_id, tab_a, tab_w = st.tabs(
+    tab_f, tab_id, tab_a, tab_w, tab_diario = st.tabs(
         [
             "📊 Planilha de Frequência",
             "🪪 Relatório Cara-Crachá",
             "🔎 Auditoria de Cadastros",
             "🏆 Prestação de Conta Pedagógica",
+            "📋 Prestação Diária",
         ]
     )
 
@@ -1894,6 +2104,12 @@ def tela_relatorio():
                         "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
                         use_container_width=True,
                     )
+
+    # ==============================================================================
+    # --- ABA 5: PRESTAÇÃO DIÁRIA (Lista de Presença por Dia - PDF) ---
+    # ==============================================================================
+    with tab_diario:
+        _renderizar_aba_prestacao_diaria()
 
     st.markdown(
         "<br><p style='text-align:center; color:#94a3b8; font-size:10px;'>Moveright™ Gestão Inteligente - Projeto Esporte e Saúde Community Phase 2 - v8.40 PRIMEMAX</p>",

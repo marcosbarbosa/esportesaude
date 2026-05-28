@@ -400,14 +400,23 @@ def rejeitar_inscricao_aluno(pre_cadastro_id):
 # ==============================================================================
 @st.cache_data(ttl=300, show_spinner=False)
 def buscar_alunos_geral(termo="", incluir_inativos=False):
+    """Busca alunos com paginação automática — supera o limite de 1000 linhas do PostgREST."""
     try:
-        query = supabase.from_("alunos").select("*")
-        if termo:
-            query = query.ilike("nome", f"%{termo}%")
-        if not incluir_inativos:
-            query = query.neq("status", "Inativo")
-        res = query.order("nome").execute()
-        return pd.DataFrame(res.data)
+        todos = []
+        inicio = 0
+        while True:
+            query = supabase.from_("alunos").select("*")
+            if termo:
+                query = query.ilike("nome", f"%{termo}%")
+            if not incluir_inativos:
+                query = query.neq("status", "Inativo")
+            res = query.order("nome").range(inicio, inicio + 999).execute()
+            if res.data:
+                todos.extend(res.data)
+            if not res.data or len(res.data) < 1000:
+                break
+            inicio += 1000
+        return pd.DataFrame(todos)
     except Exception:
         return pd.DataFrame()
 
@@ -855,17 +864,26 @@ def excluir_dia_aula_completo(data_str: str, solicitante_email: str):
 
 
 def get_diarios_periodo(data_inicio, data_fim, turma=""):
+    """Retorna diários com paginação automática — supera o limite de 1000 linhas do PostgREST."""
     try:
-        query = (
-            supabase.from_("diario_aulas")
-            .select("*")
-            .gte("data_aula", str(data_inicio))
-            .lte("data_aula", str(data_fim))
-        )
-        if turma:
-            query = query.eq("turma", turma)
-        res = query.order("data_aula").execute()
-        return pd.DataFrame(res.data)
+        todos = []
+        inicio = 0
+        while True:
+            query = (
+                supabase.from_("diario_aulas")
+                .select("*")
+                .gte("data_aula", str(data_inicio))
+                .lte("data_aula", str(data_fim))
+            )
+            if turma:
+                query = query.eq("turma", turma)
+            res = query.order("data_aula").range(inicio, inicio + 999).execute()
+            if res.data:
+                todos.extend(res.data)
+            if not res.data or len(res.data) < 1000:
+                break
+            inicio += 1000
+        return pd.DataFrame(todos)
     except Exception:
         return pd.DataFrame()
 
@@ -1049,34 +1067,55 @@ def get_relatorio_periodo(data_inicio, data_fim, turma_filtro="Todas"):
     Constrói a matriz cruzando os dias oficiais de aula (Diário) com os alunos.
     Denominador correto: total de aulas registradas no Diário por turma.
     Se não houver registro no dia da aula → FALTA (Motor Anti-Furo).
+    Todas as sub-queries usam paginação automática (chunks de 1 000 linhas)
+    para superar o limite do PostgREST e evitar corte silencioso de dados.
     """
+    def _paginar(query_fn):
+        """Executa query_fn(inicio, fim) em loop até esgotar os dados."""
+        todos, inicio = [], 0
+        while True:
+            res = query_fn(inicio, inicio + 999).execute()
+            if res.data:
+                todos.extend(res.data)
+            if not res.data or len(res.data) < 1000:
+                break
+            inicio += 1000
+        return todos
+
     try:
-        q_al = (
-            supabase.table("alunos").select("id, nome, turma").neq("status", "Inativo")
-        )
-        if turma_filtro and turma_filtro != "Todas":
-            q_al = q_al.eq("turma", turma_filtro)
-        df_alunos = pd.DataFrame(q_al.execute().data)
+        # ── Alunos ──────────────────────────────────────────────────────────
+        def _q_al(i, f):
+            q = supabase.table("alunos").select("id, nome, turma").neq("status", "Inativo")
+            if turma_filtro and turma_filtro != "Todas":
+                q = q.eq("turma", turma_filtro)
+            return q.range(i, f)
+        df_alunos = pd.DataFrame(_paginar(_q_al))
         if df_alunos.empty:
             return pd.DataFrame()
 
-        q_fr = (
-            supabase.table("frequencia")
-            .select("aluno_id, data_aula, status")
-            .gte("data_aula", str(data_inicio))
-            .lte("data_aula", str(data_fim))
-        )
-        df_freq = pd.DataFrame(q_fr.execute().data)
+        # ── Frequência (select mínimo para economizar banda) ─────────────────
+        def _q_fr(i, f):
+            return (
+                supabase.table("frequencia")
+                .select("aluno_id, data_aula, status")
+                .gte("data_aula", str(data_inicio))
+                .lte("data_aula", str(data_fim))
+                .range(i, f)
+            )
+        df_freq = pd.DataFrame(_paginar(_q_fr))
 
-        q_diario = (
-            supabase.table("diario_aulas")
-            .select("turma, data_aula")
-            .gte("data_aula", str(data_inicio))
-            .lte("data_aula", str(data_fim))
-        )
-        if turma_filtro and turma_filtro != "Todas":
-            q_diario = q_diario.eq("turma", turma_filtro)
-        df_diario = pd.DataFrame(q_diario.execute().data)
+        # ── Diário ───────────────────────────────────────────────────────────
+        def _q_di(i, f):
+            q = (
+                supabase.table("diario_aulas")
+                .select("turma, data_aula")
+                .gte("data_aula", str(data_inicio))
+                .lte("data_aula", str(data_fim))
+            )
+            if turma_filtro and turma_filtro != "Todas":
+                q = q.eq("turma", turma_filtro)
+            return q.range(i, f)
+        df_diario = pd.DataFrame(_paginar(_q_di))
 
         if df_diario.empty:
             return pd.DataFrame()
@@ -1139,6 +1178,26 @@ def get_relatorio_periodo(data_inicio, data_fim, turma_filtro="Todas"):
     except Exception as e:
         print(f"Erro na matriz de relatório: {e}")
         return pd.DataFrame()
+
+
+@st.cache_data(ttl=60, show_spinner=False)
+def get_presentes_dia_todos(data: str) -> list:
+    """
+    Retorna todos os alunos presentes num dado dia (todas as turmas).
+    Usado no relatório de Prestação de Contas Diária.
+    data: string ISO 'YYYY-MM-DD'
+    """
+    try:
+        res = (
+            supabase.from_("frequencia")
+            .select("aluno_id, alunos(nome, turma)")
+            .eq("data_aula", data)
+            .eq("status", "PRESENTE")
+            .execute()
+        )
+        return res.data if res.data else []
+    except Exception:
+        return []
 
 
 # ==============================================================================
