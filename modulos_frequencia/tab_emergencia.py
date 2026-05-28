@@ -19,6 +19,17 @@ except ImportError:
     XHTML_DISPONIVEL = False
 
 
+def _extrair_hashtag(texto: str, tag: str) -> str:
+    """Extrai conteúdo de uma seção #Tag: dentro de problemas_saude."""
+    if not texto:
+        return ""
+    m = re.search(
+        rf"#{re.escape(tag)}:\s*(.+?)(?=\n\n#|\Z)",
+        texto, re.IGNORECASE | re.DOTALL
+    )
+    return m.group(1).strip() if m else ""
+
+
 # ==============================================================================
 # 🖨️ PDF PRIME — Ficha de Emergência
 # ==============================================================================
@@ -47,8 +58,9 @@ def _gerar_pdf_emergencia(df: pd.DataFrame, turma: str) -> bytes | None:
         nome = str(r.get("nome", "")).strip()
         contato = str(r.get("contato_emergencia") or "—").strip()
         parentesco = str(r.get("grau_parentesco") or "—").strip()
-        alergia = str(r.get("alergias") or "—").strip()
-        saude = str(r.get("problemas_saude") or "—").strip()
+        ps_text = str(r.get("problemas_saude") or "")
+        alergia = _extrair_hashtag(ps_text, "Alergias") or "—"
+        saude   = ps_text[:100] if ps_text else "—"
         idade_str = "—"
         if pd.notna(r.get("data_nascimento")):
             try:
@@ -245,7 +257,8 @@ def renderizar_aba_emergencia(df_alunos_tab, turma_selecionada):
             )
 
             # Badges clínicos
-            alergia_str = str(row.get("alergias", "")).strip()
+            _ps_txt     = str(row.get("problemas_saude") or "")
+            alergia_str = _extrair_hashtag(_ps_txt, "Alergias")
             alergia_html = (
                 f"<div class='em-badge-alergia'>⚠️ Alergia: {alergia_str[:40]}</div><br>"
                 if alergia_str and alergia_str.lower() not in ["nan", "none", "não", ""] else ""

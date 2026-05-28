@@ -1118,17 +1118,19 @@ def render_aba_perfil(aluno):
             index=_par_idx,
         )
         c_s1, c_s2 = st.columns(2)
+        _ps_val = "" if pd.isna(aluno.get("problemas_saude")) else str(aluno.get("problemas_saude"))
+        _ps_h   = max(150, len(_ps_val.split("\n")) * 25)
         prob_ed = c_s1.text_area(
             "Problemas de Saúde:",
-            value=""
-            if pd.isna(aluno.get("problemas_saude"))
-            else str(aluno.get("problemas_saude")),
+            value=_ps_val,
+            height=_ps_h,
         )
+        _med_val = "" if pd.isna(aluno.get("medicamentos")) else str(aluno.get("medicamentos"))
+        _med_h   = max(150, len(_med_val.split("\n")) * 25)
         meds_ed = c_s2.text_area(
             "Uso de Medicamentos:",
-            value=""
-            if pd.isna(aluno.get("medicamentos"))
-            else str(aluno.get("medicamentos")),
+            value=_med_val,
+            height=_med_h,
         )
         rest_ed = st.text_input(
             "Restrições Físicas:",

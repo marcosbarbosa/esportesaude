@@ -1360,6 +1360,202 @@ def _renderizar_aba_prestacao_diaria():
 
 
 # ==============================================================================
+# ABA 7: MONITORAMENTO CLÍNICO — B.I. DA SAÚDE
+# ==============================================================================
+def _extrair_secao_hashtag(texto: str, hashtag: str) -> str:
+    """Extrai o conteúdo de uma seção #Hashtag: de um texto multilinha."""
+    if not texto:
+        return ""
+    pattern = rf"#{re.escape(hashtag)}:\s*(.+?)(?=\n\n#|\Z)"
+    m = re.search(pattern, texto, re.IGNORECASE | re.DOTALL)
+    return m.group(1).strip() if m else ""
+
+
+import re as _re_mod
+
+
+PALAVRAS_ALERTA = ["cirurgia", "cardiaco", "cardíaco", "pressao", "pressão", "infarto",
+                   "marcapasso", "insuficiencia", "coagulação", "anticoagulante"]
+
+BORG_OPCOES = ["0 — Nenhum", "1 — Muito leve", "2 — Leve", "3 — Moderado",
+               "4 — Ligeiramente pesado", "5 — Pesado", "6", "7 — Muito pesado",
+               "8", "9", "10 — Máximo / Emergência"]
+
+
+def _tem_alerta(texto: str) -> bool:
+    t = texto.lower() if texto else ""
+    return any(p in t for p in PALAVRAS_ALERTA)
+
+
+def _renderizar_monitoramento_clinico():
+    st.markdown("""
+        <div style='background:linear-gradient(135deg,#FFF1F2,#FEF2F2);
+                    border-left:5px solid #EF4444;padding:18px 20px;
+                    border-radius:8px;margin-bottom:20px;'>
+            <h3 style='margin:0 0 4px 0;color:#991B1B;'>🏥 Monitoramento Clínico — B.I. da Saúde</h3>
+            <p style='margin:0;color:#B91C1C;font-size:13px;'>
+                Painel de classificação de risco por aluno. Use a coluna <strong>Borg / Risco</strong>
+                para registrar o nível percebido e identificar alertas clínicos automaticamente.
+                <br>⚠️ <em>Dados confidenciais — acesso restrito à equipe técnica.</em>
+            </p>
+        </div>
+    """, unsafe_allow_html=True)
+
+    # ── Filtros ────────────────────────────────────────────────────────────────
+    c_turma, c_alerta, c_busca = st.columns([2, 1, 2])
+    with c_turma:
+        df_turmas = get_todas_turmas(ativas_apenas=True)
+        opcoes_turma = ["Todas as Turmas"] + (df_turmas["nome"].tolist() if not df_turmas.empty else [])
+        turma_filtro = st.selectbox("Turma:", opcoes_turma, key="mc_turma")
+    with c_alerta:
+        so_alertas = st.checkbox("🔴 Apenas Alertas", key="mc_alertas")
+    with c_busca:
+        busca_mc = st.text_input("🔍 Buscar aluno:", key="mc_busca", placeholder="Nome…")
+
+    # ── Carrega alunos ─────────────────────────────────────────────────────────
+    with st.spinner("Carregando dados clínicos…"):
+        df_raw = buscar_alunos_geral("", incluir_inativos=False)
+
+    if df_raw is None or df_raw.empty:
+        st.warning("Nenhum aluno ativo encontrado.")
+        return
+
+    df_raw = df_raw[df_raw.get("status", "Ativo") != "Inativo"] if "status" in df_raw.columns else df_raw
+
+    # ── Aplica filtros ─────────────────────────────────────────────────────────
+    if turma_filtro != "Todas as Turmas":
+        df_raw = df_raw[df_raw["turma"] == turma_filtro]
+
+    if busca_mc and len(busca_mc.strip()) >= 2:
+        from utils.texto import remover_acentos as _ra
+        mask = df_raw["nome"].apply(_ra).str.contains(_ra(busca_mc), case=False, na=False)
+        df_raw = df_raw[mask]
+
+    # ── Monta tabela de monitoramento ─────────────────────────────────────────
+    registros = []
+    for _, r in df_raw.iterrows():
+        ps = str(r.get("problemas_saude") or "")
+        patologias  = _extrair_secao_hashtag(ps, "Patologias")    or ps[:80] if ps else ""
+        restricoes  = _extrair_secao_hashtag(ps, "Restrições_Físicas")
+        alergias    = _extrair_secao_hashtag(ps, "Alergias")
+        incomodos   = _extrair_secao_hashtag(ps, "Incômodos_Físicos")
+        medicament  = _extrair_secao_hashtag(ps, "Uso_Contínuo_Medicamentos")
+
+        alerta = _tem_alerta(patologias) or _tem_alerta(ps)
+
+        # Borg salvo em session_state (editável na sessão)
+        borg_key = f"borg_mc_{r['id']}"
+        borg_atual = st.session_state.get(borg_key, 0)
+
+        registros.append({
+            "id":         int(r["id"]),
+            "🔴":         "🔴" if alerta else "",
+            "Nome":       str(r.get("nome", "")),
+            "Turma":      str(r.get("turma") or ""),
+            "Patologias": patologias[:120],
+            "Restrições": restricoes[:80],
+            "Alergias":   alergias[:60],
+            "Incômodos":  incomodos[:60],
+            "Medicamentos": medicament[:80],
+            "Borg/Risco": borg_atual,
+        })
+
+    df_monitor = pd.DataFrame(registros)
+
+    if so_alertas:
+        df_monitor = df_monitor[df_monitor["🔴"] == "🔴"]
+
+    if df_monitor.empty:
+        st.info("Nenhum aluno encontrado com os filtros selecionados.")
+        return
+
+    # ── Legenda Borg ──────────────────────────────────────────────────────────
+    with st.expander("📖 Legenda da Escala Borg (0–10)", expanded=False):
+        st.markdown("""
+        | Valor | Significado |
+        |-------|-------------|
+        | 0 | Nenhum esforço / Sem dor |
+        | 1–2 | Muito leve |
+        | 3–4 | Moderado — atenção |
+        | 5–6 | Pesado — monitorar de perto |
+        | 7–8 | Muito pesado — considerar adaptações |
+        | 9–10 | **Máximo / Emergência — intervir imediatamente** |
+        """)
+
+    # ── Editor interativo ─────────────────────────────────────────────────────
+    st.markdown(f"**{len(df_monitor)} aluno(s) exibidos** — edite a coluna **Borg/Risco** (0–10) diretamente na tabela:")
+
+    col_config = {
+        "id":         st.column_config.NumberColumn("ID", disabled=True, width="small"),
+        "🔴":         st.column_config.TextColumn("⚠️", width="small"),
+        "Nome":       st.column_config.TextColumn("Nome", disabled=True, width="medium"),
+        "Turma":      st.column_config.TextColumn("Turma", disabled=True, width="small"),
+        "Patologias": st.column_config.TextColumn("Patologias / Saúde", disabled=True, width="large"),
+        "Restrições": st.column_config.TextColumn("Restrições Físicas", disabled=True, width="medium"),
+        "Alergias":   st.column_config.TextColumn("Alergias", disabled=True, width="medium"),
+        "Incômodos":  st.column_config.TextColumn("Incômodos", disabled=True, width="medium"),
+        "Medicamentos": st.column_config.TextColumn("Medicamentos", disabled=True, width="medium"),
+        "Borg/Risco": st.column_config.NumberColumn(
+            "Borg / Risco (0–10)",
+            min_value=0, max_value=10,
+            step=1, width="small",
+            help="0 = sem risco  ·  10 = emergência",
+        ),
+    }
+
+    df_editado = st.data_editor(
+        df_monitor,
+        column_config=col_config,
+        use_container_width=True,
+        hide_index=True,
+        key="data_editor_borg",
+        num_rows="fixed",
+    )
+
+    # ── Aplica destaques visuais pós-edição ───────────────────────────────────
+    alertas_borg = df_editado[df_editado["Borg/Risco"] >= 7]
+    alertas_clin = df_editado[df_editado["🔴"] == "🔴"]
+
+    if not alertas_borg.empty or not alertas_clin.empty:
+        st.markdown("---")
+        st.markdown("### 🚨 Alertas Ativos")
+        col_b, col_c = st.columns(2)
+        with col_b:
+            if not alertas_borg.empty:
+                st.error(f"⚡ **{len(alertas_borg)} aluno(s) com Borg ≥ 7 (alto risco):**")
+                for _, ar in alertas_borg.iterrows():
+                    st.markdown(f"  - **{ar['Nome']}** ({ar['Turma']}) — Borg: `{int(ar['Borg/Risco'])}`")
+        with col_c:
+            if not alertas_clin.empty:
+                st.warning(f"🔴 **{len(alertas_clin)} aluno(s) com palavras-chave clínicas críticas:**")
+                for _, ar in alertas_clin.iterrows():
+                    st.markdown(f"  - **{ar['Nome']}** ({ar['Turma']}) — {ar['Patologias'][:60]}")
+
+    # ── Salvar classificações Borg na session_state ───────────────────────────
+    c_salvar, c_reset = st.columns([2, 1])
+    with c_salvar:
+        if st.button("💾 Salvar Classificações Borg (sessão)", type="primary", use_container_width=True, key="mc_salvar"):
+            for _, row_e in df_editado.iterrows():
+                k = f"borg_mc_{row_e['id']}"
+                st.session_state[k] = int(row_e["Borg/Risco"])
+            st.toast(f"✅ {len(df_editado)} classificações salvas na sessão!", icon="💾")
+    with c_reset:
+        if st.button("🔄 Limpar Borg", use_container_width=True, key="mc_reset"):
+            for _, row_e in df_editado.iterrows():
+                k = f"borg_mc_{row_e['id']}"
+                if k in st.session_state:
+                    del st.session_state[k]
+            st.rerun()
+
+    st.info(
+        "💡 As classificações Borg são mantidas durante esta sessão. "
+        "Para persistência permanente, execute o SQL: "
+        "`ALTER TABLE alunos ADD COLUMN IF NOT EXISTS risco_borg integer DEFAULT 0;` "
+        "e informe para que o sistema salve automaticamente."
+    )
+
+
+# ==============================================================================
 # RENDERIZAÇÃO DA INTERFACE PRINCIPAL (ST)
 # ==============================================================================
 def tela_relatorio():
@@ -1368,7 +1564,7 @@ def tela_relatorio():
         unsafe_allow_html=True,
     )
 
-    tab_f, tab_id, tab_a, tab_w, tab_diario, tab_sem_av = st.tabs(
+    tab_f, tab_id, tab_a, tab_w, tab_diario, tab_sem_av, tab_clinico = st.tabs(
         [
             "📊 Planilha de Frequência",
             "🪪 Relatório Cara-Crachá",
@@ -1376,6 +1572,7 @@ def tela_relatorio():
             "🏆 Prestação de Conta Pedagógica",
             "📋 Prestação Diária",
             "🧪 Avaliações Pendentes",
+            "🏥 Monitoramento Clínico",
         ]
     )
 
@@ -2266,6 +2463,12 @@ def tela_relatorio():
     with tab_sem_av:
         from views.sem_avaliacao_view import renderizar_aba_sem_avaliacao
         renderizar_aba_sem_avaliacao()
+
+    # ==============================================================================
+    # --- ABA 7: MONITORAMENTO CLÍNICO (B.I. DA SAÚDE) ---
+    # ==============================================================================
+    with tab_clinico:
+        _renderizar_monitoramento_clinico()
 
     st.markdown(
         "<br><p style='text-align:center; color:#94a3b8; font-size:10px;'>Moveright™ Gestão Inteligente - Projeto Esporte e Saúde Community Phase 2 - v8.40 PRIMEMAX</p>",

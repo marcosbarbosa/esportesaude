@@ -1,0 +1,36 @@
+Replit, preciso executar uma grande atualização estrutural e clínica no sistema, dividida em 3 fases: Migração de Dados, Otimização de Interface e Criação de um Novo Módulo de Monitoramento Clínico (B.I. da Saúde).
+
+FASE 1: Script de Migração e Concatenação de Dados (migracao_clinica.py)
+Crie um script Python avulso para ler o arquivo migraimbra2_2.csv e atualizar a tabela alunos no Supabase. O mapeamento (match) deve ser feito pelo nome do aluno ou CPF.
+
+Concatene as seguintes colunas do CSV para injetar no campo problemas_saude do banco, usando hashtags como título, seguidas do conteúdo e separadas por quebras de linha (\n\n), no exato formato PRIME abaixo:
+
+Coluna 0 -> #Patologias: [conteúdo]
+
+Coluna 1 e 6 (incômodos) -> #Incômodos_Físicos: [conteúdo] (Se 1 e 6 forem iguais, una-as sem duplicar).
+
+Coluna 2 -> #Alergias: [conteúdo]
+
+Coluna 3 -> #Uso_Contínuo_Medicamentos: [conteúdo]
+
+Coluna 4 -> #Restrições_Físicas: [conteúdo]
+
+Coluna 5 -> #Outras_Atividades: [conteúdo]
+
+Para a coluna de 'Contato de Emergência' do CSV: verifique o que já existe no banco na coluna contato_emergencia. Se o contato do CSV for diferente do que está no banco, concatene o novo contato adicionando um separador (ex: [Existente] | [Novo CSV]).
+
+FASE 2: Otimização da Interface do Prontuário (views/portal_aluno_view.py ou prontuario_view.py)
+
+No formulário onde o campo problemas_saude é exibido (usando st.text_area), configure-o para ter um tamanho dinâmico e inteligente.
+
+Use a lógica de altura baseada na quantidade de linhas: height=max(150, len(str(texto).split('\n')) * 25). O objetivo é que o operador não precise fazer scroll infinito dentro da caixinha para ler todo o histórico recém-migrado.
+
+FASE 3: Criação do Painel de Monitoramento Clínico (Painel de Patologias e Risco)
+
+Adicione uma nova aba ou tela no módulo de Relatórios ou no Portal do Aluno chamada Monitoramento Clínico (Escala Borg).
+
+Esta tela deve buscar todos os alunos ativos e criar um DataFrame listando: Nome, Turma e as hashtags extraídas (crie uma lógica simples para fatiar o texto de problemas_saude e exibir as Patologias e Restrições Físicas em colunas separadas na tabela).
+
+Adicione uma coluna interativa no st.data_editor para o professor classificar a Escala de Risco/Dor (Ex: 0 a 10 ou Cores Borg) de cada aluno com base no que está descrito.
+
+Adicione um alerta visual (ex: ícones ou destaques em vermelho) para os alunos que possuírem as palavras "Cirurgia", "Cardíaco", "Pressão" ou que tiverem escala de risco alta marcada pelo professor.
