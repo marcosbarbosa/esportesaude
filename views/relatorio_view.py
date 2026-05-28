@@ -1368,13 +1368,14 @@ def tela_relatorio():
         unsafe_allow_html=True,
     )
 
-    tab_f, tab_id, tab_a, tab_w, tab_diario = st.tabs(
+    tab_f, tab_id, tab_a, tab_w, tab_diario, tab_sem_av = st.tabs(
         [
             "📊 Planilha de Frequência",
             "🪪 Relatório Cara-Crachá",
             "🔎 Auditoria de Cadastros",
             "🏆 Prestação de Conta Pedagógica",
             "📋 Prestação Diária",
+            "🧪 Avaliações Pendentes",
         ]
     )
 
@@ -2258,6 +2259,13 @@ def tela_relatorio():
     # ==============================================================================
     with tab_diario:
         _renderizar_aba_prestacao_diaria()
+
+    # ==============================================================================
+    # --- ABA 6: AVALIAÇÕES PENDENTES ---
+    # ==============================================================================
+    with tab_sem_av:
+        from views.sem_avaliacao_view import renderizar_aba_sem_avaliacao
+        renderizar_aba_sem_avaliacao()
 
     st.markdown(
         "<br><p style='text-align:center; color:#94a3b8; font-size:10px;'>Moveright™ Gestão Inteligente - Projeto Esporte e Saúde Community Phase 2 - v8.40 PRIMEMAX</p>",
