@@ -757,6 +757,86 @@ def render_cabecalho_aluno(aluno):
                 del st.session_state["_atestado_bloquear_nome"]
                 st.rerun()
 
+    st.markdown("<div style='margin-bottom:8px;'></div>", unsafe_allow_html=True)
+
+    # 🧪 Banner Avaliação Pendente — Bloqueio por Reavaliação
+    _ap = aluno.get("avaliacao_pendente")
+    _bloqueado_aval = bool(_ap)
+    _obs_aval = str(aluno.get("obs_avaliacao_pendente") or "").strip()
+    _av_col_banner, _av_col_btn = st.columns([5, 1], vertical_alignment="center")
+    with _av_col_banner:
+        if _bloqueado_aval:
+            _obs_av_linha = f" — <em>{_obs_aval}</em>" if _obs_aval else ""
+            st.markdown(
+                "<div style='background:#451A03;border-left:5px solid #F59E0B;"
+                "padding:10px 16px;border-radius:6px;display:flex;align-items:center;gap:10px;'>"
+                "<span style='font-size:20px;'>⚡🚫</span>"
+                f"<span style='color:#FEF3C7;font-weight:700;font-size:14px;'>"
+                f"ATENÇÃO: REAVALIAÇÃO PENDENTE — PARTICIPAÇÃO BLOQUEADA{_obs_av_linha}</span></div>",
+                unsafe_allow_html=True,
+            )
+        else:
+            st.markdown(
+                "<div style='background:#EFF6FF;border-left:5px solid #1D4ED8;"
+                "padding:8px 14px;border-radius:6px;display:flex;align-items:center;gap:8px;'>"
+                "<span style='font-size:16px;'>🧪</span>"
+                "<span style='color:#1E3A5F;font-weight:600;font-size:13px;'>"
+                "Avaliação OK — Sem bloqueio por reavaliação pendente</span></div>",
+                unsafe_allow_html=True,
+            )
+    with _av_col_btn:
+        if _bloqueado_aval:
+            if st.button("✅ Liberar", key="aval_pend_liberar",
+                         use_container_width=True,
+                         help="Liberar aluno após realizar reavaliação"):
+                from database import atualizar_avaliacao_pendente, buscar_aluno_por_id
+                _op = st.session_state.get("usuario_nome", "")
+                _ok, _msg = atualizar_avaliacao_pendente(
+                    aluno["id"], False, "", _op, aluno.get("nome", "")
+                )
+                if _ok:
+                    _fresh = buscar_aluno_por_id(aluno["id"])
+                    if _fresh:
+                        st.session_state.aluno_prontuario = _fresh
+                    st.rerun()
+                else:
+                    st.error(_msg)
+        else:
+            if st.button("⚡ Bloquear", key="aval_pend_bloquear",
+                         use_container_width=True,
+                         help="Bloquear até (re)avaliação ser realizada"):
+                st.session_state["_aval_pend_bloquear_id"] = aluno["id"]
+                st.session_state["_aval_pend_bloquear_nome"] = aluno.get("nome", "")
+
+    if st.session_state.get("_aval_pend_bloquear_id") == aluno.get("id"):
+        with st.form("form_aval_pend_bloquear", clear_on_submit=True):
+            _obs_av_inp = st.text_input(
+                "Motivo do bloqueio (opcional):",
+                placeholder="Ex: Avaliação inicial pendente, reavaliação semestral…",
+                key="aval_pend_obs_inp",
+            )
+            c_ok_av, c_cancel_av = st.columns(2)
+            if c_ok_av.form_submit_button("⚡ Confirmar Bloqueio", type="primary",
+                                           use_container_width=True):
+                from database import atualizar_avaliacao_pendente, buscar_aluno_por_id
+                _op = st.session_state.get("usuario_nome", "")
+                _ok, _msg = atualizar_avaliacao_pendente(
+                    aluno["id"], True, _obs_av_inp, _op, aluno.get("nome", "")
+                )
+                if _ok:
+                    del st.session_state["_aval_pend_bloquear_id"]
+                    del st.session_state["_aval_pend_bloquear_nome"]
+                    _fresh = buscar_aluno_por_id(aluno["id"])
+                    if _fresh:
+                        st.session_state.aluno_prontuario = _fresh
+                    st.rerun()
+                else:
+                    st.error(_msg)
+            if c_cancel_av.form_submit_button("Cancelar", use_container_width=True):
+                del st.session_state["_aval_pend_bloquear_id"]
+                del st.session_state["_aval_pend_bloquear_nome"]
+                st.rerun()
+
     st.markdown("<div style='margin-bottom:10px;'></div>", unsafe_allow_html=True)
 
     u_v = aluno.get("url_foto")

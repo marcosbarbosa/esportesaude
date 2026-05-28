@@ -1339,9 +1339,29 @@ if st.session_state.menu_atual == "Principal":
                         "font-size:10px;font-weight:800;"
                         "margin-right:5px;white-space:nowrap;'>🏥⚠</abbr>"
                     ) if _atestado_bloq else ""
+                    _nunca_av = str(_r.get("id", "")) not in _ids_avaliados_hg
+                    _badge_sem_av = (
+                        "<abbr title='Nunca avaliado — sem nenhuma avaliação registrada' "
+                        "style='text-decoration:none;cursor:help;"
+                        "background:#EFF6FF;color:#1D4ED8;"
+                        "border:1px solid #BFDBFE;"
+                        "border-radius:3px;padding:1px 5px;"
+                        "font-size:10px;font-weight:800;"
+                        "margin-right:5px;white-space:nowrap;'>📋✕</abbr>"
+                    ) if _nunca_av else ""
+                    _aval_pend = bool(_r.get("avaliacao_pendente"))
+                    _badge_aval_pend = (
+                        "<abbr title='Bloqueado — aguardando reavaliação' "
+                        "style='text-decoration:none;cursor:help;"
+                        "background:#FEF3C7;color:#92400E;"
+                        "border:1px solid #FCD34D;"
+                        "border-radius:3px;padding:1px 5px;"
+                        "font-size:10px;font-weight:800;"
+                        "margin-right:5px;white-space:nowrap;'>⚡🚫</abbr>"
+                    ) if _aval_pend else ""
                     _cb.markdown(
                         f"<span style='font-size:13.5px;font-weight:700;color:#0F172A;'>"
-                        f"{_badge_img}{_badge_atestado}{_r['nome']}</span>",
+                        f"{_badge_img}{_badge_atestado}{_badge_sem_av}{_badge_aval_pend}{_r['nome']}</span>",
                         unsafe_allow_html=True,
                     )
 
