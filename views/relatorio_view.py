@@ -772,8 +772,9 @@ def _gerar_pdf_relatorio_prime(
     d_i, d_f,
 ):
     """
-    Gera PDF completo do Dashboard Prime com gráficos HTML/CSS.
-    Compatível com xhtml2pdf — sem emojis no conteúdo HTML.
+    Gera PDF Prime completo com gráficos, resumo por turma, rankings e
+    Planilha Detalhada (P/F/J colorida) em página landscape.
+    Compatível com xhtml2pdf — sem emojis no HTML.
     """
     try:
         from xhtml2pdf import pisa
@@ -790,9 +791,9 @@ def _gerar_pdf_relatorio_prime(
 
         logo_p = _gld(cfg.get("logo_principal", ""))
         logo_s = _gld(cfg.get("logo_secundaria", ""))
-        img_p  = (f'<img src="data:image/png;base64,{logo_p}" style="max-width:90px;max-height:60px;" />'
+        img_p  = (f'<img src="data:image/png;base64,{logo_p}" style="max-width:90px;max-height:55px;" />'
                   if logo_p else f"<b>{nome_org}</b>")
-        img_s  = (f'<img src="data:image/png;base64,{logo_s}" style="max-width:110px;max-height:60px;" />'
+        img_s  = (f'<img src="data:image/png;base64,{logo_s}" style="max-width:110px;max-height:55px;" />'
                   if logo_s else "")
 
         agora        = datetime.datetime.now().strftime("%d/%m/%Y as %H:%M")
@@ -815,10 +816,10 @@ def _gerar_pdf_relatorio_prime(
                     pass
             return None
 
-        # ── Gráfico: presença diária ──────────────────────────────────
+        # ── Gráfico: presença diária ─────────────────────────────────────────
         tl_dados = []
         wd_acc   = {}
-        _dt_map  = {}   # guarda dt parseado para ordenação
+        _dt_map  = {}
         for col in cols_datas:
             pres = int((df_mat[col] == "P").sum())
             dt   = _parse_dt(col, d_i, d_f)
@@ -830,15 +831,10 @@ def _gerar_pdf_relatorio_prime(
                 acc = wd_acc.setdefault(wd, [0, 0])
                 acc[0] += pres
                 acc[1] += 1
-
-        # Garante ordem cronológica independente da ordem de cols_datas
         tl_dados.sort(key=lambda x: _dt_map.get(x[0], datetime.date.max))
+        chart_diario = _html_barras_rel(tl_dados, "Presencas Diarias no Periodo", cor="#0056b3")
 
-        chart_diario = _html_barras_rel(
-            tl_dados, "Presencas por Dia de Aula", cor="#0056b3"
-        )
-
-        # ── Gráfico: média por dia da semana ──────────────────────────
+        # ── Gráfico: média por dia da semana ─────────────────────────────────
         sem_dados = [
             (d, f"{wd_acc[d][0]/wd_acc[d][1]:.1f}")
             for d in _ORDEM_SEM_PDF if d in wd_acc and wd_acc[d][1] > 0
@@ -849,20 +845,24 @@ def _gerar_pdf_relatorio_prime(
             cor="#0056b3", max_val=max_sem,
         )
 
-        # ── Tabela: resumo por turma ──────────────────────────────────
+        # ── Resumo por turma + gráfico taxa ─────────────────────────────────
         linhas_turma = ""
+        taxa_turma_dados = []
         if "Turma" in df_mat.columns and "Total P" in df_mat.columns:
+            _col_aluno = "Aluno" if "Aluno" in df_mat.columns else "Nome"
             grp = (
                 df_mat.groupby("Turma")
-                .agg(Alunos=("Aluno", "count"), Aulas=("Total Aulas", "first"),
+                .agg(Alunos=(_col_aluno, "count"), Aulas=("Total Aulas", "first"),
                      Presencas=("Total P", "sum"))
                 .reset_index()
             )
-            grp["Taxa"] = (grp["Presencas"] / (grp["Alunos"] * grp["Aulas"]).replace(0, 1) * 100).round(1)
+            grp["Taxa"]  = (grp["Presencas"] / (grp["Alunos"] * grp["Aulas"]).replace(0, 1) * 100).round(1)
             grp["Media"] = (grp["Presencas"] / grp["Alunos"].replace(0, 1)).round(1)
             for _, r in grp.iterrows():
+                taxa_turma_dados.append((str(r["Turma"]), f"{r['Taxa']:.1f}%"))
                 linhas_turma += (
-                    f"<tr><td>{r['Turma']}</td><td style='text-align:center;'>{r['Alunos']}</td>"
+                    f"<tr><td>{r['Turma']}</td>"
+                    f"<td style='text-align:center;'>{r['Alunos']}</td>"
                     f"<td style='text-align:center;'>{r['Aulas']}</td>"
                     f"<td style='text-align:center;font-weight:700;'>{r['Presencas']}</td>"
                     f"<td style='text-align:center;'>{r['Media']:.1f}</td>"
@@ -870,24 +870,44 @@ def _gerar_pdf_relatorio_prime(
                     f"</tr>"
                 )
 
-        # ── Tabela: rankings ──────────────────────────────────────────
+        chart_taxa_turma = _html_barras_rel(
+            taxa_turma_dados, "Taxa de Presenca por Turma (%)",
+            cor="#0056b3",
+            max_val=max((float(str(v).replace("%","")) for _, v in taxa_turma_dados), default=1) if taxa_turma_dados else 1,
+        ) if taxa_turma_dados else ""
+
+        # ── Gráfico: distribuição de assiduidade ────────────────────────────
+        dist_dados = [
+            ("Excelente (90%+)", n_exc),
+            ("Regular (75-90%)", n_reg),
+            ("Atencao (50-75%)", n_at),
+            ("Critico (<50%)",   n_crit),
+        ]
+        chart_dist = _html_barras_rel(
+            dist_dados, "Distribuicao de Assiduidade — Alunos por Faixa",
+            cor="#0056b3",
+            max_val=max(n_exc, n_reg, n_at, n_crit, 1),
+        )
+
+        # ── Rankings ────────────────────────────────────────────────────────
         def _perc_pdf(s):
             try:
                 return float(str(s).replace("%", "").strip())
             except Exception:
                 return 0.0
 
-        df_r = df_mat[["Aluno", "Turma", "Total P", "% Presenca" if "% Presenca" in df_mat.columns else "% Presença"]].copy()
         col_perc = "% Presença" if "% Presença" in df_mat.columns else "% Presenca"
+        _col_aluno = "Aluno" if "Aluno" in df_mat.columns else "Nome"
+        df_r = df_mat[[_col_aluno, "Turma", "Total P", col_perc]].copy() if col_perc in df_mat.columns else df_mat[[_col_aluno, "Turma", "Total P"]].copy()
         df_r["_tx"] = df_r[col_perc].apply(_perc_pdf) if col_perc in df_r.columns else df_mat.get("_taxa_num", pd.Series(dtype=float))
-        top10  = df_r.nlargest(10, "_tx")
-        atenc  = df_r[df_r["_tx"] < 75].nsmallest(20, "_tx")
+        top10 = df_r.nlargest(10, "_tx")
+        atenc = df_r[df_r["_tx"] < 75].nsmallest(20, "_tx")
 
         linhas_top = ""
         for i, (_, r) in enumerate(top10.iterrows(), 1):
             linhas_top += (
                 f"<tr><td style='text-align:center;'>{i}</td>"
-                f"<td>{r['Aluno']}</td><td>{r['Turma']}</td>"
+                f"<td>{r[_col_aluno]}</td><td>{r['Turma']}</td>"
                 f"<td style='text-align:center;'>{int(r['Total P'])}</td>"
                 f"<td style='text-align:center;font-weight:700;color:#10B981;'>{r['_tx']:.1f}%</td>"
                 f"</tr>"
@@ -896,90 +916,220 @@ def _gerar_pdf_relatorio_prime(
         for _, r in atenc.iterrows():
             cor_tx = "#EF4444" if r["_tx"] < 50 else "#F59E0B"
             linhas_at += (
-                f"<tr><td>{r['Aluno']}</td><td>{r['Turma']}</td>"
+                f"<tr><td>{r[_col_aluno]}</td><td>{r['Turma']}</td>"
                 f"<td style='text-align:center;'>{int(r['Total P'])}</td>"
                 f"<td style='text-align:center;font-weight:700;color:{cor_tx};'>{r['_tx']:.1f}%</td>"
                 f"</tr>"
             )
 
-        sec_turma = ""
+        sec_turma_taxa = ""
         if linhas_turma:
-            sec_turma = f"""
-<h2>Resumo por Turma</h2>
-<table>
-  <tr><th>Turma</th><th>Alunos</th><th>Aulas</th><th>Presencas</th><th>Media P/Aluno</th><th>Taxa</th></tr>
-  {linhas_turma}
+            sec_turma_taxa = f"""
+<table style="border-collapse:collapse;margin-bottom:0;">
+  <tr>
+    <td style="width:52%;vertical-align:top;border-bottom:0;padding-right:8px;">
+      <p style="margin:8px 0 3px;font-size:9pt;font-weight:700;color:#0056b3;border-bottom:2px solid #0056b3;padding-bottom:2px;">Resumo por Turma</p>
+      <table>
+        <tr><th>Turma</th><th>Alunos</th><th>Aulas</th><th>Presencas</th><th>Media</th><th>Taxa</th></tr>
+        {linhas_turma}
+      </table>
+    </td>
+    <td style="width:48%;vertical-align:top;border-bottom:0;padding-left:8px;">
+      {chart_taxa_turma}
+    </td>
+  </tr>
 </table>"""
 
         sec_rank = f"""
-<table>
+<table style="border-collapse:collapse;margin-bottom:0;">
   <tr>
-    <td style="width:50%;vertical-align:top;padding-right:10px;border-bottom:0;">
-      <h2>Top 10 Mais Assíduos</h2>
+    <td style="width:50%;vertical-align:top;border-bottom:0;padding-right:8px;">
+      <p style="margin:8px 0 3px;font-size:9pt;font-weight:700;color:#10B981;border-bottom:2px solid #10B981;padding-bottom:2px;">Top 10 Mais Assíduos</p>
       <table>
         <tr><th>#</th><th>Aluno</th><th>Turma</th><th>Pres.</th><th>Taxa</th></tr>
         {linhas_top}
       </table>
     </td>
-    <td style="width:50%;vertical-align:top;padding-left:10px;border-bottom:0;">
-      <h2>Requerem Atencao (abaixo 75%)</h2>
+    <td style="width:50%;vertical-align:top;border-bottom:0;padding-left:8px;">
+      <p style="margin:8px 0 3px;font-size:9pt;font-weight:700;color:#F59E0B;border-bottom:2px solid #F59E0B;padding-bottom:2px;">Requerem Atencao (abaixo 75%)</p>
       {"<table><tr><th>Aluno</th><th>Turma</th><th>Pres.</th><th>Taxa</th></tr>" + linhas_at + "</table>"
-        if linhas_at else "<p style='color:#94A3B8;font-size:9pt;'>Todos os alunos acima de 75%.</p>"}
+        if linhas_at else "<p style='color:#94A3B8;font-size:9pt;margin-top:8px;'>Todos os alunos acima de 75%.</p>"}
     </td>
   </tr>
 </table>"""
 
+        # ── Gráficos diário + semana lado a lado ────────────────────────────
+        sec_graficos = f"""
+<table style="border-collapse:collapse;margin-bottom:0;">
+  <tr>
+    <td style="width:60%;vertical-align:top;border-bottom:0;padding-right:8px;">{chart_diario}</td>
+    <td style="width:40%;vertical-align:top;border-bottom:0;padding-left:8px;">{chart_semana}</td>
+  </tr>
+</table>"""
+
+        # ══════════════════════════════════════════════════════════════════════
+        # PLANILHA DETALHADA — Página 2 (Landscape)
+        # ══════════════════════════════════════════════════════════════════════
+        _col_aluno = "Aluno" if "Aluno" in df_mat.columns else "Nome"
+        col_perc   = "% Presença" if "% Presença" in df_mat.columns else "% Presenca"
+
+        n_datas = len(cols_datas)
+        # Calcula % de largura para cada coluna de data
+        # Fixas: Ordem(3%), Aluno(17%), Turma(9%), %Pres(5%), TotP(3.5%), TotAulas(3.5%) = 41%
+        pct_data = max(1.0, round(59.0 / n_datas, 2)) if n_datas > 0 else 2.0
+
+        # Cabeçalho das datas (encurtado para caber)
+        cabecalho_datas = "".join(
+            f"<th style='text-align:center;font-size:5pt;padding:1px;width:{pct_data}%;'>"
+            f"{c}</th>"
+            for c in cols_datas
+        )
+
+        # Linha de total por dia
+        total_dia_cells = ""
+        for col in cols_datas:
+            cnt = int((df_mat[col] == "P").sum())
+            total_dia_cells += (
+                f"<td style='text-align:center;font-size:5.5pt;padding:1px;"
+                f"background:#1D4ED8;color:#fff;font-weight:700;'>{cnt if cnt > 0 else '-'}</td>"
+            )
+
+        tj_total = int(df_mat["Total J"].sum()) if "Total J" in df_mat.columns else 0
+        tf_total = int(df_mat["Total F"].sum()) if "Total F" in df_mat.columns else 0
+
+        # Linhas dos alunos
+        df_plan = df_mat.sort_values(_col_aluno).reset_index(drop=True)
+        linhas_plan = ""
+        for idx, (_, row) in enumerate(df_plan.iterrows()):
+            bg_row = "#FFFFFF" if idx % 2 == 0 else "#F8FAFC"
+            nome_aluno = str(row.get(_col_aluno, ""))[:32]
+            turma_aluno = str(row.get("Turma", ""))[:18]
+            perc_str  = str(row.get(col_perc, "-"))
+            tot_p_val = str(row.get("Total P", "-"))
+            tot_a_val = str(row.get("Total Aulas", "-"))
+
+            cells_datas = ""
+            for col in cols_datas:
+                val = str(row.get(col, "")).strip()
+                if val in ("P", "p"):
+                    bg_c = "#DCFCE7"; fg_c = "#15803D"; txt = "P"
+                elif val in ("F", "f"):
+                    bg_c = "#FEE2E2"; fg_c = "#DC2626"; txt = "F"
+                elif val in ("J", "j", "T", "t"):
+                    bg_c = "#FEF9C3"; fg_c = "#B45309"; txt = "J"
+                else:
+                    bg_c = bg_row; fg_c = "#CBD5E1"; txt = "-"
+                cells_datas += (
+                    f"<td style='text-align:center;font-size:5.5pt;padding:1px;"
+                    f"background:{bg_c};color:{fg_c};font-weight:700;'>{txt}</td>"
+                )
+
+            cor_taxa = "#10B981" if _perc_pdf(perc_str) >= 75 else ("#F59E0B" if _perc_pdf(perc_str) >= 50 else "#EF4444")
+            linhas_plan += f"""
+<tr style="background:{bg_row};">
+  <td style="text-align:center;font-size:6pt;padding:1px 2px;">{idx+1}</td>
+  <td style="font-size:6pt;padding:1px 3px;font-weight:700;">{nome_aluno}</td>
+  <td style="font-size:5.5pt;padding:1px 2px;color:#475569;">{turma_aluno}</td>
+  <td style="text-align:center;font-size:6pt;padding:1px 2px;font-weight:700;color:{cor_taxa};">{perc_str}</td>
+  <td style="text-align:center;font-size:6pt;padding:1px 2px;font-weight:700;color:#0056b3;">{tot_p_val}</td>
+  <td style="text-align:center;font-size:6pt;padding:1px 2px;color:#475569;">{tot_a_val}</td>
+  {cells_datas}
+</tr>"""
+
+        tabela_planilha = f"""
+<table style="border-collapse:collapse;width:100%;table-layout:fixed;">
+  <colgroup>
+    <col style="width:3%;"/>
+    <col style="width:17%;"/>
+    <col style="width:9%;"/>
+    <col style="width:5%;"/>
+    <col style="width:3.5%;"/>
+    <col style="width:3.5%;"/>
+  </colgroup>
+  <thead>
+    <tr style="background:#0056b3;color:#fff;">
+      <th style="font-size:6pt;padding:2px 2px;text-align:center;">No.</th>
+      <th style="font-size:6pt;padding:2px 3px;text-align:left;">Aluno</th>
+      <th style="font-size:6pt;padding:2px 2px;">Turma</th>
+      <th style="font-size:6pt;padding:2px 2px;text-align:center;">% Pres</th>
+      <th style="font-size:6pt;padding:2px 2px;text-align:center;">Tot P</th>
+      <th style="font-size:6pt;padding:2px 2px;text-align:center;">Aulas</th>
+      {cabecalho_datas}
+    </tr>
+    <tr style="background:#1D4ED8;color:#fff;">
+      <td style="font-size:5.5pt;padding:1px 2px;text-align:center;">-</td>
+      <td style="font-size:6pt;padding:1px 3px;font-weight:700;" colspan="2">TOTAL PRESENCAS / DIA</td>
+      <td style="font-size:5.5pt;padding:1px 2px;text-align:center;">-</td>
+      <td style="font-size:6pt;padding:1px 2px;text-align:center;font-weight:700;">{tp_geral}</td>
+      <td style="font-size:5.5pt;padding:1px 2px;text-align:center;">-</td>
+      {total_dia_cells}
+    </tr>
+  </thead>
+  <tbody>{linhas_plan}</tbody>
+</table>"""
+
+        # ── HTML Final ──────────────────────────────────────────────────────
         html = f"""<!DOCTYPE html>
 <html><head>
 <meta charset="UTF-8"/>
 <style>
-  body {{ font-family: Arial, sans-serif; font-size: 9.5pt; color: #1e293b; margin: 18px 28px; }}
-  table {{ width: 100%; border-collapse: collapse; margin-bottom: 10px; }}
-  th {{ background: #0056b3; color: #fff; padding: 5px 7px; text-align: left; font-size: 8pt; }}
-  td {{ padding: 4px 7px; border-bottom: 1px solid #E2E8F0; font-size: 8pt; vertical-align: top; }}
-  tr:nth-child(even) {{ background: #F8FAFC; }}
-  .kv {{ font-size: 16pt; font-weight: 900; color: #0056b3; line-height: 1.1; }}
-  .kl {{ font-size: 7pt; color: #475569; font-weight: 700; text-transform: uppercase; }}
-  .ks {{ font-size: 6.5pt; color: #94A3B8; }}
-  h2 {{ color: #0056b3; font-size: 10pt; border-bottom: 2px solid #0056b3;
-        padding-bottom: 2px; margin-top: 12px; margin-bottom: 4px; }}
-  .rod {{ margin-top: 20px; text-align: center; font-size: 7pt; color: #94A3B8;
-          border-top: 1px solid #E2E8F0; padding-top: 6px; }}
+  @page portrait_page {{
+    size: 210mm 297mm;
+    margin: 14mm 18mm 14mm 18mm;
+  }}
+  @page landscape_page {{
+    size: 297mm 210mm;
+    margin: 8mm 10mm 8mm 10mm;
+  }}
+  body {{ font-family: Arial, sans-serif; font-size: 9pt; color: #1e293b; }}
+  table {{ width: 100%; border-collapse: collapse; margin-bottom: 8px; }}
+  th {{ background: #0056b3; color: #fff; padding: 4px 6px; text-align: left; font-size: 7.5pt; }}
+  td {{ padding: 3px 6px; border-bottom: 1px solid #E2E8F0; font-size: 7.5pt; vertical-align: middle; }}
+  tr:nth-child(even) td {{ background: #F8FAFC; }}
+  .kv {{ font-size: 15pt; font-weight: 900; color: #0056b3; line-height: 1.1; }}
+  .kl {{ font-size: 6.5pt; color: #475569; font-weight: 700; text-transform: uppercase; letter-spacing:.3px; }}
+  .ks {{ font-size: 6pt; color: #94A3B8; }}
+  .rod {{ margin-top: 14px; text-align: center; font-size: 6.5pt; color: #94A3B8;
+          border-top: 1px solid #E2E8F0; padding-top: 5px; }}
+  .cabec-logo td {{ border-bottom: 0 !important; padding: 4px 6px; }}
 </style>
-</head><body>
+</head>
+<body>
 
-<table style="border-bottom:3px solid #0056b3;margin-bottom:12px;">
+<!-- ═══════════ PÁGINA 1 — ANÁLISE PRIME (Portrait) ═══════════ -->
+
+<table class="cabec-logo" style="border-bottom:3px solid #0056b3;margin-bottom:10px;">
   <tr>
-    <td style="width:22%;text-align:left;border-bottom:0;">{img_s}</td>
-    <td style="width:56%;text-align:center;border-bottom:0;">
-      <p style="margin:0;font-size:9.5pt;font-weight:900;color:#0A2540;">{titulo}</p>
-      <p style="margin:2px 0;font-size:8.5pt;color:#475569;">{subtit}</p>
-      <p style="margin:0;font-size:9pt;font-weight:700;color:#0056b3;">Relatorio Prime — Frequencia</p>
-      <p style="margin:2px 0 0;font-size:8pt;color:#64748B;">Periodo: {periodo_str} &nbsp;|&nbsp; Turma: {turma_str}</p>
-      <p style="margin:2px 0 0;font-size:7.5pt;color:#94A3B8;">Gerado em: {agora}</p>
+    <td style="width:20%;text-align:left;">{img_s}</td>
+    <td style="width:60%;text-align:center;">
+      <p style="margin:0;font-size:9pt;font-weight:900;color:#0A2540;">{titulo}</p>
+      <p style="margin:1px 0;font-size:8pt;color:#475569;">{subtit}</p>
+      <p style="margin:0;font-size:9pt;font-weight:700;color:#0056b3;">Relatorio Prime — Analise de Frequencia</p>
+      <p style="margin:1px 0 0;font-size:7.5pt;color:#64748B;">Periodo: {periodo_str} &nbsp;|&nbsp; Turma: {turma_str}</p>
+      <p style="margin:1px 0 0;font-size:7pt;color:#94A3B8;">Gerado em: {agora}</p>
     </td>
-    <td style="width:22%;text-align:right;border-bottom:0;">{img_p}</td>
+    <td style="width:20%;text-align:right;">{img_p}</td>
   </tr>
 </table>
 
-<h2>Indicadores do Periodo</h2>
-<table style="margin-bottom:12px;">
+<p style="margin:0 0 4px;font-size:8.5pt;font-weight:700;color:#0056b3;border-bottom:2px solid #0056b3;padding-bottom:2px;">Indicadores do Periodo</p>
+<table style="margin-bottom:8px;">
   <tr>
-    <td style="width:20%;text-align:center;background:#EFF6FF;border:1px solid #BFDBFE;padding:6px;">
+    <td style="width:20%;text-align:center;background:#EFF6FF;border:1.5px solid #BFDBFE;padding:5px;">
       <div class="kv">{n_alunos}</div><div class="kl">Alunos</div>
     </td>
-    <td style="width:20%;text-align:center;background:#EFF6FF;border:1px solid #BFDBFE;padding:6px;">
-      <div class="kv">{n_aulas}</div><div class="kl">Aulas</div>
+    <td style="width:20%;text-align:center;background:#EFF6FF;border:1.5px solid #BFDBFE;padding:5px;">
+      <div class="kv">{n_aulas}</div><div class="kl">Aulas Realizadas</div>
     </td>
-    <td style="width:20%;text-align:center;background:#EFF6FF;border:1px solid #BFDBFE;padding:6px;">
+    <td style="width:20%;text-align:center;background:#EFF6FF;border:1.5px solid #BFDBFE;padding:5px;">
       <div class="kv">{tp_geral}</div><div class="kl">Total Presencas</div>
     </td>
-    <td style="width:20%;text-align:center;background:#EFF6FF;border:1px solid #BFDBFE;padding:6px;">
+    <td style="width:20%;text-align:center;background:#EFF6FF;border:1.5px solid #BFDBFE;padding:5px;">
       <div class="kv">{media_p_qtd:.1f}</div>
-      <div class="kl">Media P/Aluno</div>
+      <div class="kl">Media P / Aluno</div>
       <div class="ks">de {n_aulas} aulas</div>
     </td>
-    <td style="width:20%;text-align:center;background:#EFF6FF;border:1px solid #BFDBFE;padding:6px;">
+    <td style="width:20%;text-align:center;background:#EFF6FF;border:1.5px solid #BFDBFE;padding:5px;">
       <div class="kv">{taxa_media:.1f}%</div>
       <div class="kl">Taxa Media Individual</div>
       <div class="ks">meta: 75%</div>
@@ -987,42 +1137,66 @@ def _gerar_pdf_relatorio_prime(
   </tr>
 </table>
 
-<table style="margin-bottom:6px;">
+<table style="margin-bottom:10px;">
   <tr>
-    <td style="width:25%;text-align:center;background:#DCFCE7;border:1px solid #BBF7D0;padding:5px;">
+    <td style="width:25%;text-align:center;background:#DCFCE7;border:1px solid #BBF7D0;padding:4px;">
       <div class="kv" style="color:#10B981;">{n_exc}</div><div class="kl">Excelente (90%+)</div>
     </td>
-    <td style="width:25%;text-align:center;background:#EFF6FF;border:1px solid #BFDBFE;padding:5px;">
+    <td style="width:25%;text-align:center;background:#EFF6FF;border:1px solid #BFDBFE;padding:4px;">
       <div class="kv" style="color:#3B82F6;">{n_reg}</div><div class="kl">Regular (75-90%)</div>
     </td>
-    <td style="width:25%;text-align:center;background:#FEF9C3;border:1px solid #FDE68A;padding:5px;">
+    <td style="width:25%;text-align:center;background:#FEF9C3;border:1px solid #FDE68A;padding:4px;">
       <div class="kv" style="color:#F59E0B;">{n_at}</div><div class="kl">Atencao (50-75%)</div>
     </td>
-    <td style="width:25%;text-align:center;background:#FEE2E2;border:1px solid #FECACA;padding:5px;">
-      <div class="kv" style="color:#EF4444;">{n_crit}</div><div class="kl">Critico (abaixo 50%)</div>
+    <td style="width:25%;text-align:center;background:#FEE2E2;border:1px solid #FECACA;padding:4px;">
+      <div class="kv" style="color:#EF4444;">{n_crit}</div><div class="kl">Critico (&lt;50%)</div>
     </td>
   </tr>
 </table>
 
-{chart_diario}
+{sec_graficos}
 
-{chart_semana}
+{sec_turma_taxa}
 
-{sec_turma}
+{chart_dist}
 
 {sec_rank}
 
 <div class="rod">{rodape_linha}</div>
+
+<!-- ═══════════ PÁGINA 2 — PLANILHA DETALHADA (Landscape) ═══════════ -->
+<pdf:nexttemplate name="landscape_page" />
+<pdf:nextpage />
+
+<table class="cabec-logo" style="border-bottom:2px solid #0056b3;margin-bottom:6px;">
+  <tr>
+    <td style="width:18%;text-align:left;">{img_s}</td>
+    <td style="width:64%;text-align:center;">
+      <p style="margin:0;font-size:8.5pt;font-weight:900;color:#0A2540;">{titulo}</p>
+      <p style="margin:1px 0;font-size:7.5pt;font-weight:700;color:#0056b3;">Planilha Detalhada — Frequencia Individual</p>
+      <p style="margin:0;font-size:7pt;color:#64748B;">Periodo: {periodo_str} &nbsp;|&nbsp; Turma: {turma_str} &nbsp;|&nbsp; {n_alunos} alunos &nbsp;|&nbsp; {n_aulas} aulas</p>
+      <p style="margin:1px 0 0;font-size:6.5pt;color:#94A3B8;">P = Presente (verde) &nbsp;|&nbsp; F = Falta (vermelho) &nbsp;|&nbsp; J = Justificada (amarelo)</p>
+    </td>
+    <td style="width:18%;text-align:right;">{img_p}</td>
+  </tr>
+</table>
+
+{tabela_planilha}
+
+<div class="rod">{rodape_linha} | Gerado em: {agora}</div>
+
 </body></html>"""
 
         buf = io.BytesIO()
         result = pisa.CreatePDF(html.encode("utf-8"), dest=buf)
         if result.err:
-            st.error(f"Erro ao renderizar PDF ({result.err}). Verifique o conteúdo e tente novamente.")
+            st.error(f"Erro ao renderizar PDF ({result.err}). Verifique o conteudo e tente novamente.")
             return None
         return buf.getvalue() or None
     except Exception as e:
-        st.error(f"Erro ao gerar PDF do Relatório Prime: {e}")
+        st.error(f"Erro ao gerar PDF do Relatorio Prime: {e}")
+        import traceback
+        st.caption(traceback.format_exc())
         return None
 
 
