@@ -1273,13 +1273,15 @@ def tela_relatorio():
                 tj_geral = int(df_matriz["Total J"].sum()) if "Total J" in df_matriz.columns else 0
                 n_alunos  = len(df_matriz)
 
-                # Total de aulas: máximo por turma (evita dupla contagem em multi-turma)
+                # Total de aulas: soma por turma (cada turma tem seu próprio calendário)
                 if "Total Aulas" in df_matriz.columns and "Turma" in df_matriz.columns:
                     n_aulas_por_turma = df_matriz.groupby("Turma")["Total Aulas"].first()
-                    n_aulas_total_desc = " / ".join(
-                        f"{t}: {v}" for t, v in n_aulas_por_turma.items()
-                    )
-                    n_aulas = int(n_aulas_por_turma.max())
+                    n_aulas = int(n_aulas_por_turma.sum())
+                    if len(n_aulas_por_turma) > 1:
+                        partes = " + ".join(str(v) for v in n_aulas_por_turma.values)
+                        n_aulas_total_desc = f"{partes} = {n_aulas}"
+                    else:
+                        n_aulas_total_desc = str(n_aulas)
                 else:
                     n_aulas = len(cols_data_reais)
                     n_aulas_total_desc = str(n_aulas)
@@ -1426,7 +1428,8 @@ def tela_relatorio():
                 with ck1:
                     _kpi("Alunos no Período", n_alunos, "participantes ativos")
                 with ck2:
-                    _kpi("Aulas Realizadas", n_aulas, "dias com atividade")
+                    _kpi("Aulas Realizadas", n_aulas,
+                         n_aulas_total_desc if n_aulas_total_desc != str(n_aulas) else "sessões no período")
                 with ck3:
                     _kpi(
                         "Média Presenças / Aluno",
