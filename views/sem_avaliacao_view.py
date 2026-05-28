@@ -313,7 +313,7 @@ def _card_aluno(row, ult_pres: dict, bloqueado: bool, modo: str, obs: str):
     url_foto = str(row.get("url_foto") or "").strip()
     inic = "".join(p[0].upper() for p in nome.split()[:2] if p)
     up = ult_pres.get(aluno_id)
-    up_str = up.strftime("%d/%m/%Y") if up else "Sem registro"
+    up_str = str(up) if up else "Sem registro"
     badge_html = (
         "<span class='aval-badge badge-bloq'>⚡ Bloqueado — Reavaliação Pendente</span>"
         if bloqueado else

@@ -1097,11 +1097,25 @@ def render_aba_perfil(aluno):
         )
 
         st.markdown("#### 🏥 Saúde e Alertas")
-        cont_em_ed = st.text_input(
+        _c_em, _c_par = st.columns([3, 2])
+        cont_em_ed = _c_em.text_input(
             "Contato de Emergência:",
             value=""
             if pd.isna(aluno.get("contato_emergencia"))
             else str(aluno.get("contato_emergencia")),
+            placeholder="Nome completo — (11) 9xxxx-xxxx",
+        )
+        _par_opcoes = [
+            "", "Cônjuge / Companheiro(a)", "Filho(a)", "Irmão / Irmã",
+            "Mãe", "Pai", "Neto(a)", "Sobrinho(a)", "Nora / Genro",
+            "Amigo(a)", "Vizinho(a)", "Cuidador(a)", "Outro",
+        ]
+        _par_atual = str(aluno.get("grau_parentesco") or "").strip()
+        _par_idx = next((i for i, v in enumerate(_par_opcoes) if v == _par_atual), 0)
+        grau_parentesco_ed = _c_par.selectbox(
+            "Grau de Parentesco / Relação:",
+            _par_opcoes,
+            index=_par_idx,
         )
         c_s1, c_s2 = st.columns(2)
         prob_ed = c_s1.text_area(
@@ -1161,6 +1175,7 @@ def render_aba_perfil(aluno):
                         "bairro": bai_ed,
                         "cep": cep_ed,
                         "contato_emergencia": cont_em_ed,
+                        "grau_parentesco": grau_parentesco_ed if grau_parentesco_ed else None,
                         "problemas_saude": prob_ed,
                         "medicamentos": meds_ed,
                         "restricoes_fisicas": rest_ed,
