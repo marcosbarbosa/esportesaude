@@ -303,8 +303,19 @@ def renderizar_aba_terminal(df_alunos_tab, data_aula, presencas_turma_geral, blo
                 atestado_html = ("<div class='atestado-alerta' title='Atestado médico pendente — Participação bloqueada'>🏥</div>"
                                  if _atestado_bloq else "")
 
-                # Botão de chamada: bloqueado por admin-lock OU por atestado médico
-                _botao_bloqueado = bloqueio_ativo or _atestado_bloq
+                # 🧪 AVALIAÇÃO PENDENTE — badge inferior direito + bloqueia chamada
+                _aval_pend = bool(row.get("avaliacao_pendente"))
+                aval_pend_html = (
+                    "<div style='position:absolute;bottom:-5px;right:-5px;"
+                    "background:#FEF3C7;border:2px solid #F59E0B;border-radius:50%;"
+                    "width:26px;height:26px;display:flex;align-items:center;"
+                    "justify-content:center;box-shadow:0 3px 6px rgba(245,158,11,0.4);"
+                    "font-size:11px;z-index:100;' title='Reavaliação pendente — Participação bloqueada'>⚡</div>"
+                    if _aval_pend else ""
+                )
+
+                # Botão de chamada: bloqueado por admin-lock, atestado médico OU avaliação pendente
+                _botao_bloqueado = bloqueio_ativo or _atestado_bloq or _aval_pend
                 if not _botao_bloqueado:
                     if st.button(" ", key=f"tbt_prod_{row['id']}", use_container_width=True):
                         cycle_presence_btn(row["id"], data_aula, status_atual, row["nome"])
@@ -318,7 +329,7 @@ def renderizar_aba_terminal(df_alunos_tab, data_aula, presencas_turma_geral, blo
                 cartao_html_seguro = (
                     f'<div class="celula-tablet {status_class}">'
                     f'<div class="avatar-visual">'
-                    f'{avatar_html}{cadeado_html}{lgpd_html}{atestado_html}'
+                    f'{avatar_html}{cadeado_html}{lgpd_html}{atestado_html}{aval_pend_html}'
                     f'</div>'
                     f'<div class="badge-status">{indicador}</div>'
                     f'<div class="nome-aluno">{nome_formatado}</div>'
