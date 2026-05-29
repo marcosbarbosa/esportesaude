@@ -1446,7 +1446,7 @@ def _renderizar_monitoramento_clinico():
         borg_atual = st.session_state.get(borg_key, 0)
 
         registros.append({
-            "id":         int(r["id"]),
+            "id":         str(r["id"]),
             "🔴":         "🔴" if alerta else "",
             "Nome":       str(r.get("nome", "")),
             "Turma":      str(r.get("turma") or ""),
