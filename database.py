@@ -1390,7 +1390,7 @@ def registrar_dia_sem_aula(data_iso: str, motivo: str = "", criado_por: str = ""
         pass
     try:
         supabase.from_("dias_sem_aula").update(
-            {"motivo": motivo.strip(), "criado_por": criado_por.strip()}
+            {"motivo": str(motivo or "").strip(), "criado_por": str(criado_por or "").strip()}
         ).eq("data", data_iso).execute()
         return True
     except Exception:
