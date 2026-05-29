@@ -1327,6 +1327,7 @@ def _renderizar_aba_prestacao_diaria():
                 Selecione um período para gerar a lista de presença de cada dia útil.
                 Sábados, domingos e feriados nacionais são excluídos automaticamente.
                 Dias úteis sem frequência lançada são sinalizados em alerta separado.
+                Suporta até 1 ano de período por consulta.
             </span>
         </div>
     """, unsafe_allow_html=True)
@@ -1350,8 +1351,8 @@ def _renderizar_aba_prestacao_diaria():
         st.error("⚠️ A data final não pode ser anterior à data inicial.")
         return
 
-    if (data_fim - data_ini).days > 90:
-        st.error("⚠️ Período máximo permitido: 90 dias por vez.")
+    if (data_fim - data_ini).days > 366:
+        st.error("⚠️ Período máximo permitido: 1 ano por vez.")
         return
 
     # ── Calcula feriados e dias úteis do período ──────────────────────────────
