@@ -1379,14 +1379,19 @@ def get_dias_sem_aula(data_ini: str = None, data_fim: str = None) -> set:
 def registrar_dia_sem_aula(data_iso: str, motivo: str = "", criado_por: str = "") -> bool:
     """
     Registra um dia como SEM AULA no calendário institucional.
-    Usa upsert para evitar duplicatas (constraint UNIQUE na coluna data).
+    Tenta insert; se já existir (duplicate), faz update do motivo/criado_por.
     Retorna True se sucesso.
     """
+    payload = {"data": data_iso, "motivo": motivo.strip(), "criado_por": criado_por.strip()}
     try:
-        supabase.from_("dias_sem_aula").upsert(
-            {"data": data_iso, "motivo": motivo.strip(), "criado_por": criado_por.strip()},
-            on_conflict="data",
-        ).execute()
+        supabase.from_("dias_sem_aula").insert(payload).execute()
+        return True
+    except Exception:
+        pass
+    try:
+        supabase.from_("dias_sem_aula").update(
+            {"motivo": motivo.strip(), "criado_por": criado_por.strip()}
+        ).eq("data", data_iso).execute()
         return True
     except Exception:
         return False
