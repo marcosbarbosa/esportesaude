@@ -338,12 +338,16 @@ def tela_inscricao_publica_move_right():
                         "A processar documentos e a registar assinatura digital..."
                     ):
                         url_rg, url_receita, url_atestado = None, None, None
+                        _upload_ok = True
 
                         if rg_file:
                             b_rg, n_rg, t_rg = processar_documento(
                                 rg_file.getvalue(), rg_file.name, rg_file.type
                             )
                             url_rg = upload_midia(b_rg, n_rg, t_rg)
+                            if url_rg is None:
+                                st.error("❌ Falha ao enviar o RG. Verifique sua conexão e tente novamente.")
+                                _upload_ok = False
 
                         if receita_file:
                             b_rec, n_rec, t_rec = processar_documento(
@@ -352,6 +356,8 @@ def tela_inscricao_publica_move_right():
                                 receita_file.type,
                             )
                             url_receita = upload_midia(b_rec, n_rec, t_rec)
+                            if url_receita is None:
+                                st.warning("⚠️ Falha ao enviar o Receituário — o restante será salvo normalmente.")
 
                         if atestado_file:
                             b_at, n_at, t_at = processar_documento(
@@ -360,6 +366,13 @@ def tela_inscricao_publica_move_right():
                                 atestado_file.type,
                             )
                             url_atestado = upload_midia(b_at, n_at, t_at)
+                            if url_atestado is None:
+                                st.error("❌ Falha ao enviar o Atestado Médico. Verifique sua conexão e tente novamente.")
+                                _upload_ok = False
+
+                        if not _upload_ok:
+                            st.info("ℹ️ A inscrição NÃO foi salva. Corrija os erros acima e envie novamente.")
+                            st.stop()
 
                         contato_emergencia_final = (
                             f"{emergencia_nome.strip()} - {emergencia_tel.strip()}"

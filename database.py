@@ -1156,8 +1156,13 @@ def upload_midia(file_bytes, file_name, mime_type, bucket="documentos_alunos"):
         supabase.storage.from_(bucket).upload(
             file=file_bytes, path=nome_u, file_options={"content-type": mime_type}
         )
-        return supabase.storage.from_(bucket).get_public_url(nome_u)
-    except Exception:
+        url = supabase.storage.from_(bucket).get_public_url(nome_u)
+        if not url or str(url).strip() in ("", "None", "null"):
+            print(f"[upload_midia] AVISO: URL vazia após upload de '{nome_u}' no bucket '{bucket}'")
+            return None
+        return url
+    except Exception as e:
+        print(f"[upload_midia] ERRO ao enviar '{file_name}' para bucket '{bucket}': {e}")
         return None
 
 
