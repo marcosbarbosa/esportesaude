@@ -1160,16 +1160,23 @@ if st.session_state.menu_atual == "Principal":
         _df_alunos = buscar_alunos_geral("")
         _df_ultima  = load_frequencia_ultima_presenca()
 
-        # Templates WhatsApp (carregados uma vez, fora do loop)
+        # Templates WhatsApp — carregados uma vez, fora do loop.
+        # Cada gatilho da tabela crm_templates (painel Configurações > Mensagens)
+        # é mapeado com exatidão: niver_hoje / niver_futuro / niver_passou /
+        # evasao_nunca / evasao_60 / evasao_80 / assiduo_top.
         try:
             from utils.niver_automatico import montar_link_whatsapp, personalizar_mensagem, get_parabenizados_dict
             from database import get_crm_templates
             _df_tpl = get_crm_templates()
-            _tpl_niver = _df_tpl[_df_tpl["gatilho"].str.contains("niver", na=False)]["mensagem"].iloc[0] if not _df_tpl.empty else "{nome}, parabéns pelo seu aniversário! 🎂"
-            _tpl_evasao = _df_tpl[_df_tpl["gatilho"].str.contains("evasao", na=False)]["mensagem"].iloc[0] if not _df_tpl.empty else "Olá {nome}, sentimos sua falta! Quando nos visita?"
+            # Dicionário {gatilho: mensagem} — fonte única e auditada
+            _tpl_map: dict = {}
+            if not _df_tpl.empty and "gatilho" in _df_tpl.columns:
+                for _, _tr in _df_tpl.iterrows():
+                    _tpl_map[str(_tr.get("gatilho", ""))] = str(_tr.get("mensagem", ""))
             _parab_dict = get_parabenizados_dict()
             _wapp_ok = True
         except Exception:
+            _tpl_map = {}
             _parab_dict = {}
             _wapp_ok = False
 
@@ -1399,7 +1406,15 @@ if st.session_state.menu_atual == "Principal":
                             else:
                                 _wap_n = str(_r.get("whatsapp") or "").strip()
                                 if _wap_n:
-                                    _msg_n = personalizar_mensagem(_tpl_niver, str(_r.get("nome", "")))
+                                    # Escolhe o gatilho correto conforme o momento do aniversário
+                                    if _mes_n == _hoje_mes and _dia_n == _hoje_dia:
+                                        _niver_key = "niver_hoje"
+                                    elif _dia_n > _hoje_dia:
+                                        _niver_key = "niver_futuro"
+                                    else:
+                                        _niver_key = "niver_passou"
+                                    _tpl_n = _tpl_map.get(_niver_key, "🎉 Parabéns, {nome}!")
+                                    _msg_n = personalizar_mensagem(_tpl_n, str(_r.get("nome", "")))
                                     _link_n = montar_link_whatsapp(_wap_n, _msg_n)
                                     if _link_n:
                                         _niver_html += (
@@ -1433,7 +1448,11 @@ if st.session_state.menu_atual == "Principal":
                         if _wapp_ok and _up_dias > 14:
                             _wap_e = str(_r.get("whatsapp") or "").strip()
                             if _wap_e:
-                                _msg_e = personalizar_mensagem(_tpl_evasao, str(_r.get("nome", "")))
+                                # Gatilho correto conforme grau de ausência:
+                                # 14-30 dias → evasao_60 | >30 dias → evasao_80
+                                _ev_key = "evasao_60" if _up_dias <= 30 else "evasao_80"
+                                _tpl_e = _tpl_map.get(_ev_key, "Olá {nome}, sentimos sua falta!")
+                                _msg_e = personalizar_mensagem(_tpl_e, str(_r.get("nome", "")))
                                 _link_e = montar_link_whatsapp(_wap_e, _msg_e)
                                 if _link_e:
                                     _cor_icone = "#F59E0B" if _up_dias <= 30 else "#EF4444"
@@ -1444,11 +1463,12 @@ if st.session_state.menu_atual == "Principal":
                                     )
                     else:
                         _up_html = "<span style='font-size:12px;color:#CBD5E1;'>Sem registro</span>"
-                        # Sem histórico = possível evasão desde o início
+                        # Sem histórico = aluno nunca veio → gatilho evasao_nunca
                         if _wapp_ok:
                             _wap_e = str(_r.get("whatsapp") or "").strip()
                             if _wap_e:
-                                _msg_e = personalizar_mensagem(_tpl_evasao, str(_r.get("nome", "")))
+                                _tpl_e = _tpl_map.get("evasao_nunca", "Olá {nome}, ainda não te vimos por aqui!")
+                                _msg_e = personalizar_mensagem(_tpl_e, str(_r.get("nome", "")))
                                 _link_e = montar_link_whatsapp(_wap_e, _msg_e)
                                 if _link_e:
                                     _up_html += (
