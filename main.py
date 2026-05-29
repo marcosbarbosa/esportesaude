@@ -777,6 +777,112 @@ if not st.session_state.usuario_logado:
     st.stop()
 
 # ==============================================================================
+# 📅 CALENDÁRIO INSTITUCIONAL — Tela de gestão de Dias Sem Aula
+# ==============================================================================
+
+def _tela_calendario_institucional():
+    from database import (
+        get_dias_sem_aula_periodo_df,
+        registrar_dia_sem_aula,
+        remover_dia_sem_aula,
+    )
+
+    st.markdown("""
+        <div style='background:#F0FDF4;border-left:4px solid #16A34A;
+                    padding:12px 16px;border-radius:6px;margin-bottom:18px;'>
+            <strong style='color:#14532D;'>📅 Calendário Institucional — Dias Sem Aula</strong><br>
+            <span style='color:#15803D;font-size:13px;'>
+                Registre dias em que não houve aula por motivo institucional
+                (reuniões internas, recessos, feriados locais, etc.).<br>
+                Esses dias são automaticamente excluídos do alerta de
+                <em>frequência pendente</em> nos relatórios.
+            </span>
+        </div>
+    """, unsafe_allow_html=True)
+
+    hoje_cal = datetime.date.today()
+
+    # ── Formulário de cadastro ─────────────────────────────────────────────
+    st.markdown("### ➕ Registrar dia sem aula")
+    ca, cb, cc = st.columns([2, 4, 2])
+    novo_dia_cal   = ca.date_input("Data:", value=hoje_cal, format="DD/MM/YYYY", key="cal_data_novo")
+    motivo_cal_txt = cb.text_input("Motivo:", placeholder="Ex: Reunião pedagógica, Feriado municipal…", key="cal_motivo")
+    btn_reg_cal    = cc.button("✅ Registrar", type="primary", use_container_width=True, key="cal_btn_reg")
+
+    if btn_reg_cal:
+        ok = registrar_dia_sem_aula(
+            str(novo_dia_cal),
+            motivo_cal_txt,
+            criado_por=st.session_state.get("usuario_logado", "sistema"),
+        )
+        if ok:
+            st.success(f"✅ {novo_dia_cal.strftime('%d/%m/%Y')} registrado como Sem Aula.")
+            st.session_state.pop("cal_lista_carregada", None)
+            st.rerun()
+        else:
+            st.error("❌ Falha ao registrar. Verifique se a tabela `dias_sem_aula` foi criada no Supabase.")
+            with st.expander("ℹ️ SQL para criar a tabela (execute 1 vez no Supabase)", expanded=True):
+                st.code("""
+CREATE TABLE IF NOT EXISTS dias_sem_aula (
+    id         uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+    data       date NOT NULL UNIQUE,
+    motivo     text DEFAULT '',
+    criado_em  timestamptz DEFAULT now(),
+    criado_por text DEFAULT ''
+);
+ALTER TABLE dias_sem_aula ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "allow_all" ON dias_sem_aula
+    FOR ALL USING (true) WITH CHECK (true);
+                """, language="sql")
+
+    st.markdown("---")
+
+    # ── Filtro de período para listar ──────────────────────────────────────
+    st.markdown("### 📋 Registros existentes")
+    fl1, fl2, fl3 = st.columns([2, 2, 2])
+    cal_ini = fl1.date_input(
+        "De:", value=hoje_cal - datetime.timedelta(days=180),
+        format="DD/MM/YYYY", key="cal_lista_ini"
+    )
+    cal_fim = fl2.date_input(
+        "Até:", value=hoje_cal + datetime.timedelta(days=90),
+        format="DD/MM/YYYY", key="cal_lista_fim"
+    )
+    btn_listar = fl3.button("🔍 Buscar", use_container_width=True, key="cal_btn_listar")
+
+    if btn_listar:
+        st.session_state["cal_lista_carregada"] = True
+
+    if st.session_state.get("cal_lista_carregada"):
+        df_cal = get_dias_sem_aula_periodo_df(str(cal_ini), str(cal_fim))
+        if df_cal.empty:
+            st.info("Nenhum dia sem aula registrado no período selecionado.")
+        else:
+            st.markdown(f"**{len(df_cal)} dia(s) encontrado(s):**")
+            for _, row_cal in df_cal.iterrows():
+                try:
+                    d_obj   = datetime.date.fromisoformat(str(row_cal["data"]))
+                    weekday = ["Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado", "Domingo"][d_obj.weekday()]
+                    d_disp  = f"{d_obj.strftime('%d/%m/%Y')} ({weekday})"
+                except Exception:
+                    d_disp = str(row_cal["data"])
+                motivo_d = str(row_cal.get("motivo", "") or "—")
+                criado_d = str(row_cal.get("criado_por", "") or "sistema")
+                col_d, col_m, col_x = st.columns([3, 5, 1])
+                col_d.markdown(f"📌 **{d_disp}**")
+                col_m.markdown(
+                    f"<small style='color:#64748B;'>{motivo_d} · <em>por {criado_d}</em></small>",
+                    unsafe_allow_html=True,
+                )
+                if col_x.button("🗑️", key=f"cal_del_{row_cal['data']}", help="Remover este dia"):
+                    remover_dia_sem_aula(str(row_cal["data"]))
+                    st.session_state.pop("cal_lista_carregada", None)
+                    st.rerun()
+    else:
+        st.caption("Ajuste o período e clique em **Buscar** para ver os registros.")
+
+
+# ==============================================================================
 # 🧭 NAVEGAÇÃO INTERNA E DASHBOARD
 # ==============================================================================
 
@@ -1596,7 +1702,7 @@ elif st.session_state.menu_atual in (
         tela_conferencia_facial()
     else:
         _aba_cfg = st.tabs(
-            ["🏫 Turmas", "💬 Mensagens", "🎂 Aniversários", "🎨 Identidade Visual", "🛠️ Admin", "🔀 Mesclar Fichas", "🔒 LGPD"]
+            ["🏫 Turmas", "💬 Mensagens", "🎂 Aniversários", "🎨 Identidade Visual", "🛠️ Admin", "🔀 Mesclar Fichas", "📅 Calendário", "🔒 LGPD"]
         )
         with _aba_cfg[0]:
             from views.turmas_view import tela_gestao_turmas
@@ -1620,6 +1726,8 @@ elif st.session_state.menu_atual in (
             from views.merge_alunos_view import tela_merge_alunos
             tela_merge_alunos()
         with _aba_cfg[6]:
+            _tela_calendario_institucional()
+        with _aba_cfg[7]:
             from database import get_logs_lgpd
             st.markdown(
                 "<p style='font-weight:800;color:#0A2540;font-size:1rem;margin-bottom:4px;'>"
