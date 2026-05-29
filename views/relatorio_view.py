@@ -12,6 +12,7 @@ import datetime
 import plotly.express as px
 import io
 import os
+import re
 from views.relatorio_identificacao_view import renderizar_aba_caracracha
 from gerador_pdf import criar_prestacao_diaria_pdf
 
@@ -1369,9 +1370,6 @@ def _extrair_secao_hashtag(texto: str, hashtag: str) -> str:
     pattern = rf"#{re.escape(hashtag)}:\s*(.+?)(?=\n\n#|\Z)"
     m = re.search(pattern, texto, re.IGNORECASE | re.DOTALL)
     return m.group(1).strip() if m else ""
-
-
-import re as _re_mod
 
 
 PALAVRAS_ALERTA = ["cirurgia", "cardiaco", "cardíaco", "pressao", "pressão", "infarto",
