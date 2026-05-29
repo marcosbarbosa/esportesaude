@@ -1348,6 +1348,80 @@ def get_presentes_dia_todos(data: str) -> list:
         return []
 
 
+# ==============================================================================
+# 📅 CALENDÁRIO INSTITUCIONAL — Dias Sem Aula (reuniões, recesso, etc.)
+# ==============================================================================
+
+def get_dias_sem_aula(data_ini: str = None, data_fim: str = None) -> set:
+    """
+    Retorna set de datetime.date com dias registrados como SEM AULA
+    (reuniões internas, recessos institucionais, feriados locais, etc.).
+    Filtra pelo intervalo se fornecido; caso contrário, retorna todos.
+    Tabela: dias_sem_aula (data date PK, motivo text, criado_em, criado_por)
+    """
+    import datetime as _dt
+    try:
+        q = supabase.from_("dias_sem_aula").select("data")
+        if data_ini:
+            q = q.gte("data", data_ini)
+        if data_fim:
+            q = q.lte("data", data_fim)
+        res = q.order("data").execute()
+        return {
+            _dt.date.fromisoformat(str(r["data"]))
+            for r in (res.data or [])
+            if r.get("data")
+        }
+    except Exception:
+        return set()
+
+
+def registrar_dia_sem_aula(data_iso: str, motivo: str = "", criado_por: str = "") -> bool:
+    """
+    Registra um dia como SEM AULA no calendário institucional.
+    Usa upsert para evitar duplicatas (constraint UNIQUE na coluna data).
+    Retorna True se sucesso.
+    """
+    try:
+        supabase.from_("dias_sem_aula").upsert(
+            {"data": data_iso, "motivo": motivo.strip(), "criado_por": criado_por.strip()},
+            on_conflict="data",
+        ).execute()
+        return True
+    except Exception:
+        return False
+
+
+def remover_dia_sem_aula(data_iso: str) -> bool:
+    """Remove um dia do calendário institucional. Retorna True se sucesso."""
+    try:
+        supabase.from_("dias_sem_aula").delete().eq("data", data_iso).execute()
+        return True
+    except Exception:
+        return False
+
+
+def get_dias_sem_aula_periodo_df(data_ini: str, data_fim: str):
+    """
+    Retorna DataFrame com todos os campos dos dias sem aula no período,
+    para exibição na tela de gestão.
+    """
+    try:
+        res = (
+            supabase.from_("dias_sem_aula")
+            .select("data, motivo, criado_por, criado_em")
+            .gte("data", data_ini)
+            .lte("data", data_fim)
+            .order("data")
+            .execute()
+        )
+        import pandas as _pd
+        return _pd.DataFrame(res.data or [])
+    except Exception:
+        import pandas as _pd
+        return _pd.DataFrame()
+
+
 def get_presentes_periodo_todos(data_ini: str, data_fim: str) -> dict:
     """
     Retorna dict { 'YYYY-MM-DD': ['Nome1', 'Nome2', ...] } para todos os dias

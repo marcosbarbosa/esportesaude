@@ -32,6 +32,10 @@ from database import (
     get_ultima_presenca_batch,
     get_presentes_dia_todos,
     get_presentes_periodo_todos,
+    get_dias_sem_aula,
+    get_dias_sem_aula_periodo_df,
+    registrar_dia_sem_aula,
+    remover_dia_sem_aula,
 )
 
 # 🚀 IMPORTAÇÃO DO MOTOR NATIVO DO WORD
@@ -1321,18 +1325,92 @@ def _renderizar_aba_prestacao_diaria():
 
     st.markdown("""
         <div style='background:#EFF6FF;border-left:4px solid #1E88E5;
-                    padding:12px 16px;border-radius:6px;margin-bottom:18px;'>
+                    padding:12px 16px;border-radius:6px;margin-bottom:12px;'>
             <strong style='color:#1E3A5F;'>📋 Prestação de Contas Diária</strong><br>
             <span style='color:#1D4ED8;font-size:13px;'>
-                Selecione um período para gerar a lista de presença de cada dia útil.
                 Sábados, domingos e feriados nacionais são excluídos automaticamente.
-                Dias úteis sem frequência lançada são sinalizados em alerta separado.
-                Suporta até 1 ano de período por consulta.
+                Dias úteis sem frequência que estejam no <strong>Calendário Institucional</strong>
+                (reuniões, recessos) são marcados como <em>Sem Aula</em> e não geram alerta.
+                Suporta até 1 ano por consulta.
             </span>
         </div>
     """, unsafe_allow_html=True)
 
     hoje = datetime.date.today()
+
+    # ══════════════════════════════════════════════════════════════════════════
+    # PAINEL: CALENDÁRIO INSTITUCIONAL — Gerenciar Dias Sem Aula
+    # ══════════════════════════════════════════════════════════════════════════
+    with st.expander("📅 Calendário Institucional — Dias Sem Aula (reuniões, recessos, etc.)", expanded=False):
+        st.markdown(
+            "<small style='color:#64748B;'>Registre dias em que não houve aula por motivo "
+            "institucional (reunião interna, recesso, feriado local...). "
+            "Esses dias serão excluídos do alerta de frequência pendente.</small>",
+            unsafe_allow_html=True,
+        )
+
+        # ── Formulário de cadastro ─────────────────────────────────────────
+        st.markdown("**➕ Registrar novo dia sem aula:**")
+        ca, cb, cc = st.columns([2, 3, 2])
+        novo_dia   = ca.date_input("Data:", value=hoje, format="DD/MM/YYYY", key="dsa_data_novo")
+        motivo_txt = cb.text_input("Motivo:", placeholder="Ex: Reunião pedagógica", key="dsa_motivo")
+        registrar  = cc.button("✅ Registrar", type="primary",
+                               use_container_width=True, key="dsa_btn_reg")
+
+        if registrar:
+            ok = registrar_dia_sem_aula(
+                str(novo_dia), motivo_txt,
+                criado_por=st.session_state.get("usuario_logado", "sistema"),
+            )
+            if ok:
+                st.success(f"✅ {novo_dia.strftime('%d/%m/%Y')} registrado como Sem Aula.")
+                st.rerun()
+            else:
+                st.error("❌ Falha ao registrar. Verifique se a tabela `dias_sem_aula` foi criada no Supabase.")
+
+        st.markdown("---")
+
+        # ── Lista dos últimos 6 meses + próximos 3 meses ──────────────────
+        _ini_lista = (hoje - datetime.timedelta(days=180)).isoformat()
+        _fim_lista = (hoje + datetime.timedelta(days=90)).isoformat()
+        df_dsa = get_dias_sem_aula_periodo_df(_ini_lista, _fim_lista)
+
+        if df_dsa.empty:
+            st.info("Nenhum dia sem aula registrado nos últimos 6 meses.")
+        else:
+            st.markdown(f"**{len(df_dsa)} dia(s) registrado(s):**")
+            for _, row_dsa in df_dsa.iterrows():
+                try:
+                    d_obj  = datetime.date.fromisoformat(str(row_dsa["data"]))
+                    d_disp = d_obj.strftime("%d/%m/%Y") + f" ({_dia_da_semana_pt(d_obj)})"
+                except Exception:
+                    d_disp = str(row_dsa["data"])
+                motivo_disp  = str(row_dsa.get("motivo", "") or "—")
+                criado_disp  = str(row_dsa.get("criado_por", "") or "sistema")
+                col_d, col_m, col_x = st.columns([3, 5, 1])
+                col_d.markdown(f"📌 **{d_disp}**")
+                col_m.markdown(f"<small>{motivo_disp} · por {criado_disp}</small>", unsafe_allow_html=True)
+                if col_x.button("🗑️", key=f"dsa_del_{row_dsa['data']}", help="Remover"):
+                    remover_dia_sem_aula(str(row_dsa["data"]))
+                    st.rerun()
+
+        # ── SQL para criar a tabela (exibido se ainda não existir) ────────
+        with st.expander("ℹ️ SQL para criar tabela no Supabase (execute 1 vez)", expanded=False):
+            st.code("""
+-- Execute no SQL Editor do Supabase Dashboard:
+CREATE TABLE IF NOT EXISTS dias_sem_aula (
+    id         uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+    data       date NOT NULL UNIQUE,
+    motivo     text DEFAULT '',
+    criado_em  timestamptz DEFAULT now(),
+    criado_por text DEFAULT ''
+);
+ALTER TABLE dias_sem_aula ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "allow_all" ON dias_sem_aula
+    FOR ALL USING (true) WITH CHECK (true);
+            """, language="sql")
+
+    # ── Formulário de busca ───────────────────────────────────────────────────
     c_ini, c_fim, c_btn = st.columns([2, 2, 1], vertical_alignment="bottom")
     data_ini = c_ini.date_input(
         "📅 Data Inicial:", value=hoje, format="DD/MM/YYYY", key="pd_data_ini"
@@ -1355,93 +1433,146 @@ def _renderizar_aba_prestacao_diaria():
         st.error("⚠️ Período máximo permitido: 1 ano por vez.")
         return
 
-    # ── Calcula feriados e dias úteis do período ──────────────────────────────
+    # ── Calcula feriados, dias sem aula e dias úteis do período ───────────────
     anos_no_periodo = {data_ini.year + i for i in range((data_fim - data_ini).days // 365 + 2)
                        if (data_ini.year + i) <= data_fim.year}
-    feriados = _feriados_nacionais_br(anos_no_periodo)
+    feriados         = _feriados_nacionais_br(anos_no_periodo)
+    dias_sem_aula_set = get_dias_sem_aula(str(data_ini), str(data_fim))
 
-    def eh_dia_util(d: datetime.date) -> bool:
-        return d.weekday() < 5 and d not in feriados  # 0=Seg … 4=Sex
+    def eh_dia_util_base(d: datetime.date) -> bool:
+        """Dia útil: seg–sex, excluindo feriados nacionais."""
+        return d.weekday() < 5 and d not in feriados
 
+    def eh_dia_letivo(d: datetime.date) -> bool:
+        """Dia letivo: útil E não está no calendário institucional."""
+        return eh_dia_util_base(d) and d not in dias_sem_aula_set
+
+    # Todos os dias úteis (base para detectar ausência de frequência)
     dias_uteis_range = sorted(
         data_ini + datetime.timedelta(days=i)
         for i in range((data_fim - data_ini).days + 1)
-        if eh_dia_util(data_ini + datetime.timedelta(days=i))
+        if eh_dia_util_base(data_ini + datetime.timedelta(days=i))
     )
 
     # ── Busca presenças do período ─────────────────────────────────────────────
-    with st.spinner(f"Consultando presenças de {data_ini.strftime('%d/%m/%Y')} a {data_fim.strftime('%d/%m/%Y')}…"):
+    with st.spinner(f"Consultando presenças de {data_ini.strftime('%d/%m/%Y')} "
+                    f"a {data_fim.strftime('%d/%m/%Y')}…"):
         por_dia_raw = get_presentes_periodo_todos(str(data_ini), str(data_fim))
 
-    # Remove fins de semana e feriados da base retornada (segurança extra)
+    # Filtra: só dias letivos (remove fins de semana, feriados e dias sem aula)
     por_dia = {
         iso: nomes
         for iso, nomes in por_dia_raw.items()
-        if eh_dia_util(datetime.date.fromisoformat(iso))
+        if eh_dia_letivo(datetime.date.fromisoformat(iso))
     }
 
-    # ── Dias úteis SEM frequência lançada ─────────────────────────────────────
+    # ── Classifica os dias úteis sem frequência ───────────────────────────────
     datas_com_frequencia = {datetime.date.fromisoformat(iso) for iso in por_dia}
-    dias_sem_frequencia = [d for d in dias_uteis_range if d not in datas_com_frequencia]
 
-    sufixo = (
-        data_ini.strftime("%Y%m%d")
-        if data_ini == data_fim else
-        f"{data_ini.strftime('%Y%m%d')}_a_{data_fim.strftime('%Y%m%d')}"
-    )
+    # Dias sem aula registrados no Calendário Institucional (no período)
+    dias_calendario = sorted(d for d in dias_uteis_range if d in dias_sem_aula_set)
+    # Dias úteis REAIS sem frequência e sem justificativa no calendário
+    dias_sem_frequencia = [
+        d for d in dias_uteis_range
+        if d not in datas_com_frequencia and d not in dias_sem_aula_set
+    ]
+
+    sufixo  = (data_ini.strftime("%Y%m%d") if data_ini == data_fim
+               else f"{data_ini.strftime('%Y%m%d')}_a_{data_fim.strftime('%Y%m%d')}")
     ini_fmt = data_ini.strftime("%d/%m/%Y")
     fim_fmt = data_fim.strftime("%d/%m/%Y")
 
     # ══════════════════════════════════════════════════════════════════════════
-    # ALERTA — dias úteis sem frequência
+    # BLOCO INFORMATIVO — dias sem aula (calendário institucional)
+    # ══════════════════════════════════════════════════════════════════════════
+    if dias_calendario:
+        motivos_map = {}
+        df_cal = get_dias_sem_aula_periodo_df(str(data_ini), str(data_fim))
+        if not df_cal.empty:
+            for _, rr in df_cal.iterrows():
+                try:
+                    motivos_map[datetime.date.fromisoformat(str(rr["data"]))] = str(rr.get("motivo", "") or "")
+                except Exception:
+                    pass
+        linhas_cal = ""
+        for i, d in enumerate(dias_calendario, 1):
+            bg = "#F0FDF4" if i % 2 == 1 else "#DCFCE7"
+            motivo_d = motivos_map.get(d, "")
+            linhas_cal += (
+                f"<tr style='background:{bg};'>"
+                f"<td style='padding:4px 8px;text-align:center;width:32px;font-size:11px;"
+                f"font-weight:700;color:#166534;border:1px solid #86EFAC;'>{i}</td>"
+                f"<td style='padding:4px 10px;font-size:11px;font-weight:600;"
+                f"color:#15803D;border:1px solid #86EFAC;'>{d.strftime('%d/%m/%Y')}"
+                f" ({_dia_da_semana_pt(d)})</td>"
+                f"<td style='padding:4px 10px;font-size:11px;color:#166534;"
+                f"border:1px solid #86EFAC;'>{motivo_d or '—'}</td>"
+                f"</tr>"
+            )
+        st.markdown(f"""
+<div style='border:2px solid #86EFAC;border-radius:8px;background:#F0FDF4;
+            padding:14px 18px;margin-bottom:14px;'>
+  <div style='font-size:13px;font-weight:900;color:#15803D;margin-bottom:8px;'>
+    📅 {len(dias_calendario)} dia(s) SEM AULA — registrado(s) no Calendário Institucional
+  </div>
+  <table style='width:100%;border-collapse:collapse;'>
+    <thead>
+      <tr style='background:#16A34A;'>
+        <th style='padding:5px 8px;color:#fff;font-size:9.5px;border:1px solid #16A34A;
+                   width:32px;'>#</th>
+        <th style='padding:5px 10px;color:#fff;font-size:9.5px;text-align:left;
+                   border:1px solid #16A34A;'>Data</th>
+        <th style='padding:5px 10px;color:#fff;font-size:9.5px;text-align:left;
+                   border:1px solid #16A34A;'>Motivo</th>
+      </tr>
+    </thead>
+    <tbody>{linhas_cal}</tbody>
+  </table>
+</div>
+        """, unsafe_allow_html=True)
+
+    # ══════════════════════════════════════════════════════════════════════════
+    # ALERTA — dias úteis sem frequência e SEM justificativa
     # ══════════════════════════════════════════════════════════════════════════
     if dias_sem_frequencia:
-        nomes_dias_semana = {
-            "Segunda-feira": "Seg", "Terça-feira": "Ter", "Quarta-feira": "Qua",
-            "Quinta-feira": "Qui", "Sexta-feira": "Sex",
-        }
         linhas_alerta = ""
-        itens_alerta = []
+        itens_alerta  = []
         for i, d in enumerate(dias_sem_frequencia, 1):
-            dsem = _dia_da_semana_pt(d)
-            d_fmt = d.strftime("%d/%m/%Y")
-            item_str = f"{d_fmt} ({dsem})"
+            dsem      = _dia_da_semana_pt(d)
+            d_fmt     = d.strftime("%d/%m/%Y")
+            item_str  = f"{d_fmt} ({dsem})"
             itens_alerta.append(item_str)
             bg = "#FFF5F5" if i % 2 == 1 else "#FFECEC"
-            linhas_alerta += f"""
-            <tr style='background:{bg};'>
-              <td style='padding:5px 10px;font-weight:700;color:#7F1D1D;
-                         font-size:12px;border:1px solid #FECACA;text-align:center;
-                         width:36px;'>{i}</td>
-              <td style='padding:5px 12px;font-size:12px;font-weight:600;
-                         color:#991B1B;border:1px solid #FECACA;'>{d_fmt}</td>
-              <td style='padding:5px 12px;font-size:12px;color:#7F1D1D;
-                         border:1px solid #FECACA;'>{dsem}</td>
-              <td style='padding:5px 12px;font-size:11px;color:#B91C1C;font-style:italic;
-                         border:1px solid #FECACA;'>Sem frequência lançada</td>
-            </tr>"""
-
+            linhas_alerta += (
+                f"<tr style='background:{bg};'>"
+                f"<td style='padding:5px 10px;font-weight:700;color:#7F1D1D;"
+                f"font-size:12px;border:1px solid #FECACA;text-align:center;width:36px;'>{i}</td>"
+                f"<td style='padding:5px 12px;font-size:12px;font-weight:600;"
+                f"color:#991B1B;border:1px solid #FECACA;'>{d_fmt}</td>"
+                f"<td style='padding:5px 12px;font-size:12px;color:#7F1D1D;"
+                f"border:1px solid #FECACA;'>{dsem}</td>"
+                f"<td style='padding:5px 12px;font-size:11px;color:#B91C1C;font-style:italic;"
+                f"border:1px solid #FECACA;'>Sem frequência lançada</td>"
+                f"</tr>"
+            )
         st.markdown(f"""
 <div style='border:2px solid #FCA5A5;border-radius:8px;background:#FEF2F2;
             padding:18px 20px;margin-bottom:18px;'>
-  <div style='font-size:14px;font-weight:900;color:#991B1B;margin-bottom:10px;'>
-    ⚠️ ATENÇÃO — {len(dias_sem_frequencia)} dia(s) útil(is) sem frequência registrada
+  <div style='font-size:14px;font-weight:900;color:#991B1B;margin-bottom:8px;'>
+    ⚠️ ATENÇÃO — {len(dias_sem_frequencia)} dia(s) sem frequência E sem justificativa
   </div>
   <div style='font-size:12px;color:#7F1D1D;margin-bottom:12px;'>
-    Os dias abaixo são dias úteis (seg–sex, excluindo feriados) sem nenhuma presença lançada
-    no sistema. Verifique se houve aula e corrija se necessário.
+    Esses dias são úteis (seg–sex, excluindo feriados e Calendário Institucional)
+    mas não têm nenhuma presença lançada. Verifique e corrija, ou
+    <strong>registre no Calendário Institucional</strong> se não houve aula.
   </div>
   <table style='width:100%;border-collapse:collapse;'>
     <thead>
       <tr style='background:#DC2626;'>
-        <th style='padding:6px 10px;color:#fff;font-size:10px;border:1px solid #DC2626;
-                   width:36px;'>#</th>
-        <th style='padding:6px 12px;color:#fff;font-size:10px;text-align:left;
-                   border:1px solid #DC2626;'>Data</th>
-        <th style='padding:6px 12px;color:#fff;font-size:10px;text-align:left;
-                   border:1px solid #DC2626;'>Dia da Semana</th>
-        <th style='padding:6px 12px;color:#fff;font-size:10px;text-align:left;
-                   border:1px solid #DC2626;'>Situação</th>
+        <th style='padding:6px 10px;color:#fff;font-size:10px;border:1px solid #DC2626;width:36px;'>#</th>
+        <th style='padding:6px 12px;color:#fff;font-size:10px;text-align:left;border:1px solid #DC2626;'>Data</th>
+        <th style='padding:6px 12px;color:#fff;font-size:10px;text-align:left;border:1px solid #DC2626;'>Dia da Semana</th>
+        <th style='padding:6px 12px;color:#fff;font-size:10px;text-align:left;border:1px solid #DC2626;'>Situação</th>
       </tr>
     </thead>
     <tbody>{linhas_alerta}</tbody>
@@ -1449,11 +1580,10 @@ def _renderizar_aba_prestacao_diaria():
 </div>
         """, unsafe_allow_html=True)
 
-        # Botão de download do alerta em PDF
         with st.spinner("Preparando PDF do alerta…"):
             pdf_alerta = criar_pdf_alerta_frequencia(itens_alerta, ini_fmt, fim_fmt)
         st.download_button(
-            label=f"🖨️ Imprimir Alerta — {len(dias_sem_frequencia)} dia(s) sem frequência",
+            label=f"🖨️ Imprimir Alerta — {len(dias_sem_frequencia)} dia(s) pendente(s)",
             data=pdf_alerta,
             file_name=f"Alerta_Frequencia_{sufixo}.pdf",
             mime="application/pdf",
@@ -1463,19 +1593,20 @@ def _renderizar_aba_prestacao_diaria():
         st.markdown("<hr style='margin:16px 0;border-color:#E2E8F0;'>", unsafe_allow_html=True)
 
     # ══════════════════════════════════════════════════════════════════════════
-    # RELATÓRIO PRINCIPAL — dias com frequência
+    # RELATÓRIO PRINCIPAL — dias com frequência lançada
     # ══════════════════════════════════════════════════════════════════════════
     if not por_dia:
-        st.info("Nenhum dia útil com frequência lançada no período selecionado.")
+        st.info("Nenhum dia letivo com frequência lançada no período selecionado.")
         return
 
     total_dias   = len(por_dia)
     total_alunos = sum(len(v) for v in por_dia.values())
 
-    m1, m2, m3 = st.columns(3)
+    m1, m2, m3, m4 = st.columns(4)
     m1.metric("📅 Dias com aula", total_dias)
-    m2.metric("👥 Total de presenças", total_alunos)
-    m3.metric("📊 Média por dia", f"{total_alunos / total_dias:.1f}")
+    m2.metric("🚫 Dias sem aula (calendário)", len(dias_calendario))
+    m3.metric("👥 Total de presenças", total_alunos)
+    m4.metric("📊 Média por dia", f"{total_alunos / total_dias:.1f}")
 
     st.markdown("<hr style='margin:12px 0;border-color:#E2E8F0;'>", unsafe_allow_html=True)
 
@@ -1497,11 +1628,11 @@ def _renderizar_aba_prestacao_diaria():
     # ── Preview visual — um bloco por dia ────────────────────────────────────
     st.markdown(f"#### 🖥️ Preview do Relatório — {total_dias} página(s)")
 
-    cfg      = _gcfg()
-    logo_p   = get_base64_image(cfg.get("logo_principal",  "logo-imbra.png"))
-    logo_s   = get_base64_image(cfg.get("logo_secundaria", "logo-secretaria.png"))
-    img_p    = (f"<img src='data:image/png;base64,{logo_p}' style='height:48px;object-fit:contain;'>") if logo_p else ""
-    img_s    = (f"<img src='data:image/png;base64,{logo_s}' style='height:48px;object-fit:contain;'>") if logo_s else ""
+    cfg         = _gcfg()
+    logo_p      = get_base64_image(cfg.get("logo_principal",  "logo-imbra.png"))
+    logo_s      = get_base64_image(cfg.get("logo_secundaria", "logo-secretaria.png"))
+    img_p       = (f"<img src='data:image/png;base64,{logo_p}' style='height:48px;object-fit:contain;'>") if logo_p else ""
+    img_s       = (f"<img src='data:image/png;base64,{logo_s}' style='height:48px;object-fit:contain;'>") if logo_s else ""
     nome_org    = cfg.get("nome_organizacao",  "INSTITUTO MUDA BRASIL").upper()
     titulo_proj = cfg.get("titulo_projeto", "ESPORTE E SAÚDE NA COMUNIDADE - FASE 2").upper()
     hoje_fmt    = hoje.strftime("%d/%m/%Y")
@@ -1511,7 +1642,6 @@ def _renderizar_aba_prestacao_diaria():
             data_fmt = datetime.date.fromisoformat(data_iso).strftime("%d/%m/%Y")
         except Exception:
             data_fmt = data_iso
-
         bloco = _bloco_preview_dia(
             data_fmt, nomes, img_s, img_p, nome_org, titulo_proj, hoje_fmt,
             numero_dia=idx, total_dias=total_dias,
