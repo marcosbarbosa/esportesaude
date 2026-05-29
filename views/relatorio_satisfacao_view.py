@@ -294,21 +294,221 @@ def _gerar_html_print(df_filtrado, trimestre_sel, ano_sel,
     return html
 
 
-def _gerar_pdf_bytes(html: str) -> bytes | None:
-    """Converte o HTML do relatório em PDF via xhtml2pdf. Retorna None se falhar."""
+def _gerar_html_para_pdf(df_filtrado, trimestre_sel, ano_sel,
+                          tx_exc, tx_dor, tx_ene, tx_imp,
+                          df_com_print, graficos_b64=None):
+    """
+    Template HTML otimizado para xhtml2pdf:
+    - Layout 100% via <table> (sem flexbox, sem column-count)
+    - Fontes compactas e margens mínimas para caber em 1 página A4
+    - Gráficos embutidos como base64 PNG nas células da tabela
+    """
+    agora = datetime.datetime.now().strftime("%d/%m/%Y às %H:%M")
+    try:
+        from utils.identidade import get_config as _gcfg, get_logo_data_url as _gld
+        _cfg = _gcfg()
+        nome_studio = _cfg.get("titulo_projeto", "Esporte e Saúde")
+        logo_b64    = _gld(_cfg.get("logo_principal", "logo-imbra.png"))
+    except Exception:
+        nome_studio = "Esporte e Saúde"
+        logo_b64    = None
+
+    graficos_b64 = graficos_b64 or {}
+    n_resp = len(df_filtrado)
+
+    # ── logo ──────────────────────────────────────────────────────────────────
+    logo_tag = (
+        f'<img src="{logo_b64}" style="height:36pt;max-width:90pt;">'
+        if logo_b64 else
+        f'<b style="font-size:10pt;color:#0056b3;">{nome_studio}</b>'
+    )
+
+    # ── gráficos ──────────────────────────────────────────────────────────────
+    def _chart_cell(col):
+        b64 = graficos_b64.get(col)
+        if b64:
+            return f'<img src="data:image/png;base64,{b64}" style="width:99%;"/>'
+        return '<p style="color:#94A3B8;font-size:6pt;text-align:center;">sem dados</p>'
+
+    # ── tabelas de sentimento ──────────────────────────────────────────────────
+    cor = {"Positivo (Excelente)": "#10B981",
+           "Neutro (Mediano)": "#F59E0B",
+           "Atenção (Melhoria)": "#EF4444"}
+
+    def _sent_rows(col):
+        if col not in df_filtrado.columns:
+            return ""
+        rows = ""
+        for sent, cnt in df_filtrado[col].value_counts().items():
+            if sent == "Sem Classificação":
+                continue
+            pct = round(cnt / n_resp * 100) if n_resp else 0
+            c = cor.get(sent, "#64748B")
+            rows += (
+                f"<tr>"
+                f"<td style='padding:2pt 4pt;border-bottom:0.5pt solid #E2E8F0;font-size:6pt;'>"
+                f"<font color='{c}'>&#9679;</font> {sent}</td>"
+                f"<td style='text-align:center;padding:2pt 4pt;border-bottom:0.5pt solid #E2E8F0;font-size:6pt;'>{cnt}</td>"
+                f"<td style='text-align:center;padding:2pt 4pt;border-bottom:0.5pt solid #E2E8F0;font-size:6pt;'>{pct}%</td>"
+                f"</tr>"
+            )
+        return rows
+
+    def _mini_sent(titulo, col):
+        rows = _sent_rows(col)
+        return (
+            f"<p style='font-size:6.5pt;font-weight:bold;color:#0A2540;"
+            f"border-bottom:1pt solid #0056b3;padding-bottom:1pt;margin:0 0 2pt 0;'>{titulo}</p>"
+            f"<table width='100%' style='border-collapse:collapse;'>"
+            f"<tr style='background-color:#F1F5F9;'>"
+            f"<th style='text-align:left;padding:2pt 4pt;font-size:5.5pt;'>Sentimento</th>"
+            f"<th style='text-align:center;padding:2pt 4pt;font-size:5.5pt;'>Votos</th>"
+            f"<th style='text-align:center;padding:2pt 4pt;font-size:5.5pt;'>%</th>"
+            f"</tr>{rows}</table>"
+        )
+
+    # ── comentários em 4 colunas (tabela) ─────────────────────────────────────
+    comentarios = []
+    if not df_com_print.empty:
+        for _, cr in df_com_print.iterrows():
+            turma_c = str(cr.get("turma", "")).strip()
+            texto_c = str(cr.get("comentario", "")).strip()
+            if texto_c:
+                comentarios.append((turma_c, texto_c))
+    # máx 24 comentários (6 por coluna × 4 colunas)
+    comentarios = comentarios[:24]
+    colunas_com = [[], [], [], []]
+    for i, item in enumerate(comentarios):
+        colunas_com[i % 4].append(item)
+
+    def _bloco_com(turma, texto):
+        return (
+            f"<table width='100%' style='margin-bottom:3pt;'><tr>"
+            f"<td style='background-color:#F0F9FF;border-left:2pt solid #0056b3;"
+            f"padding:3pt 4pt;font-size:5.5pt;line-height:1.3;'>"
+            f"<b style='color:#0056b3;font-size:5pt;'>{turma}</b><br>"
+            f"<i>&ldquo;{texto}&rdquo;</i>"
+            f"</td></tr></table>"
+        )
+
+    com_cells = ""
+    for col_list in colunas_com:
+        blocos = "".join(_bloco_com(t, c) for t, c in col_list)
+        com_cells += f"<td width='25%' style='vertical-align:top;padding:0 3pt;'>{blocos}</td>"
+
+    tem_comentarios = any(colunas_com)
+
+    html = f"""<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8"/>
+<style>
+  @page {{ size: A4 portrait; margin: 7mm 8mm; }}
+  body {{ font-family: Helvetica, Arial, sans-serif; font-size: 7pt;
+          color: #1E293B; margin: 0; padding: 0; }}
+  table {{ border-collapse: collapse; }}
+</style>
+</head>
+<body>
+
+<!-- CABEÇALHO -->
+<table width="100%" style="border-bottom:2pt solid #0056b3;padding-bottom:4pt;margin-bottom:5pt;">
+  <tr>
+    <td width="18%" style="vertical-align:middle;">{logo_tag}</td>
+    <td style="text-align:center;vertical-align:middle;">
+      <p style="font-size:12pt;font-weight:bold;color:#0A2540;margin:0;">{nome_studio}</p>
+      <p style="font-size:8pt;color:#475569;margin:1pt 0 0 0;">Relatório de Satisfação &amp; Impacto na Saúde</p>
+      <p style="font-size:6pt;color:#94A3B8;margin:1pt 0 0 0;">Período: {trimestre_sel} de {ano_sel} &nbsp;|&nbsp; Emitido em {agora}</p>
+    </td>
+    <td width="14%" style="text-align:right;vertical-align:middle;font-size:7pt;color:#64748B;">
+      <b style="font-size:14pt;color:#0A2540;">{n_resp}</b><br>pesquisas
+    </td>
+  </tr>
+</table>
+
+<!-- KPIs -->
+<table width="100%" style="margin-bottom:5pt;">
+  <tr>
+    <td width="20%" style="text-align:center;border:0.5pt solid #CBD5E1;background-color:#F8FAFC;padding:4pt 2pt;">
+      <p style="font-size:14pt;font-weight:bold;color:#10B981;margin:0;">{tx_exc}%</p>
+      <p style="font-size:5.5pt;color:#64748B;margin:0;">Excelência nas Aulas</p>
+    </td>
+    <td width="20%" style="text-align:center;border:0.5pt solid #CBD5E1;background-color:#F8FAFC;padding:4pt 2pt;">
+      <p style="font-size:14pt;font-weight:bold;color:#0056b3;margin:0;">{tx_dor}%</p>
+      <p style="font-size:5.5pt;color:#64748B;margin:0;">Alívio de Dores</p>
+    </td>
+    <td width="20%" style="text-align:center;border:0.5pt solid #CBD5E1;background-color:#F8FAFC;padding:4pt 2pt;">
+      <p style="font-size:14pt;font-weight:bold;color:#F59E0B;margin:0;">{tx_ene}%</p>
+      <p style="font-size:5.5pt;color:#64748B;margin:0;">Mais Energia</p>
+    </td>
+    <td width="20%" style="text-align:center;border:0.5pt solid #CBD5E1;background-color:#F8FAFC;padding:4pt 2pt;">
+      <p style="font-size:14pt;font-weight:bold;color:#8B5CF6;margin:0;">{tx_imp}%</p>
+      <p style="font-size:5.5pt;color:#64748B;margin:0;">Impacto na Vida</p>
+    </td>
+    <td width="20%" style="text-align:center;border:0.5pt solid #CBD5E1;background-color:#F8FAFC;padding:4pt 2pt;">
+      <p style="font-size:14pt;font-weight:bold;color:#0A2540;margin:0;">{n_resp}</p>
+      <p style="font-size:5.5pt;color:#64748B;margin:0;">Total Respostas</p>
+    </td>
+  </tr>
+</table>
+
+<!-- GRÁFICOS -->
+<p style="font-size:7pt;font-weight:bold;color:#0A2540;border-bottom:1pt solid #0056b3;padding-bottom:2pt;margin:0 0 3pt 0;">Análise Gráfica</p>
+<table width="100%" style="margin-bottom:5pt;">
+  <tr>
+    <td width="25%" style="text-align:center;vertical-align:top;">{_chart_cell("Sentimento_Q4")}</td>
+    <td width="25%" style="text-align:center;vertical-align:top;">{_chart_cell("Sentimento_Q2")}</td>
+    <td width="25%" style="text-align:center;vertical-align:top;">{_chart_cell("Sentimento_Q1")}</td>
+    <td width="25%" style="text-align:center;vertical-align:top;">{_chart_cell("Sentimento_Q3")}</td>
+  </tr>
+</table>
+
+<!-- TABELAS DE SENTIMENTO -->
+<p style="font-size:7pt;font-weight:bold;color:#0A2540;border-bottom:1pt solid #0056b3;padding-bottom:2pt;margin:0 0 3pt 0;">Análise Detalhada por Indicador</p>
+<table width="100%" style="margin-bottom:5pt;">
+  <tr>
+    <td width="25%" style="vertical-align:top;padding-right:4pt;">{_mini_sent("1. Qualidade dos Professores","Sentimento_Q4")}</td>
+    <td width="25%" style="vertical-align:top;padding-right:4pt;">{_mini_sent("2. Melhora nas Dores Crônicas","Sentimento_Q2")}</td>
+    <td width="25%" style="vertical-align:top;padding-right:4pt;">{_mini_sent("3. Disposição e Energia","Sentimento_Q1")}</td>
+    <td width="25%" style="vertical-align:top;">{_mini_sent("4. Impacto Transformador na Vida","Sentimento_Q3")}</td>
+  </tr>
+</table>
+
+{"<!-- COMENTÁRIOS --><p style='font-size:7pt;font-weight:bold;color:#0A2540;border-bottom:1pt solid #0056b3;padding-bottom:2pt;margin:0 0 3pt 0;'>Comentários dos Alunos</p><table width='100%' style='margin-bottom:4pt;'><tr>" + com_cells + "</tr></table>" if tem_comentarios else ""}
+
+<!-- RODAPÉ -->
+<table width="100%" style="border-top:0.5pt solid #E2E8F0;margin-top:3pt;">
+  <tr>
+    <td style="text-align:center;font-size:5.5pt;color:#94A3B8;padding-top:3pt;">
+      {nome_studio} &nbsp;·&nbsp; Relatório gerado automaticamente pelo Sistema IMBRA &nbsp;·&nbsp; {agora}
+    </td>
+  </tr>
+</table>
+
+</body>
+</html>"""
+    return html
+
+
+def _gerar_pdf_bytes(df_filtrado, trimestre_sel, ano_sel,
+                     tx_exc, tx_dor, tx_ene, tx_imp,
+                     df_com_print, graficos_b64=None) -> bytes | None:
+    """Gera PDF compacto (1 página A4) via xhtml2pdf usando template de tabelas."""
     if not _XHTML_SAT:
         return None
     try:
-        buf = io.BytesIO()
-        status = pisa.CreatePDF(
-            src=html.encode("utf-8"),
-            dest=buf,
-            encoding="utf-8",
+        html = _gerar_html_para_pdf(
+            df_filtrado, trimestre_sel, ano_sel,
+            tx_exc, tx_dor, tx_ene, tx_imp,
+            df_com_print, graficos_b64=graficos_b64,
         )
+        buf = io.BytesIO()
+        status = pisa.CreatePDF(src=html.encode("utf-8"), dest=buf, encoding="utf-8")
         if status.err:
             return None
         return buf.getvalue()
-    except Exception:
+    except Exception as e:
+        print(f"[_gerar_pdf_bytes] ERRO: {e}")
         return None
 
 
@@ -503,7 +703,11 @@ def tela_relatorio_prime_satisfacao():
 
         _col_pdf, _col_html, _col_info = st.columns([1, 1, 3])
         with _col_pdf:
-            _pdf_bytes = _gerar_pdf_bytes(_html_rel)
+            _pdf_bytes = _gerar_pdf_bytes(
+                df_filtrado, trimestre_sel, ano_sel,
+                tx_exc, tx_dor, tx_ene, tx_imp,
+                df_com, graficos_b64=_graficos_b64,
+            )
             if _pdf_bytes:
                 st.download_button(
                     label="📄 Baixar PDF",
