@@ -1348,6 +1348,39 @@ def get_presentes_dia_todos(data: str) -> list:
         return []
 
 
+def get_presentes_periodo_todos(data_ini: str, data_fim: str) -> dict:
+    """
+    Retorna dict { 'YYYY-MM-DD': ['Nome1', 'Nome2', ...] } para todos os dias
+    com pelo menos 1 presente no intervalo [data_ini, data_fim].
+    Ordenado cronologicamente por data, nomes em ordem alfabética por dia.
+    """
+    try:
+        res = (
+            supabase.from_("frequencia")
+            .select("data_aula, alunos(nome)")
+            .gte("data_aula", data_ini)
+            .lte("data_aula", data_fim)
+            .eq("status", "PRESENTE")
+            .limit(50000)
+            .execute()
+        )
+        dados = res.data or []
+        por_dia: dict = {}
+        for r in dados:
+            data = str(r.get("data_aula", "")).strip()
+            nome = (r.get("alunos") or {}).get("nome", "")
+            if not data or not nome:
+                continue
+            por_dia.setdefault(data, set()).add(nome.strip())
+        # Converte para listas ordenadas, dict ordenado por data
+        return {
+            d: sorted(por_dia[d])
+            for d in sorted(por_dia)
+        }
+    except Exception:
+        return {}
+
+
 # ==============================================================================
 # 🩺 GESTÃO CLÍNICA E AVALIAÇÕES
 # ==============================================================================

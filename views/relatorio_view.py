@@ -14,7 +14,7 @@ import io
 import os
 import re
 from views.relatorio_identificacao_view import renderizar_aba_caracracha
-from gerador_pdf import criar_prestacao_diaria_pdf, gerar_pdf_monitoramento_clinico
+from gerador_pdf import criar_prestacao_diaria_pdf, criar_prestacao_periodo_pdf, gerar_pdf_monitoramento_clinico
 
 from database import (
     get_relatorio_periodo,
@@ -26,6 +26,7 @@ from database import (
     get_midias_diario,
     get_ultima_presenca_batch,
     get_presentes_dia_todos,
+    get_presentes_periodo_todos,
 )
 
 # 🚀 IMPORTAÇÃO DO MOTOR NATIVO DO WORD
@@ -1202,8 +1203,68 @@ def _gerar_pdf_relatorio_prime(
 
 
 # ==============================================================================
-# 📋 PRESTAÇÃO DIÁRIA — Lista de Presença por Dia (PDF)
+# 📋 PRESTAÇÃO DIÁRIA — Lista de Presença por Período (PDF)
 # ==============================================================================
+def _bloco_preview_dia(data_fmt, nomes, img_s, img_p, nome_org, titulo_proj, hoje_fmt, numero_dia=None, total_dias=None):
+    """Retorna HTML de um bloco de preview para um dia de presença."""
+    linhas = ""
+    for i, nome in enumerate(nomes, 1):
+        bg = "#F8FAFC" if i % 2 == 0 else "#FFFFFF"
+        linhas += (
+            f"<tr style='background:{bg};'>"
+            f"<td style='padding:4px 8px;text-align:center;width:42px;"
+            f"font-weight:700;color:#475569;font-size:11px;border:1px solid #E2E8F0;'>{i}</td>"
+            f"<td style='padding:4px 10px;font-size:12px;font-weight:600;"
+            f"color:#0F172A;text-transform:uppercase;border:1px solid #E2E8F0;'>{nome}</td>"
+            f"</tr>"
+        )
+    pag_info = f" &nbsp;·&nbsp; Página {numero_dia} de {total_dias}" if numero_dia else ""
+    return f"""
+<div style='background:#fff;border:1px solid #CBD5E1;border-radius:8px;
+            box-shadow:0 4px 18px rgba(0,0,0,.08);padding:24px 28px;
+            max-width:720px;margin:0 auto 28px auto;font-family:Arial,sans-serif;'>
+  <div style='display:grid;grid-template-columns:76px 1fr 76px;
+              align-items:center;gap:10px;
+              border-bottom:3px solid #1E3A5F;padding-bottom:10px;margin-bottom:12px;'>
+    <div style='text-align:center;'>{img_s}</div>
+    <div style='text-align:center;'>
+      <div style='font-size:10.5px;font-weight:900;color:#0A2540;
+                  text-transform:uppercase;line-height:1.35;'>{nome_org}<br>{titulo_proj}</div>
+      <div style='font-size:8.5px;color:#64748B;font-weight:600;margin-top:2px;'>
+        PLANILHA DE FREQUÊNCIA DIÁRIA
+      </div>
+    </div>
+    <div style='text-align:center;'>{img_p}</div>
+  </div>
+  <div style='background:#1E3A5F;color:#fff;padding:6px 10px;
+              font-weight:900;font-size:12px;margin-bottom:8px;'>
+    Lista de Presença — {data_fmt}
+  </div>
+  <div style='font-size:10px;color:#1E3A5F;font-weight:700;margin-bottom:7px;'>
+    Total de alunos presentes: <span style='background:#1E88E5;color:#fff;
+    padding:1px 8px;border-radius:10px;'>{len(nomes)}</span>
+  </div>
+  <table style='width:100%;border-collapse:collapse;'>
+    <thead>
+      <tr style='background:#1E3A5F;'>
+        <th style='padding:5px 8px;text-align:center;font-size:9.5px;font-weight:800;
+                   color:#fff;width:42px;border:1px solid #1E3A5F;'>#</th>
+        <th style='padding:5px 10px;text-align:left;font-size:9.5px;font-weight:800;
+                   color:#fff;text-transform:uppercase;border:1px solid #1E3A5F;'>
+          NOME DO ALUNO
+        </th>
+      </tr>
+    </thead>
+    <tbody>{linhas}</tbody>
+  </table>
+  <div style='margin-top:12px;text-align:center;font-size:7.5px;color:#94A3B8;
+              border-top:1px solid #E2E8F0;padding-top:7px;'>
+    Sistema Esporte e Saúde — Gestão Inteligente MoveRight™ &nbsp;|&nbsp;
+    Emitido em: {hoje_fmt} &nbsp;|&nbsp; Data de referência: {data_fmt}{pag_info}
+  </div>
+</div>"""
+
+
 def _renderizar_aba_prestacao_diaria():
     from utils.identidade import get_config as _gcfg
     from utils.imagem import get_base64_image
@@ -1213,151 +1274,98 @@ def _renderizar_aba_prestacao_diaria():
                     padding:12px 16px;border-radius:6px;margin-bottom:18px;'>
             <strong style='color:#1E3A5F;'>📋 Prestação de Contas Diária</strong><br>
             <span style='color:#1D4ED8;font-size:13px;'>
-                Selecione um dia para gerar a lista numerada e em ordem alfabética
-                de todos os alunos presentes, com cabeçalho oficial para download em PDF.
+                Selecione um período para gerar a lista de presença de cada dia em ordem
+                alfabética. Cada dia ocupa uma página separada no PDF com cabeçalho oficial.
             </span>
         </div>
     """, unsafe_allow_html=True)
 
-    c_data, c_btn = st.columns([2, 1], vertical_alignment="bottom")
-    data_sel = c_data.date_input(
-        "📅 Dia da Aula:", value=datetime.date.today(), format="DD/MM/YYYY",
-        key="pd_data_sel"
+    hoje = datetime.date.today()
+    c_ini, c_fim, c_btn = st.columns([2, 2, 1], vertical_alignment="bottom")
+    data_ini = c_ini.date_input(
+        "📅 Data Inicial:", value=hoje, format="DD/MM/YYYY", key="pd_data_ini"
+    )
+    data_fim = c_fim.date_input(
+        "📅 Data Final:", value=hoje, format="DD/MM/YYYY", key="pd_data_fim"
     )
     gerar = c_btn.button("🔍 Buscar Presenças", type="primary",
                          use_container_width=True, key="pd_buscar")
 
     if not gerar:
-        st.caption("Selecione o dia e clique em **Buscar Presenças**.")
+        st.caption("Selecione o período e clique em **Buscar Presenças**.")
         return
 
-    data_iso = str(data_sel)
-    data_fmt = data_sel.strftime("%d/%m/%Y")
-
-    with st.spinner("Consultando registros..."):
-        registros = get_presentes_dia_todos(data_iso)
-
-    if not registros:
-        st.warning(f"Nenhum aluno registrado como presente em **{data_fmt}**.")
+    if data_fim < data_ini:
+        st.error("⚠️ A data final não pode ser anterior à data inicial.")
         return
 
-    # Extrai e ordena nomes alfabeticamente
-    nomes = sorted(set(
-        str(r.get("alunos", {}).get("nome", "") or r.get("nome", "")).strip()
-        for r in registros
-        if (r.get("alunos", {}) or {}).get("nome") or r.get("nome")
-    ))
+    delta = (data_fim - data_ini).days
+    if delta > 90:
+        st.error("⚠️ Período máximo permitido: 90 dias por vez.")
+        return
 
-    total = len(nomes)
-    cfg = _gcfg()
+    with st.spinner(f"Consultando presenças de {data_ini.strftime('%d/%m/%Y')} a {data_fim.strftime('%d/%m/%Y')}…"):
+        por_dia = get_presentes_periodo_todos(str(data_ini), str(data_fim))
 
-    # ── Gera PDF server-side ──────────────────────────────────────────────────
-    with st.spinner("Gerando PDF..."):
-        pdf_bytes = criar_prestacao_diaria_pdf(data_fmt, nomes)
+    if not por_dia:
+        st.warning("Nenhum aluno registrado como presente no período selecionado.")
+        return
 
-    # ── Botão de download real ────────────────────────────────────────────────
-    nome_arquivo = f"Presenca_Diaria_{data_sel.strftime('%Y%m%d')}.pdf"
+    total_dias   = len(por_dia)
+    total_alunos = sum(len(v) for v in por_dia.values())
+
+    # ── Métricas de resumo ────────────────────────────────────────────────────
+    m1, m2, m3 = st.columns(3)
+    m1.metric("📅 Dias com aula", total_dias)
+    m2.metric("👥 Total de presenças", total_alunos)
+    m3.metric("📊 Média por dia", f"{total_alunos / total_dias:.1f}")
+
+    st.markdown("<hr style='margin:12px 0;border-color:#E2E8F0;'>", unsafe_allow_html=True)
+
+    # ── Gera PDF multipágina ──────────────────────────────────────────────────
+    with st.spinner("Gerando PDF…"):
+        pdf_bytes = criar_prestacao_periodo_pdf(por_dia)
+
+    sufixo = (
+        f"{data_ini.strftime('%Y%m%d')}"
+        if data_ini == data_fim else
+        f"{data_ini.strftime('%Y%m%d')}_a_{data_fim.strftime('%Y%m%d')}"
+    )
     st.download_button(
-        label="⬇️ Baixar PDF — Lista de Presença",
+        label=f"📄 Baixar PDF — {total_dias} dia(s) / {total_alunos} presenças",
         data=pdf_bytes,
-        file_name=nome_arquivo,
+        file_name=f"Presenca_Periodo_{sufixo}.pdf",
         mime="application/pdf",
         type="primary",
         use_container_width=True,
         key="pd_download",
     )
 
-    st.markdown("<hr style='margin:16px 0 12px 0;border-color:#E2E8F0;'>", unsafe_allow_html=True)
+    st.markdown("<hr style='margin:14px 0 10px 0;border-color:#E2E8F0;'>", unsafe_allow_html=True)
 
-    # ── Preview visual simulando o documento impresso ─────────────────────────
-    logo_p = get_base64_image(cfg.get("logo_principal",  "logo-imbra.png"))
-    logo_s = get_base64_image(cfg.get("logo_secundaria", "logo-secretaria.png"))
-    img_p = (f"<img src='data:image/png;base64,{logo_p}' "
-             f"style='height:52px;object-fit:contain;'>") if logo_p else ""
-    img_s = (f"<img src='data:image/png;base64,{logo_s}' "
-             f"style='height:52px;object-fit:contain;'>") if logo_s else ""
+    # ── Preview visual — um bloco por dia ─────────────────────────────────────
+    st.markdown(f"#### 🖥️ Preview do Relatório — {total_dias} página(s)")
 
+    cfg      = _gcfg()
+    logo_p   = get_base64_image(cfg.get("logo_principal",  "logo-imbra.png"))
+    logo_s   = get_base64_image(cfg.get("logo_secundaria", "logo-secretaria.png"))
+    img_p    = (f"<img src='data:image/png;base64,{logo_p}' style='height:48px;object-fit:contain;'>") if logo_p else ""
+    img_s    = (f"<img src='data:image/png;base64,{logo_s}' style='height:48px;object-fit:contain;'>") if logo_s else ""
     nome_org    = cfg.get("nome_organizacao",  "INSTITUTO MUDA BRASIL").upper()
     titulo_proj = cfg.get("titulo_projeto", "ESPORTE E SAÚDE NA COMUNIDADE - FASE 2").upper()
-    hoje_fmt    = datetime.date.today().strftime("%d/%m/%Y")
+    hoje_fmt    = hoje.strftime("%d/%m/%Y")
 
-    linhas_preview = ""
-    for i, nome in enumerate(nomes, 1):
-        bg = "#F8FAFC" if i % 2 == 0 else "#FFFFFF"
-        linhas_preview += (
-            f"<tr style='background:{bg};'>"
-            f"<td style='padding:5px 8px;text-align:center;width:42px;"
-            f"           font-weight:700;color:#475569;font-size:11px;"
-            f"           border:1px solid #E2E8F0;'>{i}</td>"
-            f"<td style='padding:5px 10px;font-size:12px;font-weight:600;"
-            f"           color:#0F172A;text-transform:uppercase;"
-            f"           border:1px solid #E2E8F0;'>{nome}</td>"
-            f"</tr>"
+    for idx, (data_iso, nomes) in enumerate(por_dia.items(), 1):
+        try:
+            data_fmt = datetime.date.fromisoformat(data_iso).strftime("%d/%m/%Y")
+        except Exception:
+            data_fmt = data_iso
+
+        bloco = _bloco_preview_dia(
+            data_fmt, nomes, img_s, img_p, nome_org, titulo_proj, hoje_fmt,
+            numero_dia=idx, total_dias=total_dias,
         )
-
-    st.markdown(f"""
-<div style='
-    background:#fff;
-    border:1px solid #CBD5E1;
-    border-radius:8px;
-    box-shadow:0 4px 18px rgba(0,0,0,.10);
-    padding:28px 32px;
-    max-width:720px;
-    margin:0 auto;
-    font-family:Arial,sans-serif;
-'>
-  <!-- Cabeçalho com logos -->
-  <div style='display:grid;grid-template-columns:80px 1fr 80px;
-              align-items:center;gap:10px;
-              border-bottom:3px solid #1E3A5F;padding-bottom:12px;margin-bottom:14px;'>
-    <div style='text-align:center;'>{img_s}</div>
-    <div style='text-align:center;'>
-      <div style='font-size:11px;font-weight:900;color:#0A2540;
-                  text-transform:uppercase;line-height:1.35;'>{nome_org}<br>{titulo_proj}</div>
-      <div style='font-size:9px;color:#64748B;font-weight:600;margin-top:3px;'>
-        PLANILHA DE FREQUÊNCIA DIÁRIA
-      </div>
-    </div>
-    <div style='text-align:center;'>{img_p}</div>
-  </div>
-
-  <!-- Faixa título -->
-  <div style='background:#1E3A5F;color:#fff;padding:7px 10px;
-              font-weight:900;font-size:12px;margin-bottom:10px;'>
-    Lista de Presença — {data_fmt}
-  </div>
-
-  <!-- Sub-info -->
-  <div style='font-size:10px;color:#1E3A5F;font-weight:700;margin-bottom:8px;'>
-    Total de alunos presentes: <span style='background:#1E88E5;color:#fff;
-    padding:1px 8px;border-radius:10px;'>{total}</span>
-  </div>
-
-  <!-- Tabela -->
-  <table style='width:100%;border-collapse:collapse;'>
-    <thead>
-      <tr style='background:#1E3A5F;'>
-        <th style='padding:6px 8px;text-align:center;font-size:10px;font-weight:800;
-                   color:#fff;width:42px;border:1px solid #1E3A5F;'>#</th>
-        <th style='padding:6px 10px;text-align:left;font-size:10px;font-weight:800;
-                   color:#fff;text-transform:uppercase;border:1px solid #1E3A5F;'>
-          NOME DO ALUNO
-        </th>
-      </tr>
-    </thead>
-    <tbody>
-      {linhas_preview}
-    </tbody>
-  </table>
-
-  <!-- Rodapé -->
-  <div style='margin-top:14px;text-align:center;font-size:8px;color:#94A3B8;
-              border-top:1px solid #E2E8F0;padding-top:8px;'>
-    Sistema Esporte e Saúde — Gestão Inteligente MoveRight™ &nbsp;|&nbsp;
-    Emitido em: {hoje_fmt} &nbsp;|&nbsp; Data de referência: {data_fmt}
-  </div>
-</div>
-    """, unsafe_allow_html=True)
+        st.markdown(bloco, unsafe_allow_html=True)
 
 
 # ==============================================================================

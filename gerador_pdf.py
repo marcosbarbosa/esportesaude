@@ -711,30 +711,24 @@ def criar_lista_acao_evasao_pdf(df, categoria, data_inicio, data_fim, turma):
 # ==============================================================================
 # RELATÓRIO: PRESTAÇÃO DE CONTAS DIÁRIA — Lista de Presença por Dia
 # ==============================================================================
-def criar_prestacao_diaria_pdf(data_fmt: str, nomes: list) -> bytes:
-    """
-    Gera PDF da lista de alunos presentes num determinado dia.
-    Usa o mesmo cabeçalho padrão (logos + título).
-    Retorna bytes prontos para st.download_button.
-    """
-    pdf = PDF()
-    pdf.add_page()
-    _cabecalho_padrao(pdf, subtitulo="PLANILHA DE FREQUÊNCIA DIÁRIA")
+def _pagina_prestacao_diaria(pdf: FPDF, data_fmt: str, nomes: list):
+    """Renderiza uma página completa de presença para um único dia."""
+    _cabecalho_padrao(pdf, subtitulo="PLANILHA DE FREQUENCIA DIARIA")
 
-    # ── Título do relatório ───────────────────────────────────────────────────
+    # Faixa azul com data
     pdf.set_font("Arial", "B", 11)
     pdf.set_fill_color(30, 58, 95)
     pdf.set_text_color(255, 255, 255)
-    pdf.cell(0, 8, limpar_texto(f"  Lista de Presenca - {data_fmt}"), fill=True, ln=1)
+    pdf.cell(0, 8, limpar_texto(f"  Lista de Presenca  -  {data_fmt}"), fill=True, ln=1)
     pdf.ln(2)
 
-    # ── Sub-header: total ─────────────────────────────────────────────────────
+    # Sub-header totalizador
     pdf.set_font("Arial", "B", 9)
     pdf.set_text_color(30, 58, 95)
     pdf.cell(0, 6, limpar_texto(f"Total de alunos presentes: {len(nomes)}"), ln=1)
     pdf.ln(3)
 
-    # ── Cabeçalho da tabela ───────────────────────────────────────────────────
+    # Cabeçalho da tabela
     pdf.set_fill_color(30, 58, 95)
     pdf.set_text_color(255, 255, 255)
     pdf.set_font("Arial", "B", 9)
@@ -742,11 +736,10 @@ def criar_prestacao_diaria_pdf(data_fmt: str, nomes: list) -> bytes:
     pdf.cell(176, 7, limpar_texto("NOME DO ALUNO"), border=1, fill=True, align="L")
     pdf.ln()
 
-    # ── Linhas ────────────────────────────────────────────────────────────────
+    # Linhas de dados
     pdf.set_text_color(0, 0, 0)
     for i, nome in enumerate(nomes, 1):
-        fill = (i % 2 == 0)
-        if fill:
+        if i % 2 == 0:
             pdf.set_fill_color(248, 250, 252)
         else:
             pdf.set_fill_color(255, 255, 255)
@@ -756,7 +749,40 @@ def criar_prestacao_diaria_pdf(data_fmt: str, nomes: list) -> bytes:
         pdf.cell(176, 6.5, limpar_texto(nome.upper()), border=1, fill=True, align="L")
         pdf.ln()
 
-    # Saída
+
+def criar_prestacao_diaria_pdf(data_fmt: str, nomes: list) -> bytes:
+    """
+    Gera PDF de um único dia (mantido para compatibilidade retroativa).
+    """
+    pdf = PDF()
+    pdf.set_auto_page_break(auto=True, margin=18)
+    pdf.add_page()
+    _pagina_prestacao_diaria(pdf, data_fmt, nomes)
+    try:
+        return pdf.output(dest='S').encode('latin-1')
+    except Exception:
+        return bytes(pdf.output())
+
+
+def criar_prestacao_periodo_pdf(dias: dict) -> bytes:
+    """
+    Gera PDF multi-página da Prestação de Contas por Período.
+    dias: dict ordenado { 'YYYY-MM-DD': ['Nome1', 'Nome2', ...] }
+    Cada dia ocupa uma nova página com cabeçalho completo.
+    """
+    import datetime as _dt
+    pdf = PDF()
+    pdf.set_auto_page_break(auto=True, margin=18)
+
+    for data_iso, nomes in dias.items():
+        pdf.add_page()
+        # Formata data para exibição
+        try:
+            data_fmt = _dt.date.fromisoformat(data_iso).strftime("%d/%m/%Y")
+        except Exception:
+            data_fmt = data_iso
+        _pagina_prestacao_diaria(pdf, data_fmt, nomes)
+
     try:
         return pdf.output(dest='S').encode('latin-1')
     except Exception:
