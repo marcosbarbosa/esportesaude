@@ -1370,29 +1370,41 @@ def _renderizar_aba_prestacao_diaria():
 
         st.markdown("---")
 
-        # ── Lista dos últimos 6 meses + próximos 3 meses ──────────────────
-        _ini_lista = (hoje - datetime.timedelta(days=180)).isoformat()
-        _fim_lista = (hoje + datetime.timedelta(days=90)).isoformat()
-        df_dsa = get_dias_sem_aula_periodo_df(_ini_lista, _fim_lista)
+        # ── Lista dos registros — carrega apenas quando o usuário clicar ──
+        col_load, _ = st.columns([2, 5])
+        carregar_lista = col_load.button(
+            "📋 Ver registros", key="dsa_btn_listar", use_container_width=True
+        )
+        if carregar_lista:
+            st.session_state["dsa_lista_carregada"] = True
 
-        if df_dsa.empty:
-            st.info("Nenhum dia sem aula registrado nos últimos 6 meses.")
-        else:
-            st.markdown(f"**{len(df_dsa)} dia(s) registrado(s):**")
-            for _, row_dsa in df_dsa.iterrows():
-                try:
-                    d_obj  = datetime.date.fromisoformat(str(row_dsa["data"]))
-                    d_disp = d_obj.strftime("%d/%m/%Y") + f" ({_dia_da_semana_pt(d_obj)})"
-                except Exception:
-                    d_disp = str(row_dsa["data"])
-                motivo_disp  = str(row_dsa.get("motivo", "") or "—")
-                criado_disp  = str(row_dsa.get("criado_por", "") or "sistema")
-                col_d, col_m, col_x = st.columns([3, 5, 1])
-                col_d.markdown(f"📌 **{d_disp}**")
-                col_m.markdown(f"<small>{motivo_disp} · por {criado_disp}</small>", unsafe_allow_html=True)
-                if col_x.button("🗑️", key=f"dsa_del_{row_dsa['data']}", help="Remover"):
-                    remover_dia_sem_aula(str(row_dsa["data"]))
-                    st.rerun()
+        if st.session_state.get("dsa_lista_carregada"):
+            _ini_lista = (hoje - datetime.timedelta(days=180)).isoformat()
+            _fim_lista = (hoje + datetime.timedelta(days=90)).isoformat()
+            df_dsa = get_dias_sem_aula_periodo_df(_ini_lista, _fim_lista)
+
+            if df_dsa.empty:
+                st.info("Nenhum dia sem aula registrado nos últimos 6 meses.")
+            else:
+                st.markdown(f"**{len(df_dsa)} dia(s) registrado(s) (últimos 6 meses + próximos 3):**")
+                for _, row_dsa in df_dsa.iterrows():
+                    try:
+                        d_obj  = datetime.date.fromisoformat(str(row_dsa["data"]))
+                        d_disp = d_obj.strftime("%d/%m/%Y") + f" ({_dia_da_semana_pt(d_obj)})"
+                    except Exception:
+                        d_disp = str(row_dsa["data"])
+                    motivo_disp = str(row_dsa.get("motivo", "") or "—")
+                    criado_disp = str(row_dsa.get("criado_por", "") or "sistema")
+                    col_d, col_m, col_x = st.columns([3, 5, 1])
+                    col_d.markdown(f"📌 **{d_disp}**")
+                    col_m.markdown(
+                        f"<small>{motivo_disp} · por {criado_disp}</small>",
+                        unsafe_allow_html=True,
+                    )
+                    if col_x.button("🗑️", key=f"dsa_del_{row_dsa['data']}", help="Remover"):
+                        remover_dia_sem_aula(str(row_dsa["data"]))
+                        st.session_state.pop("dsa_lista_carregada", None)
+                        st.rerun()
 
         # ── SQL para criar a tabela (exibido se ainda não existir) ────────
         with st.expander("ℹ️ SQL para criar tabela no Supabase (execute 1 vez)", expanded=False):
