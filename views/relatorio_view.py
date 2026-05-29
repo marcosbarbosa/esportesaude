@@ -14,7 +14,7 @@ import io
 import os
 import re
 from views.relatorio_identificacao_view import renderizar_aba_caracracha
-from gerador_pdf import criar_prestacao_diaria_pdf
+from gerador_pdf import criar_prestacao_diaria_pdf, gerar_pdf_monitoramento_clinico
 
 from database import (
     get_relatorio_periodo,
@@ -1509,6 +1509,32 @@ def _renderizar_monitoramento_clinico():
         key="data_editor_borg",
         num_rows="fixed",
     )
+
+    # ── Exportar PDF ──────────────────────────────────────────────────────────
+    col_pdf, _ = st.columns([1, 3])
+    with col_pdf:
+        if st.button("📄 Exportar PDF", use_container_width=True, key="mc_exportar_pdf"):
+            with st.spinner("Gerando PDF…"):
+                try:
+                    pdf_bytes = gerar_pdf_monitoramento_clinico(
+                        df_editado.drop(columns=["id"], errors="ignore"),
+                        turma_filtro=turma_filtro,
+                    )
+                    nome_arquivo = (
+                        f"monitoramento_clinico_"
+                        f"{datetime.date.today().strftime('%Y%m%d')}.pdf"
+                    )
+                    st.download_button(
+                        label="⬇️ Baixar PDF",
+                        data=pdf_bytes,
+                        file_name=nome_arquivo,
+                        mime="application/pdf",
+                        use_container_width=True,
+                        key="mc_download_pdf",
+                    )
+                    st.success("PDF gerado com sucesso!")
+                except Exception as _e:
+                    st.error(f"Erro ao gerar PDF: {_e}")
 
     # ── Aplica destaques visuais pós-edição ───────────────────────────────────
     alertas_borg = df_editado[df_editado["Borg/Risco"] >= 7]
