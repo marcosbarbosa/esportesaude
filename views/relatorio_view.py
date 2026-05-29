@@ -14,7 +14,12 @@ import io
 import os
 import re
 from views.relatorio_identificacao_view import renderizar_aba_caracracha
-from gerador_pdf import criar_prestacao_diaria_pdf, criar_prestacao_periodo_pdf, gerar_pdf_monitoramento_clinico
+from gerador_pdf import (
+    criar_prestacao_diaria_pdf,
+    criar_prestacao_periodo_pdf,
+    criar_pdf_alerta_frequencia,
+    gerar_pdf_monitoramento_clinico,
+)
 
 from database import (
     get_relatorio_periodo,
@@ -1205,6 +1210,51 @@ def _gerar_pdf_relatorio_prime(
 # ==============================================================================
 # 📋 PRESTAÇÃO DIÁRIA — Lista de Presença por Período (PDF)
 # ==============================================================================
+
+# ── Feriados nacionais brasileiros ────────────────────────────────────────────
+def _pascoa(ano: int) -> datetime.date:
+    """Algoritmo anônimo gregoriano para calcular a Páscoa."""
+    a = ano % 19
+    b, c = divmod(ano, 100)
+    d, e = divmod(b, 4)
+    f = (b + 8) // 25
+    g = (b - f + 1) // 3
+    h = (19 * a + b - d - g + 15) % 30
+    i, k = divmod(c, 4)
+    l = (32 + 2 * e + 2 * i - h - k) % 7
+    m = (a + 11 * h + 22 * l) // 451
+    mes = (h + l - 7 * m + 114) // 31
+    dia = (h + l - 7 * m + 114) % 31 + 1
+    return datetime.date(ano, mes, dia)
+
+
+def _feriados_nacionais_br(anos: set) -> set:
+    """
+    Retorna set de datetime.date com feriados nacionais brasileiros
+    para todos os anos solicitados. Inclui fixos + móveis (Páscoa-based).
+    """
+    feriados = set()
+    FIXOS = [(1, 1), (4, 21), (5, 1), (9, 7), (10, 12), (11, 2), (11, 15), (12, 25)]
+    for ano in anos:
+        for mes, dia in FIXOS:
+            try:
+                feriados.add(datetime.date(ano, mes, dia))
+            except ValueError:
+                pass
+        pascoa = _pascoa(ano)
+        feriados.add(pascoa - datetime.timedelta(days=48))  # Carnaval 2ª-feira
+        feriados.add(pascoa - datetime.timedelta(days=47))  # Carnaval 3ª-feira
+        feriados.add(pascoa - datetime.timedelta(days=2))   # Sexta-feira Santa
+        feriados.add(pascoa + datetime.timedelta(days=60))  # Corpus Christi
+    return feriados
+
+
+def _dia_da_semana_pt(d: datetime.date) -> str:
+    nomes = ["Segunda-feira", "Terça-feira", "Quarta-feira",
+             "Quinta-feira", "Sexta-feira", "Sábado", "Domingo"]
+    return nomes[d.weekday()]
+
+
 def _bloco_preview_dia(data_fmt, nomes, img_s, img_p, nome_org, titulo_proj, hoje_fmt, numero_dia=None, total_dias=None):
     """Retorna HTML de um bloco de preview para um dia de presença."""
     linhas = ""
@@ -1274,8 +1324,9 @@ def _renderizar_aba_prestacao_diaria():
                     padding:12px 16px;border-radius:6px;margin-bottom:18px;'>
             <strong style='color:#1E3A5F;'>📋 Prestação de Contas Diária</strong><br>
             <span style='color:#1D4ED8;font-size:13px;'>
-                Selecione um período para gerar a lista de presença de cada dia em ordem
-                alfabética. Cada dia ocupa uma página separada no PDF com cabeçalho oficial.
+                Selecione um período para gerar a lista de presença de cada dia útil.
+                Sábados, domingos e feriados nacionais são excluídos automaticamente.
+                Dias úteis sem frequência lançada são sinalizados em alerta separado.
             </span>
         </div>
     """, unsafe_allow_html=True)
@@ -1299,22 +1350,127 @@ def _renderizar_aba_prestacao_diaria():
         st.error("⚠️ A data final não pode ser anterior à data inicial.")
         return
 
-    delta = (data_fim - data_ini).days
-    if delta > 90:
+    if (data_fim - data_ini).days > 90:
         st.error("⚠️ Período máximo permitido: 90 dias por vez.")
         return
 
-    with st.spinner(f"Consultando presenças de {data_ini.strftime('%d/%m/%Y')} a {data_fim.strftime('%d/%m/%Y')}…"):
-        por_dia = get_presentes_periodo_todos(str(data_ini), str(data_fim))
+    # ── Calcula feriados e dias úteis do período ──────────────────────────────
+    anos_no_periodo = {data_ini.year + i for i in range((data_fim - data_ini).days // 365 + 2)
+                       if (data_ini.year + i) <= data_fim.year}
+    feriados = _feriados_nacionais_br(anos_no_periodo)
 
+    def eh_dia_util(d: datetime.date) -> bool:
+        return d.weekday() < 5 and d not in feriados  # 0=Seg … 4=Sex
+
+    dias_uteis_range = sorted(
+        data_ini + datetime.timedelta(days=i)
+        for i in range((data_fim - data_ini).days + 1)
+        if eh_dia_util(data_ini + datetime.timedelta(days=i))
+    )
+
+    # ── Busca presenças do período ─────────────────────────────────────────────
+    with st.spinner(f"Consultando presenças de {data_ini.strftime('%d/%m/%Y')} a {data_fim.strftime('%d/%m/%Y')}…"):
+        por_dia_raw = get_presentes_periodo_todos(str(data_ini), str(data_fim))
+
+    # Remove fins de semana e feriados da base retornada (segurança extra)
+    por_dia = {
+        iso: nomes
+        for iso, nomes in por_dia_raw.items()
+        if eh_dia_util(datetime.date.fromisoformat(iso))
+    }
+
+    # ── Dias úteis SEM frequência lançada ─────────────────────────────────────
+    datas_com_frequencia = {datetime.date.fromisoformat(iso) for iso in por_dia}
+    dias_sem_frequencia = [d for d in dias_uteis_range if d not in datas_com_frequencia]
+
+    sufixo = (
+        data_ini.strftime("%Y%m%d")
+        if data_ini == data_fim else
+        f"{data_ini.strftime('%Y%m%d')}_a_{data_fim.strftime('%Y%m%d')}"
+    )
+    ini_fmt = data_ini.strftime("%d/%m/%Y")
+    fim_fmt = data_fim.strftime("%d/%m/%Y")
+
+    # ══════════════════════════════════════════════════════════════════════════
+    # ALERTA — dias úteis sem frequência
+    # ══════════════════════════════════════════════════════════════════════════
+    if dias_sem_frequencia:
+        nomes_dias_semana = {
+            "Segunda-feira": "Seg", "Terça-feira": "Ter", "Quarta-feira": "Qua",
+            "Quinta-feira": "Qui", "Sexta-feira": "Sex",
+        }
+        linhas_alerta = ""
+        itens_alerta = []
+        for i, d in enumerate(dias_sem_frequencia, 1):
+            dsem = _dia_da_semana_pt(d)
+            d_fmt = d.strftime("%d/%m/%Y")
+            item_str = f"{d_fmt} ({dsem})"
+            itens_alerta.append(item_str)
+            bg = "#FFF5F5" if i % 2 == 1 else "#FFECEC"
+            linhas_alerta += f"""
+            <tr style='background:{bg};'>
+              <td style='padding:5px 10px;font-weight:700;color:#7F1D1D;
+                         font-size:12px;border:1px solid #FECACA;text-align:center;
+                         width:36px;'>{i}</td>
+              <td style='padding:5px 12px;font-size:12px;font-weight:600;
+                         color:#991B1B;border:1px solid #FECACA;'>{d_fmt}</td>
+              <td style='padding:5px 12px;font-size:12px;color:#7F1D1D;
+                         border:1px solid #FECACA;'>{dsem}</td>
+              <td style='padding:5px 12px;font-size:11px;color:#B91C1C;font-style:italic;
+                         border:1px solid #FECACA;'>Sem frequência lançada</td>
+            </tr>"""
+
+        st.markdown(f"""
+<div style='border:2px solid #FCA5A5;border-radius:8px;background:#FEF2F2;
+            padding:18px 20px;margin-bottom:18px;'>
+  <div style='font-size:14px;font-weight:900;color:#991B1B;margin-bottom:10px;'>
+    ⚠️ ATENÇÃO — {len(dias_sem_frequencia)} dia(s) útil(is) sem frequência registrada
+  </div>
+  <div style='font-size:12px;color:#7F1D1D;margin-bottom:12px;'>
+    Os dias abaixo são dias úteis (seg–sex, excluindo feriados) sem nenhuma presença lançada
+    no sistema. Verifique se houve aula e corrija se necessário.
+  </div>
+  <table style='width:100%;border-collapse:collapse;'>
+    <thead>
+      <tr style='background:#DC2626;'>
+        <th style='padding:6px 10px;color:#fff;font-size:10px;border:1px solid #DC2626;
+                   width:36px;'>#</th>
+        <th style='padding:6px 12px;color:#fff;font-size:10px;text-align:left;
+                   border:1px solid #DC2626;'>Data</th>
+        <th style='padding:6px 12px;color:#fff;font-size:10px;text-align:left;
+                   border:1px solid #DC2626;'>Dia da Semana</th>
+        <th style='padding:6px 12px;color:#fff;font-size:10px;text-align:left;
+                   border:1px solid #DC2626;'>Situação</th>
+      </tr>
+    </thead>
+    <tbody>{linhas_alerta}</tbody>
+  </table>
+</div>
+        """, unsafe_allow_html=True)
+
+        # Botão de download do alerta em PDF
+        with st.spinner("Preparando PDF do alerta…"):
+            pdf_alerta = criar_pdf_alerta_frequencia(itens_alerta, ini_fmt, fim_fmt)
+        st.download_button(
+            label=f"🖨️ Imprimir Alerta — {len(dias_sem_frequencia)} dia(s) sem frequência",
+            data=pdf_alerta,
+            file_name=f"Alerta_Frequencia_{sufixo}.pdf",
+            mime="application/pdf",
+            use_container_width=True,
+            key="pd_alerta_download",
+        )
+        st.markdown("<hr style='margin:16px 0;border-color:#E2E8F0;'>", unsafe_allow_html=True)
+
+    # ══════════════════════════════════════════════════════════════════════════
+    # RELATÓRIO PRINCIPAL — dias com frequência
+    # ══════════════════════════════════════════════════════════════════════════
     if not por_dia:
-        st.warning("Nenhum aluno registrado como presente no período selecionado.")
+        st.info("Nenhum dia útil com frequência lançada no período selecionado.")
         return
 
     total_dias   = len(por_dia)
     total_alunos = sum(len(v) for v in por_dia.values())
 
-    # ── Métricas de resumo ────────────────────────────────────────────────────
     m1, m2, m3 = st.columns(3)
     m1.metric("📅 Dias com aula", total_dias)
     m2.metric("👥 Total de presenças", total_alunos)
@@ -1322,15 +1478,9 @@ def _renderizar_aba_prestacao_diaria():
 
     st.markdown("<hr style='margin:12px 0;border-color:#E2E8F0;'>", unsafe_allow_html=True)
 
-    # ── Gera PDF multipágina ──────────────────────────────────────────────────
     with st.spinner("Gerando PDF…"):
         pdf_bytes = criar_prestacao_periodo_pdf(por_dia)
 
-    sufixo = (
-        f"{data_ini.strftime('%Y%m%d')}"
-        if data_ini == data_fim else
-        f"{data_ini.strftime('%Y%m%d')}_a_{data_fim.strftime('%Y%m%d')}"
-    )
     st.download_button(
         label=f"📄 Baixar PDF — {total_dias} dia(s) / {total_alunos} presenças",
         data=pdf_bytes,
@@ -1343,7 +1493,7 @@ def _renderizar_aba_prestacao_diaria():
 
     st.markdown("<hr style='margin:14px 0 10px 0;border-color:#E2E8F0;'>", unsafe_allow_html=True)
 
-    # ── Preview visual — um bloco por dia ─────────────────────────────────────
+    # ── Preview visual — um bloco por dia ────────────────────────────────────
     st.markdown(f"#### 🖥️ Preview do Relatório — {total_dias} página(s)")
 
     cfg      = _gcfg()

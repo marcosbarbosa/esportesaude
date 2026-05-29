@@ -769,6 +769,7 @@ def criar_prestacao_periodo_pdf(dias: dict) -> bytes:
     Gera PDF multi-página da Prestação de Contas por Período.
     dias: dict ordenado { 'YYYY-MM-DD': ['Nome1', 'Nome2', ...] }
     Cada dia ocupa uma nova página com cabeçalho completo.
+    Sábados, domingos e feriados já devem ter sido removidos antes de chamar.
     """
     import datetime as _dt
     pdf = PDF()
@@ -776,12 +777,83 @@ def criar_prestacao_periodo_pdf(dias: dict) -> bytes:
 
     for data_iso, nomes in dias.items():
         pdf.add_page()
-        # Formata data para exibição
         try:
             data_fmt = _dt.date.fromisoformat(data_iso).strftime("%d/%m/%Y")
         except Exception:
             data_fmt = data_iso
         _pagina_prestacao_diaria(pdf, data_fmt, nomes)
+
+    try:
+        return pdf.output(dest='S').encode('latin-1')
+    except Exception:
+        return bytes(pdf.output())
+
+
+def criar_pdf_alerta_frequencia(
+    datas_faltantes: list,
+    periodo_ini_fmt: str,
+    periodo_fim_fmt: str,
+) -> bytes:
+    """
+    Gera PDF de alerta listando dias úteis sem frequência lançada no período.
+    datas_faltantes: lista de strings no formato 'DD/MM/YYYY (DiaDaSemana)'
+    """
+    import datetime as _dt
+
+    pdf = PDF()
+    pdf.set_auto_page_break(auto=True, margin=18)
+    pdf.add_page()
+    _cabecalho_padrao(pdf, subtitulo="ALERTA — FREQUENCIAS NAO LANCADAS")
+
+    # Faixa de título
+    pdf.set_font("Arial", "B", 11)
+    pdf.set_fill_color(180, 30, 30)
+    pdf.set_text_color(255, 255, 255)
+    pdf.cell(0, 8, limpar_texto(
+        f"  Periodo: {periodo_ini_fmt} a {periodo_fim_fmt}"
+        f"  |  {len(datas_faltantes)} dia(s) sem frequencia"
+    ), fill=True, ln=1)
+    pdf.ln(3)
+
+    # Aviso descritivo
+    pdf.set_font("Arial", "", 9)
+    pdf.set_text_color(120, 0, 0)
+    pdf.multi_cell(0, 5, limpar_texto(
+        "Os dias listados abaixo sao dias uteis (segunda a sexta, excluindo feriados nacionais) "
+        "nos quais nenhuma frequencia foi registrada no sistema. "
+        "Verificar se houve aula e corrigir se necessario."
+    ))
+    pdf.ln(4)
+
+    # Cabeçalho da tabela
+    pdf.set_fill_color(180, 30, 30)
+    pdf.set_text_color(255, 255, 255)
+    pdf.set_font("Arial", "B", 9)
+    pdf.cell(14, 7, "#", border=1, fill=True, align="C")
+    pdf.cell(90, 7, limpar_texto("DATA"), border=1, fill=True, align="C")
+    pdf.cell(86, 7, limpar_texto("SITUACAO"), border=1, fill=True, align="L")
+    pdf.ln()
+
+    # Linhas
+    pdf.set_text_color(0, 0, 0)
+    for i, item in enumerate(datas_faltantes, 1):
+        if i % 2 == 0:
+            pdf.set_fill_color(255, 245, 245)
+        else:
+            pdf.set_fill_color(255, 255, 255)
+        pdf.set_font("Arial", "B", 8)
+        pdf.cell(14, 6.5, str(i), border=1, fill=True, align="C")
+        pdf.set_font("Arial", "", 9)
+        pdf.cell(90, 6.5, limpar_texto(item), border=1, fill=True, align="C")
+        pdf.cell(86, 6.5, limpar_texto("Sem frequencia lancada"), border=1, fill=True, align="L")
+        pdf.ln()
+
+    # Rodapé informativo
+    hoje_fmt = _dt.date.today().strftime("%d/%m/%Y")
+    pdf.ln(4)
+    pdf.set_font("Arial", "I", 8)
+    pdf.set_text_color(100, 100, 100)
+    pdf.cell(0, 5, limpar_texto(f"Emitido em: {hoje_fmt}  |  Sistema IMBRA — Gestao Inteligente MoveRight"), ln=1)
 
     try:
         return pdf.output(dest='S').encode('latin-1')
