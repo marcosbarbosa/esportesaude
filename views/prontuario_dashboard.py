@@ -70,8 +70,22 @@ def carregar_dados_crm_avaliacoes_senior():
         )
         df_av = pd.DataFrame(res_av.data)
 
-        res_freq = supabase.from_("frequencia").select("aluno_id, status, data_aula").limit(50000).execute()
-        df_f_bruto = pd.DataFrame(res_freq.data)
+        # Paginação completa — sem limite de 50.000 registros
+        _freq_rows = []
+        _freq_offset = 0
+        while True:
+            _batch = (
+                supabase.from_("frequencia")
+                .select("aluno_id, status, data_aula")
+                .range(_freq_offset, _freq_offset + 9999)
+                .execute()
+            )
+            if _batch.data:
+                _freq_rows.extend(_batch.data)
+            if not _batch.data or len(_batch.data) < 10000:
+                break
+            _freq_offset += 10000
+        df_f_bruto = pd.DataFrame(_freq_rows) if _freq_rows else pd.DataFrame(columns=["aluno_id","status","data_aula"])
         if not df_f_bruto.empty and "data_aula" in df_f_bruto.columns:
             df_f_bruto["data_aula"] = pd.to_datetime(df_f_bruto["data_aula"], errors="coerce")
         # guarda cópia limpa com datas para uso nos filtros de período
@@ -581,29 +595,44 @@ def renderizar_dashboard():
 
         # Recalcula métricas de frequência para o período selecionado
         if not df_freq_datado.empty and corte is not None:
-            df_periodo = df_freq_datado[df_freq_datado["data_aula"] >= corte]
+            df_periodo = df_freq_datado[df_freq_datado["data_aula"] >= corte].copy()
         else:
             df_periodo = df_freq_datado.copy()
 
+        _cols_drop = [c for c in ("total_aulas","total_presencas","taxa_presenca","aluno_id","dias_passados") if c in df_todos_crm.columns]
+        df_base_periodo = df_todos_crm.drop(columns=_cols_drop).copy()
+
         if not df_periodo.empty:
-            df_stats_p = (
+            # ── Presenças por aluno no período ────────────────────────────────
+            _pres_p = (
                 df_periodo.groupby("aluno_id")
-                .agg(
-                    total_aulas=("status", "count"),
-                    total_presencas=("status", lambda x: (x == "PRESENTE").sum()),
-                )
+                .agg(total_presencas=("status", lambda x: (x == "PRESENTE").sum()))
                 .reset_index()
             )
-            _cols_drop = [c for c in ("total_aulas","total_presencas","taxa_presenca","aluno_id","dias_passados") if c in df_todos_crm.columns]
-            df_base_periodo = pd.merge(
-                df_todos_crm.drop(columns=_cols_drop).copy(),
-                df_stats_p,
-                left_on="id", right_on="aluno_id", how="left"
+
+            # ── Aulas por TURMA no período (datas distintas) ──────────────────
+            # Mapeia aluno_id → turma para identificar a turma de cada registro
+            _id_to_turma = df_todos_crm.set_index("id")["turma"].to_dict()
+            _df_per = df_periodo.copy()
+            _df_per["_turma"] = _df_per["aluno_id"].map(_id_to_turma)
+            _aulas_turma = (
+                _df_per.dropna(subset=["_turma", "data_aula"])
+                .drop_duplicates(subset=["_turma", "data_aula"])
+                .groupby("_turma")
+                .size()
+                .reset_index(name="total_aulas")
+                .rename(columns={"_turma": "turma"})
+            )
+
+            # ── Monta df_base_periodo ─────────────────────────────────────────
+            df_base_periodo = df_base_periodo.merge(
+                _pres_p, left_on="id", right_on="aluno_id", how="left"
+            )
+            df_base_periodo = df_base_periodo.merge(
+                _aulas_turma, on="turma", how="left"
             )
         else:
-            _cols_drop = [c for c in ("total_aulas","total_presencas","taxa_presenca","aluno_id","dias_passados") if c in df_todos_crm.columns]
-            df_base_periodo = df_todos_crm.drop(columns=_cols_drop).copy()
-            df_base_periodo["total_aulas"] = 0
+            df_base_periodo["total_aulas"]     = 0
             df_base_periodo["total_presencas"] = 0
 
         df_base_periodo["total_aulas"]     = df_base_periodo["total_aulas"].fillna(0).astype(int)
