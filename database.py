@@ -1352,21 +1352,34 @@ def get_presentes_periodo_todos(data_ini: str, data_fim: str) -> dict:
     """
     Retorna dict { 'YYYY-MM-DD': ['Nome1', 'Nome2', ...] } para todos os dias
     com pelo menos 1 presente no intervalo [data_ini, data_fim].
+    Usa paginação por .range() para contornar o limite de 1000 linhas
+    que o servidor Supabase impõe independentemente do .limit() do cliente.
     Ordenado cronologicamente por data, nomes em ordem alfabética por dia.
     """
     try:
-        res = (
-            supabase.from_("frequencia")
-            .select("data_aula, alunos(nome)")
-            .gte("data_aula", data_ini)
-            .lte("data_aula", data_fim)
-            .eq("status", "PRESENTE")
-            .limit(50000)
-            .execute()
-        )
-        dados = res.data or []
+        PAGE        = 1000
+        MAX_PAGINAS = 50          # guarda: máximo 50.000 registros
+        todos: list = []
+        offset      = 0
+        for _ in range(MAX_PAGINAS):
+            res = (
+                supabase.from_("frequencia")
+                .select("data_aula, alunos(nome)")
+                .gte("data_aula", data_ini)
+                .lte("data_aula", data_fim)
+                .eq("status", "PRESENTE")
+                .order("data_aula")
+                .range(offset, offset + PAGE - 1)
+                .execute()
+            )
+            lote = res.data or []
+            todos.extend(lote)
+            if len(lote) < PAGE:
+                break          # última página → fim dos dados
+            offset += PAGE
+
         por_dia: dict = {}
-        for r in dados:
+        for r in todos:
             data = str(r.get("data_aula", "")).strip()
             nome = (r.get("alunos") or {}).get("nome", "")
             if not data or not nome:
