@@ -43,9 +43,10 @@ _RUIDO_SET = {
 }
 
 def _filtrar_comentarios(df_com: "pd.DataFrame") -> "pd.DataFrame":
-    """Remove comentários vazios, muito curtos ou claramente sem conteúdo."""
+    """Remove comentários vazios, muito curtos, sem nexo ou com conteúdo ofensivo."""
     if df_com.empty:
         return df_com
+    from utils.moderacao import contem_conteudo_ofensivo
     def _valido(texto):
         t = str(texto or "").strip()
         if len(t) < 8:
@@ -55,6 +56,8 @@ def _filtrar_comentarios(df_com: "pd.DataFrame") -> "pd.DataFrame":
             return False
         palavras = [p for p in tl.split() if p.isalpha()]
         if len(palavras) < 2:
+            return False
+        if contem_conteudo_ofensivo(t):
             return False
         return True
     return df_com[df_com["comentario"].apply(_valido)].copy()

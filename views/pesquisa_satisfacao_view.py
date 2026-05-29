@@ -203,61 +203,56 @@ def tela_pesquisa_satisfacao_move_right():
                     "⚠️ Por favor, escolha a sua Turma e uma carinha para todas as perguntas antes de enviar!"
                 )
             else:
-                try:
-                    ip_audit, geo_audit = capturar_dados_auditoria()
-                    turma_db = f"Turma {turma_opcao.replace('⏰', '').strip()}"
+                # Valida comentário antes de salvar
+                from utils.moderacao import sanitizar_comentario
+                _com_texto = (comentario or "").strip()
+                _bloqueado, _msg_bloqueio = sanitizar_comentario(_com_texto)
+                if _bloqueado:
+                    st.error(_msg_bloqueio)
+                else:
+                    try:
+                        ip_audit, geo_audit = capturar_dados_auditoria()
+                        turma_db = f"Turma {turma_opcao.replace('⏰', '').strip()}"
 
-                    payload = {
-                        "turma": turma_db,
-                        "q1_disposicao": q1.replace("**", "")
-                        .replace("  \n", " ")
-                        .strip(),
-                        "q2_dores": q2.replace("**", "").replace("  \n", " ").strip(),
-                        "q3_efeito_vida": q3.replace("**", "")
-                        .replace("  \n", " ")
-                        .strip(),
-                        "q4_avaliacao_geral": q4.replace("**", "")
-                        .replace("  \n", " ")
-                        .strip(),
-                        "comentario": comentario.strip() if comentario else None,
-                        "data_resposta": datetime.datetime.now().isoformat(),
-                        "trimestre_referencia": trimestre_db.split(" (")[0],
-                        "ip_registro": ip_audit,
-                        "localizacao_registro": geo_audit,
-                    }
-                    supabase.table("pesquisas_satisfacao").insert(payload).execute()
+                        payload = {
+                            "turma": turma_db,
+                            "q1_disposicao": q1.replace("**", "").replace("  \n", " ").strip(),
+                            "q2_dores": q2.replace("**", "").replace("  \n", " ").strip(),
+                            "q3_efeito_vida": q3.replace("**", "").replace("  \n", " ").strip(),
+                            "q4_avaliacao_geral": q4.replace("**", "").replace("  \n", " ").strip(),
+                            "comentario": _com_texto if _com_texto else None,
+                            "data_resposta": datetime.datetime.now().isoformat(),
+                            "trimestre_referencia": trimestre_db.split(" (")[0],
+                            "ip_registro": ip_audit,
+                            "localizacao_registro": geo_audit,
+                        }
+                        supabase.table("pesquisas_satisfacao").insert(payload).execute()
 
-                    # 1️⃣ MOSTRA A MENSAGEM GIGANTE
-                    mensagem_sucesso = """
-                    <div id="msg-sucesso-fim" style="background-color: #D1FAE5; border: 5px solid #10B981; border-radius: 15px; padding: 35px; text-align: center; margin-bottom: 25px; box-shadow: 0 10px 25px rgba(16, 185, 129, 0.3);">
-                        <h1 style="color: #047857; font-size: 45px; font-weight: 950; margin: 0; text-transform: uppercase;">💚 OBRIGADO!</h1>
-                        <p style="color: #065F46; font-size: 26px; font-weight: 800; margin: 15px 0 0 0; line-height: 1.2;">PESQUISA ENVIADA COM SUCESSO!</p>
-                    </div>
-                    """
-                    placeholder_sucesso.markdown(
-                        mensagem_sucesso, unsafe_allow_html=True
-                    )
-
-                    # 2️⃣ SOLTA OS BALÕES E SOBE A TELA
-                    st.balloons()
-                    st.components.v1.html(
+                        # 1️⃣ MOSTRA A MENSAGEM GIGANTE
+                        mensagem_sucesso = """
+                        <div id="msg-sucesso-fim" style="background-color: #D1FAE5; border: 5px solid #10B981; border-radius: 15px; padding: 35px; text-align: center; margin-bottom: 25px; box-shadow: 0 10px 25px rgba(16, 185, 129, 0.3);">
+                            <h1 style="color: #047857; font-size: 45px; font-weight: 950; margin: 0; text-transform: uppercase;">💚 OBRIGADO!</h1>
+                            <p style="color: #065F46; font-size: 26px; font-weight: 800; margin: 15px 0 0 0; line-height: 1.2;">PESQUISA ENVIADA COM SUCESSO!</p>
+                        </div>
                         """
-                        <script>
+                        placeholder_sucesso.markdown(mensagem_sucesso, unsafe_allow_html=True)
+
+                        # 2️⃣ SOLTA OS BALÕES E SOBE A TELA
+                        st.balloons()
+                        st.components.v1.html(
+                            """<script>
                             var doc = window.parent.document;
                             var elem = doc.getElementById('topo-da-pesquisa');
-                            if(elem) {
-                                elem.scrollIntoView({behavior: 'smooth', block: 'start'});
-                            }
-                        </script>
-                        """,
-                        height=0,
-                    )
+                            if(elem) { elem.scrollIntoView({behavior: 'smooth', block: 'start'}); }
+                            </script>""",
+                            height=0,
+                        )
 
-                    # 3️⃣ A MÁGICA: ESPERA 3.5 SEGUNDOS E REINICIA A TELA
-                    time.sleep(3.5)
-                    st.rerun()
+                        # 3️⃣ A MÁGICA: ESPERA 3.5 SEGUNDOS E REINICIA A TELA
+                        time.sleep(3.5)
+                        st.rerun()
 
-                except Exception as e:
-                    st.error(f"Erro ao salvar: {e}.")
+                    except Exception as e:
+                        st.error(f"Erro ao salvar: {e}.")
 
     st.markdown("</div>", unsafe_allow_html=True)
