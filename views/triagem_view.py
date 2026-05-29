@@ -16,8 +16,28 @@ from database import (
     rejeitar_inscricao_aluno,
     get_todas_turmas,
     get_ocupacao_turmas,
-    supabase
+    supabase,
+    upload_midia,
 )
+
+
+def _salvar_doc_pre_cadastro(pre_id: str, campo: str, arquivo) -> tuple[bool, str]:
+    """
+    Faz upload do arquivo e salva a URL no campo indicado de pre_cadastros.
+    Retorna (sucesso, mensagem).
+    """
+    try:
+        b = arquivo.getvalue()
+        nome = arquivo.name
+        mime = arquivo.type
+        url = upload_midia(b, nome, mime)
+        if not url:
+            return False, "Falha no upload — verifique o bucket 'documentos_alunos' no Supabase."
+        supabase.table("pre_cadastros").update({campo: url}).eq("id", str(pre_id)).execute()
+        get_pre_cadastros_pendentes.clear()
+        return True, url
+    except Exception as e:
+        return False, str(e)
 
 def mover_para_espera(cadastro_id, nome):
     """Muda o status da inscrição para a Lista de Espera."""
@@ -203,31 +223,82 @@ def tela_triagem():
             st.markdown("---")
 
             st.markdown("### 📎 Conferência de Documentação Legal")
+
+            _aid = str(aluno.get('id', ''))
+            url_rg  = aluno.get('url_rg')
+            url_rec = aluno.get('url_receituario')
+            url_ate = aluno.get('url_atestado_medico')
+
             col_rg, col_rec, col_ate = st.columns(3)
 
+            # ── 1. RG ────────────────────────────────────────────────────────
             with col_rg:
-                st.info("📄 **1. Identidade (RG/CPF)**")
-                url_rg = aluno.get('url_rg')
+                st.markdown("**📄 1. Identidade (RG/CPF)**")
                 if url_rg:
-                    renderizar_documento_com_rotacao(url_rg, f"tri_rg_{aluno.get('id','')}")
+                    st.success("✅ Documento recebido")
+                    renderizar_documento_com_rotacao(url_rg, f"tri_rg_{_aid}")
                 else:
-                    st.error("❌ RG não enviado.")
+                    st.error("❌ RG não enviado")
+                    arq_rg = st.file_uploader(
+                        "Adicionar RG agora",
+                        type=["jpg","jpeg","png","pdf"],
+                        key=f"up_rg_{_aid}",
+                    )
+                    if arq_rg:
+                        with st.spinner("Enviando RG…"):
+                            ok, resultado = _salvar_doc_pre_cadastro(_aid, "url_rg", arq_rg)
+                        if ok:
+                            st.success("✅ RG salvo!")
+                            time.sleep(0.8)
+                            st.rerun()
+                        else:
+                            st.error(f"Erro: {resultado}")
 
+            # ── 2. Receituário (opcional) ─────────────────────────────────────
             with col_rec:
-                st.warning("💊 **2. Receituário Médico**")
-                url_rec = aluno.get('url_receituario')
+                st.markdown("**💊 2. Receituário Médico**")
                 if url_rec:
-                    renderizar_documento_com_rotacao(url_rec, f"tri_rec_{aluno.get('id','')}")
+                    st.success("✅ Documento recebido")
+                    renderizar_documento_com_rotacao(url_rec, f"tri_rec_{_aid}")
                 else:
-                    st.markdown("<p style='color:#64748B;'>Nenhuma receita anexada.</p>", unsafe_allow_html=True)
+                    st.caption("Nenhuma receita anexada.")
+                    arq_rec = st.file_uploader(
+                        "Adicionar Receituário",
+                        type=["jpg","jpeg","png","pdf"],
+                        key=f"up_rec_{_aid}",
+                    )
+                    if arq_rec:
+                        with st.spinner("Enviando Receituário…"):
+                            ok, resultado = _salvar_doc_pre_cadastro(_aid, "url_receituario", arq_rec)
+                        if ok:
+                            st.success("✅ Receituário salvo!")
+                            time.sleep(0.8)
+                            st.rerun()
+                        else:
+                            st.error(f"Erro: {resultado}")
 
+            # ── 3. Atestado (bloqueante para matrícula) ───────────────────────
             with col_ate:
-                st.success("🏥 **3. Atestado Médico**")
-                url_ate = aluno.get('url_atestado_medico')
+                st.markdown("**🏥 3. Atestado Médico *(obrigatório)***")
                 if url_ate:
-                    renderizar_documento_com_rotacao(url_ate, f"tri_ate_{aluno.get('id','')}")
+                    st.success("✅ Documento recebido")
+                    renderizar_documento_com_rotacao(url_ate, f"tri_ate_{_aid}")
                 else:
-                    st.error("❌ Atestado em falta! (Bloqueante)")
+                    st.error("❌ Atestado em falta — bloqueante para matrícula!")
+                    arq_ate = st.file_uploader(
+                        "Adicionar Atestado agora",
+                        type=["jpg","jpeg","png","pdf"],
+                        key=f"up_ate_{_aid}",
+                    )
+                    if arq_ate:
+                        with st.spinner("Enviando Atestado…"):
+                            ok, resultado = _salvar_doc_pre_cadastro(_aid, "url_atestado_medico", arq_ate)
+                        if ok:
+                            st.success("✅ Atestado salvo! Matrícula liberada.")
+                            time.sleep(0.8)
+                            st.rerun()
+                        else:
+                            st.error(f"Erro: {resultado}")
 
             st.markdown("---")
 
