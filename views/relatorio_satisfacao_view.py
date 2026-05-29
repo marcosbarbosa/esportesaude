@@ -27,6 +27,205 @@ except ImportError:
 
 from utils.imagem import get_base64_image
 
+# =============================================================================
+# 🧹 FILTRO DE COMENTÁRIOS SEM NEXO
+# =============================================================================
+_RUIDO_SET = {
+    "oi","oi!","olá","ola","ok","ok!","blz","blz!","bom","sim","nao","não",
+    "top","top!","yes","yeah","legal","legal!","maneiro","bacana","show",
+    "show!","massa","valeu","obg","vlw","vlw!","nada","pura","blzpura","boa",
+    "boa!","tá","ta","tá bom","ta bom","tudo","ótimo","otimo","zero","wow",
+    "uau","hmm","hm","ahh","ah","eh","é","eeee","rsrs","kk","kkk","haha",
+    "😊","👍","👏","💪","🙂","😁","😀","😃","😄","🤩",
+    "tudo bem","tudo bom","tudo ótimo","muito bom","muito boa",
+    "sem comentario","sem comentários","sem comentarios","n/a","na",".",
+    "-","–","...","nenhum","nenhuma","nada a declarar",
+}
+
+def _filtrar_comentarios(df_com: "pd.DataFrame") -> "pd.DataFrame":
+    """Remove comentários vazios, muito curtos ou claramente sem conteúdo."""
+    if df_com.empty:
+        return df_com
+    def _valido(texto):
+        t = str(texto or "").strip()
+        if len(t) < 8:
+            return False
+        tl = t.lower().rstrip("!.?,;")
+        if tl in _RUIDO_SET:
+            return False
+        palavras = [p for p in tl.split() if p.isalpha()]
+        if len(palavras) < 2:
+            return False
+        return True
+    return df_com[df_com["comentario"].apply(_valido)].copy()
+
+
+# =============================================================================
+# 🖨️ GERADOR DE HTML PARA IMPRESSÃO EM NOVA JANELA
+# =============================================================================
+def _gerar_html_print(df_filtrado, trimestre_sel, ano_sel,
+                       tx_exc, tx_dor, tx_ene, tx_imp, df_com_print):
+    agora = datetime.datetime.now().strftime("%d/%m/%Y às %H:%M")
+    try:
+        from utils.identidade import get_config as _gcfg, get_logo_data_url as _gld
+        _cfg = _gcfg()
+        nome_studio = _cfg.get("titulo_projeto", "Esporte e Saúde")
+        logo_b64 = _gld(_cfg.get("logo_principal", "logo-imbra.png"))
+    except Exception:
+        nome_studio = "Esporte e Saúde"
+        logo_b64 = None
+
+    logo_tag = (
+        f'<img src="{logo_b64}" style="height:64px;max-width:140px;object-fit:contain;">'
+        if logo_b64 else
+        f'<div style="font-size:22px;font-weight:900;color:#0056b3;">{nome_studio}</div>'
+    )
+
+    n_resp = len(df_filtrado)
+
+    def _sent_tabela(col):
+        if col not in df_filtrado.columns:
+            return ""
+        contagem = df_filtrado[col].value_counts()
+        rows = ""
+        cor = {"Positivo (Excelente)": "#10B981", "Neutro (Mediano)": "#F59E0B", "Atenção (Melhoria)": "#EF4444"}
+        for sentimento, votos in contagem.items():
+            if sentimento == "Sem Classificação":
+                continue
+            pct = round(votos / n_resp * 100) if n_resp > 0 else 0
+            c = cor.get(sentimento, "#64748B")
+            rows += (
+                f"<tr><td style='padding:4px 8px;border-bottom:1px solid #E2E8F0;'>"
+                f"<span style='color:{c};font-weight:700;'>●</span> {sentimento}</td>"
+                f"<td style='text-align:center;padding:4px 8px;border-bottom:1px solid #E2E8F0;'>{votos}</td>"
+                f"<td style='text-align:center;padding:4px 8px;border-bottom:1px solid #E2E8F0;'>{pct}%</td></tr>"
+            )
+        return rows
+
+    # Blocos de comentários — 4 colunas
+    blocos_com = ""
+    if not df_com_print.empty:
+        for _, cr in df_com_print.iterrows():
+            turma_c = str(cr.get("turma", "")).strip()
+            texto_c = str(cr.get("comentario", "")).strip()
+            blocos_com += (
+                "<div style='background:#F0F9FF;border-left:3px solid #0056b3;"
+                "padding:7px 9px;border-radius:5px;font-size:8pt;line-height:1.35;"
+                "break-inside:avoid;margin-bottom:7px;'>"
+                f"<strong style='font-size:7.5pt;color:#0056b3;'>{turma_c}</strong><br>"
+                f"<em>&ldquo;{texto_c}&rdquo;</em></div>"
+            )
+
+    tbl_q4 = _sent_tabela("Sentimento_Q4")
+    tbl_q2 = _sent_tabela("Sentimento_Q2")
+    tbl_q1 = _sent_tabela("Sentimento_Q1")
+    tbl_q3 = _sent_tabela("Sentimento_Q3")
+
+    def _mini_tabela(titulo, rows):
+        return (
+            f"<div style='margin-bottom:12px;'>"
+            f"<div style='font-size:8.5pt;font-weight:700;color:#0A2540;"
+            f"border-bottom:2px solid #0056b3;padding-bottom:3px;margin-bottom:5px;'>{titulo}</div>"
+            f"<table style='width:100%;border-collapse:collapse;font-size:8pt;'>"
+            f"<tr style='background:#F1F5F9;'><th style='text-align:left;padding:3px 8px;'>Sentimento</th>"
+            f"<th style='text-align:center;padding:3px 8px;'>Votos</th>"
+            f"<th style='text-align:center;padding:3px 8px;'>%</th></tr>"
+            f"{rows}</table></div>"
+        )
+
+    html = f"""<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<title>Relatório de Satisfação — {nome_studio}</title>
+<style>
+  * {{ box-sizing: border-box; margin: 0; padding: 0; }}
+  body {{ font-family: Arial, sans-serif; color: #1E293B; font-size: 9pt;
+         background: #fff; padding: 18mm 15mm; -webkit-print-color-adjust: exact; print-color-adjust: exact; }}
+  @media print {{
+    @page {{ size: A4 portrait; margin: 12mm 14mm; }}
+    .no-print {{ display: none !important; }}
+  }}
+  .header-bar {{ display: flex; align-items: center; justify-content: space-between;
+                  border-bottom: 3px solid #0056b3; padding-bottom: 10px; margin-bottom: 14px; }}
+  .header-title {{ text-align: center; flex: 1; }}
+  .header-title h1 {{ font-size: 15pt; color: #0A2540; font-weight: 900; }}
+  .header-title h2 {{ font-size: 10pt; color: #475569; font-weight: 600; margin-top: 2px; }}
+  .header-title p  {{ font-size: 8pt; color: #94A3B8; margin-top: 3px; }}
+  .kpi-row {{ display: flex; gap: 10px; margin-bottom: 14px; }}
+  .kpi-box {{ flex: 1; text-align: center; border: 1px solid #E2E8F0;
+               border-radius: 8px; padding: 8px 4px; background: #F8FAFC; }}
+  .kpi-val {{ font-size: 18pt; font-weight: 900; line-height: 1; }}
+  .kpi-lbl {{ font-size: 7pt; font-weight: 700; color: #64748B; margin-top: 2px; }}
+  .section-title {{ font-size: 10pt; font-weight: 800; color: #0A2540;
+                     border-bottom: 2px solid #0056b3; padding-bottom: 4px; margin: 14px 0 8px; }}
+  .tabelas-row {{ display: flex; gap: 14px; margin-bottom: 14px; }}
+  .tabelas-row > div {{ flex: 1; }}
+  .col-comentarios {{ column-count: 4; column-gap: 10px; }}
+  .rodape {{ margin-top: 14px; border-top: 1px solid #E2E8F0;
+              padding-top: 6px; font-size: 7pt; color: #94A3B8; text-align: center; }}
+  .btn-print {{ display: block; margin: 0 auto 14px; padding: 8px 24px;
+                 background: #0056b3; color: white; border: none;
+                 border-radius: 6px; font-size: 11pt; cursor: pointer; font-weight: 700; }}
+  .btn-print:hover {{ background: #003d82; }}
+</style>
+</head>
+<body>
+  <button class="btn-print no-print" onclick="window.print()">🖨️ Imprimir / Salvar PDF</button>
+
+  <div class="header-bar">
+    <div style="min-width:120px;">{logo_tag}</div>
+    <div class="header-title">
+      <h1>{nome_studio}</h1>
+      <h2>Relatório de Satisfação &amp; Impacto na Saúde</h2>
+      <p>Período: {trimestre_sel} de {ano_sel} &nbsp;|&nbsp; Emitido em {agora}</p>
+    </div>
+    <div style="min-width:120px;text-align:right;font-size:8pt;color:#64748B;">
+      {n_resp} pesquisas<br>respondidas
+    </div>
+  </div>
+
+  <div class="kpi-row">
+    <div class="kpi-box">
+      <div class="kpi-val" style="color:#10B981;">{tx_exc}%</div>
+      <div class="kpi-lbl">Excelência nas Aulas</div>
+    </div>
+    <div class="kpi-box">
+      <div class="kpi-val" style="color:#0056b3;">{tx_dor}%</div>
+      <div class="kpi-lbl">Alívio de Dores</div>
+    </div>
+    <div class="kpi-box">
+      <div class="kpi-val" style="color:#F59E0B;">{tx_ene}%</div>
+      <div class="kpi-lbl">Mais Energia</div>
+    </div>
+    <div class="kpi-box">
+      <div class="kpi-val" style="color:#8B5CF6;">{tx_imp}%</div>
+      <div class="kpi-lbl">Impacto na Vida</div>
+    </div>
+    <div class="kpi-box">
+      <div class="kpi-val" style="color:#0A2540;">{n_resp}</div>
+      <div class="kpi-lbl">Total Respostas</div>
+    </div>
+  </div>
+
+  <div class="section-title">Análise Detalhada por Indicador</div>
+  <div class="tabelas-row">
+    <div>{_mini_tabela("1. Qualidade dos Professores", tbl_q4)}</div>
+    <div>{_mini_tabela("2. Melhora nas Dores Crônicas", tbl_q2)}</div>
+    <div>{_mini_tabela("3. Disposição e Energia", tbl_q1)}</div>
+    <div>{_mini_tabela("4. Impacto Transformador na Vida", tbl_q3)}</div>
+  </div>
+
+  {'<div class="section-title">Comentários dos Alunos</div><div class="col-comentarios">' + blocos_com + '</div>' if blocos_com else ''}
+
+  <div class="rodape">
+    {nome_studio} &nbsp;·&nbsp; Relatório gerado automaticamente pelo Sistema IMBRA &nbsp;·&nbsp; {agora}
+  </div>
+</body>
+</html>"""
+    return html
+
+
 def gerar_documento_word(df, periodo, ano, tx_exc, tx_dor, tx_ene, tx_imp):
     total_resp = len(df)
     data_emissao = datetime.date.today().strftime("%d/%m/%Y")
@@ -193,12 +392,43 @@ def tela_relatorio_prime_satisfacao():
         for q in ["q1_disposicao", "q2_dores", "q3_efeito_vida", "q4_avaliacao_geral"]:
             df_filtrado[f"Sentimento_{q[:2].upper()}"] = df_filtrado.get(q, pd.Series(["Sem Classificação"]*len(df_filtrado))).apply(class_sent)
 
-        m1, m2, m3, m4, m5 = st.columns(5)
         tx_exc = int(((df_filtrado["Sentimento_Q4"] == "Positivo (Excelente)").sum() / len(df_filtrado)) * 100) if len(df_filtrado)>0 else 0
         tx_dor = int(((df_filtrado["Sentimento_Q2"] == "Positivo (Excelente)").sum() / len(df_filtrado)) * 100) if len(df_filtrado)>0 else 0
         tx_ene = int(((df_filtrado["Sentimento_Q1"] == "Positivo (Excelente)").sum() / len(df_filtrado)) * 100) if len(df_filtrado)>0 else 0
         tx_imp = int(((df_filtrado["Sentimento_Q3"] == "Positivo (Excelente)").sum() / len(df_filtrado)) * 100) if len(df_filtrado)>0 else 0
 
+        # ── Comentários filtrados ─────────────────────────────────────────────
+        _df_com_raw = (
+            df_filtrado[df_filtrado["comentario"].notna() & (df_filtrado["comentario"].str.strip() != "")]
+            if "comentario" in df_filtrado.columns else pd.DataFrame()
+        )
+        df_com = _filtrar_comentarios(_df_com_raw)
+
+        # ── BOTÃO DE IMPRESSÃO NO TOPO ────────────────────────────────────────
+        _btn_col, _ = st.columns([1, 4])
+        with _btn_col:
+            if st.button("🖨️ Gerar Relatório PDF", key="btn_print_top", use_container_width=True, type="primary"):
+                _html_rel = _gerar_html_print(
+                    df_filtrado, trimestre_sel, ano_sel,
+                    tx_exc, tx_dor, tx_ene, tx_imp, df_com
+                )
+                _html_escaped = _html_rel.replace("\\", "\\\\").replace("`", "\\`")
+                st.components.v1.html(
+                    f"""<script>
+                    var w = window.open('', '_blank');
+                    w.document.open();
+                    w.document.write(`{_html_escaped}`);
+                    w.document.close();
+                    w.focus();
+                    setTimeout(function(){{ w.print(); }}, 800);
+                    </script>""",
+                    height=0,
+                )
+
+        st.markdown("<hr style='margin:8px 0;'>", unsafe_allow_html=True)
+
+        # ── KPIs ──────────────────────────────────────────────────────────────
+        m1, m2, m3, m4, m5 = st.columns(5)
         m1.markdown(f"<div class='metric-card'><div class='metric-value'>{len(df_filtrado)}</div><div class='metric-label'>Pesquisas</div></div>", unsafe_allow_html=True)
         m2.markdown(f"<div class='metric-card'><div class='metric-value' style='color:#10B981;'>{tx_exc}%</div><div class='metric-label'>Excelência</div></div>", unsafe_allow_html=True)
         m3.markdown(f"<div class='metric-card'><div class='metric-value' style='color:#0056b3;'>{tx_dor}%</div><div class='metric-label'>Alívio Dores</div></div>", unsafe_allow_html=True)
@@ -207,6 +437,7 @@ def tela_relatorio_prime_satisfacao():
 
         st.markdown("<hr>", unsafe_allow_html=True)
 
+        # ── Gráficos (não alterar) ────────────────────────────────────────────
         mapa = {"Positivo (Excelente)": "#10B981", "Neutro (Mediano)": "#F59E0B", "Atenção (Melhoria)": "#EF4444"}
         def plot_pie(df_p, col, tit):
             cnt = df_p[col].value_counts().reset_index()
@@ -223,47 +454,31 @@ def tela_relatorio_prime_satisfacao():
         with r3: plot_pie(df_filtrado, "Sentimento_Q1", "3. Disposição (Energia)")
         with r4: plot_pie(df_filtrado, "Sentimento_Q2", "4. Melhora nas Dores")
 
-        # ── Comentários do período ────────────────────────────────────────────
-        df_com = (
-            df_filtrado[df_filtrado["comentario"].notna() & (df_filtrado["comentario"].str.strip() != "")]
-            if "comentario" in df_filtrado.columns
-            else pd.DataFrame()
-        )
+        # ── Comentários — layout compacto 3 colunas ───────────────────────────
         if not df_com.empty:
             st.markdown("---")
-            st.markdown("### 💬 Comentários dos Alunos")
-            for _, cr in df_com.iterrows():
+            n_com = len(df_com)
+            st.markdown(
+                f"<div style='display:flex;align-items:center;gap:10px;margin-bottom:10px;'>"
+                f"<span style='font-size:16px;font-weight:800;color:#0A2540;'>💬 Comentários dos Alunos</span>"
+                f"<span style='background:#0056b3;color:white;font-size:11px;font-weight:700;"
+                f"padding:2px 8px;border-radius:10px;'>{n_com}</span></div>",
+                unsafe_allow_html=True,
+            )
+            cols_com = st.columns(3)
+            for i, (_, cr) in enumerate(df_com.iterrows()):
                 dt_c = cr.get("data_resposta", "")
-                dt_c = dt_c.strftime("%d/%m/%Y") if pd.notnull(dt_c) else ""
-                turma_c = cr.get("turma", "")
-                st.markdown(
-                    f"<div style='background:#F0F9FF;border-left:4px solid #0056b3;"
-                    f"padding:10px 14px;border-radius:6px;margin-bottom:8px;font-size:14px;'>"
-                    f"<strong>{turma_c}</strong>"
-                    + (f" <span style='color:#94A3B8;font-size:11px;'>· {dt_c}</span>" if dt_c else "")
-                    + f"<br><em>\"{cr['comentario']}\"</em></div>",
+                dt_c = dt_c.strftime("%d/%m") if pd.notnull(dt_c) else ""
+                turma_c = str(cr.get("turma", "")).strip()
+                texto_c = str(cr.get("comentario", "")).strip()
+                cols_com[i % 3].markdown(
+                    f"<div style='background:#F0F9FF;border-left:3px solid #0056b3;"
+                    f"padding:8px 10px;border-radius:5px;margin-bottom:7px;font-size:12.5px;line-height:1.4;'>"
+                    f"<span style='font-size:11px;font-weight:700;color:#0056b3;'>{turma_c}"
+                    + (f" <span style='color:#94A3B8;font-weight:400;'>· {dt_c}</span>" if dt_c else "")
+                    + f"</span><br><em style='color:#1E293B;'>\"{texto_c}\"</em></div>",
                     unsafe_allow_html=True,
                 )
-
-        # ── Botão de impressão (captura toda a tela com os gráficos) ─────────
-        st.markdown("---")
-        st.markdown("""
-            <style>
-            @media print {
-                header, footer, [data-testid="stSidebar"],
-                [data-testid="stToolbar"], [data-testid="stDecoration"],
-                [data-testid="stStatusWidget"], .stButton,
-                [data-testid="stTabs"] > div:first-child { display: none !important; }
-                [data-testid="stMainBlockContainer"] { padding: 0 !important; }
-                body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-            }
-            </style>
-        """, unsafe_allow_html=True)
-        if st.button("🖨️ Imprimir / Salvar como PDF", use_container_width=False, key="btn_print_dashboard"):
-            st.components.v1.html(
-                "<script>window.print();</script>",
-                height=0,
-            )
 
     # MÓDULO DE EXCLUSÃO NA ABA 2
     with tab_faxina:
