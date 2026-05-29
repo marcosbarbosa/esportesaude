@@ -1382,7 +1382,7 @@ def registrar_dia_sem_aula(data_iso: str, motivo: str = "", criado_por: str = ""
     Tenta insert; se já existir (duplicate), faz update do motivo/criado_por.
     Retorna True se sucesso.
     """
-    payload = {"data": data_iso, "motivo": motivo.strip(), "criado_por": criado_por.strip()}
+    payload = {"data": data_iso, "motivo": str(motivo or "").strip(), "criado_por": str(criado_por or "").strip()}
     try:
         supabase.from_("dias_sem_aula").insert(payload).execute()
         return True
