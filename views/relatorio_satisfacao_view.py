@@ -88,10 +88,36 @@ def gerar_docx_satisfacao_bytes(df, periodo, ano, tx_exc, tx_dor, tx_ene, tx_imp
 # =========================================================================
 def deletar_pesquisa(id_pesquisa):
     try:
-        supabase.table("pesquisas_satisfacao").delete().eq("id", id_pesquisa).execute()
-        st.success("✅ Pesquisa removida com sucesso!")
-        time.sleep(1)
-        st.rerun()
+        resp = (
+            supabase.table("pesquisas_satisfacao")
+            .delete()
+            .eq("id", str(id_pesquisa))
+            .execute()
+        )
+        # supabase-py v2 devolve as linhas excluídas em resp.data.
+        # Se a lista estiver vazia → RLS bloqueou ou id não existe.
+        if resp.data:
+            st.success("✅ Pesquisa removida com sucesso!")
+            time.sleep(0.8)
+            st.rerun()
+        else:
+            # Tenta confirmar via SELECT se o registro ainda existe
+            check = (
+                supabase.table("pesquisas_satisfacao")
+                .select("id")
+                .eq("id", str(id_pesquisa))
+                .execute()
+            )
+            if not check.data:
+                # Registro sumiu — o delete funcionou mesmo sem retornar dados
+                st.success("✅ Pesquisa removida com sucesso!")
+                time.sleep(0.8)
+                st.rerun()
+            else:
+                st.error(
+                    "❌ Não foi possível excluir. Verifique as permissões "
+                    "de DELETE na tabela 'pesquisas_satisfacao' no Supabase."
+                )
     except Exception as e:
         st.error(f"Erro ao excluir a pesquisa: {e}")
 
@@ -190,6 +216,48 @@ def tela_relatorio_prime_satisfacao():
         with r3: plot_pie(df_filtrado, "Sentimento_Q1", "3. Disposição (Energia)")
         with r4: plot_pie(df_filtrado, "Sentimento_Q2", "4. Melhora nas Dores")
 
+        # ── Comentários do período ────────────────────────────────────────────
+        df_com = (
+            df_filtrado[df_filtrado["comentario"].notna() & (df_filtrado["comentario"].str.strip() != "")]
+            if "comentario" in df_filtrado.columns
+            else pd.DataFrame()
+        )
+        if not df_com.empty:
+            st.markdown("---")
+            st.markdown("### 💬 Comentários dos Alunos")
+            for _, cr in df_com.iterrows():
+                dt_c = cr.get("data_resposta", "")
+                dt_c = dt_c.strftime("%d/%m/%Y") if pd.notnull(dt_c) else ""
+                turma_c = cr.get("turma", "")
+                st.markdown(
+                    f"<div style='background:#F0F9FF;border-left:4px solid #0056b3;"
+                    f"padding:10px 14px;border-radius:6px;margin-bottom:8px;font-size:14px;'>"
+                    f"<strong>{turma_c}</strong>"
+                    + (f" <span style='color:#94A3B8;font-size:11px;'>· {dt_c}</span>" if dt_c else "")
+                    + f"<br><em>\"{cr['comentario']}\"</em></div>",
+                    unsafe_allow_html=True,
+                )
+
+        # ── Botão de impressão (captura toda a tela com os gráficos) ─────────
+        st.markdown("---")
+        st.markdown("""
+            <style>
+            @media print {
+                header, footer, [data-testid="stSidebar"],
+                [data-testid="stToolbar"], [data-testid="stDecoration"],
+                [data-testid="stStatusWidget"], .stButton,
+                [data-testid="stTabs"] > div:first-child { display: none !important; }
+                [data-testid="stMainBlockContainer"] { padding: 0 !important; }
+                body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+            }
+            </style>
+        """, unsafe_allow_html=True)
+        if st.button("🖨️ Imprimir / Salvar como PDF", use_container_width=False, key="btn_print_dashboard"):
+            st.components.v1.html(
+                "<script>window.print();</script>",
+                height=0,
+            )
+
     # MÓDULO DE EXCLUSÃO NA ABA 2
     with tab_faxina:
         st.info("💡 Elimine pesquisas antigas de teste para não poluir o Dashboard oficial.")
@@ -199,12 +267,20 @@ def tela_relatorio_prime_satisfacao():
             with st.expander(f"📝 {dt_f} — {row.get('turma','Turma')} ({row.get('trimestre_referencia','N/A')})"):
                 cx1, cx2 = st.columns([4,1])
                 with cx1:
-                    st.write(f"**Disposição:** {row.get('q1_disposicao','')}")
-                    st.write(f"**Dores:** {row.get('q2_dores','')}")
-                    st.write(f"**Efeito Vida:** {row.get('q3_efeito_vida','')}")
-                    st.write(f"**Aulas:** {row.get('q4_avaliacao_geral','')}")
-                    if "comentario" in row and pd.notna(row["comentario"]) and str(row["comentario"]).strip() != "":
-                        st.write(f"**Comentário Antigo:** {row['comentario']}")
+                    st.write(f"**1. Disposição:** {row.get('q1_disposicao','—')}")
+                    st.write(f"**2. Dores:** {row.get('q2_dores','—')}")
+                    st.write(f"**3. Efeito Vida:** {row.get('q3_efeito_vida','—')}")
+                    st.write(f"**4. Aulas:** {row.get('q4_avaliacao_geral','—')}")
+                    _com = str(row.get("comentario") or "").strip()
+                    if _com:
+                        st.markdown(
+                            f"<div style='background:#F0F9FF;border-left:3px solid #0056b3;"
+                            f"padding:8px 12px;border-radius:5px;margin-top:6px;font-size:13px;'>"
+                            f"💬 <strong>Comentário:</strong> {_com}</div>",
+                            unsafe_allow_html=True,
+                        )
+                    else:
+                        st.caption("💬 Sem comentário")
                 with cx2:
                     if st.button("🗑️ Excluir", key=f"del_{row['id']}", type="primary"):
                         deletar_pesquisa(row["id"])

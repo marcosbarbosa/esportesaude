@@ -181,6 +181,18 @@ def tela_pesquisa_satisfacao_move_right():
         )
 
         st.markdown("<br>", unsafe_allow_html=True)
+        st.markdown(
+            "<div class='pergunta-texto'>5. Deixe um comentário (opcional):</div>",
+            unsafe_allow_html=True,
+        )
+        comentario = st.text_area(
+            "comentario",
+            placeholder="Escreva aqui sua mensagem, sugestão ou elogio…",
+            max_chars=500,
+            label_visibility="collapsed",
+        )
+
+        st.markdown("<br>", unsafe_allow_html=True)
         btn_enviar = st.form_submit_button(
             "🚀 FINALIZAR E ENVIAR", type="primary", use_container_width=True
         )
@@ -207,6 +219,7 @@ def tela_pesquisa_satisfacao_move_right():
                         "q4_avaliacao_geral": q4.replace("**", "")
                         .replace("  \n", " ")
                         .strip(),
+                        "comentario": comentario.strip() if comentario else None,
                         "data_resposta": datetime.datetime.now().isoformat(),
                         "trimestre_referencia": trimestre_db.split(" (")[0],
                         "ip_registro": ip_audit,
