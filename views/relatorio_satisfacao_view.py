@@ -88,36 +88,43 @@ def gerar_docx_satisfacao_bytes(df, periodo, ano, tx_exc, tx_dor, tx_ene, tx_imp
 # =========================================================================
 def deletar_pesquisa(id_pesquisa):
     try:
+        # Converte para int se possível (id é bigserial no banco)
+        try:
+            id_val = int(id_pesquisa)
+        except (ValueError, TypeError):
+            id_val = str(id_pesquisa)
+
         resp = (
             supabase.table("pesquisas_satisfacao")
             .delete()
-            .eq("id", str(id_pesquisa))
+            .eq("id", id_val)
             .execute()
         )
+
         # supabase-py v2 devolve as linhas excluídas em resp.data.
-        # Se a lista estiver vazia → RLS bloqueou ou id não existe.
         if resp.data:
             st.success("✅ Pesquisa removida com sucesso!")
             time.sleep(0.8)
             st.rerun()
+            return
+
+        # resp.data vazio: pode ter funcionado sem retornar dados (RLS sem RETURNING)
+        check = (
+            supabase.table("pesquisas_satisfacao")
+            .select("id")
+            .eq("id", id_val)
+            .execute()
+        )
+        if not check.data:
+            st.success("✅ Pesquisa removida com sucesso!")
+            time.sleep(0.8)
+            st.rerun()
         else:
-            # Tenta confirmar via SELECT se o registro ainda existe
-            check = (
-                supabase.table("pesquisas_satisfacao")
-                .select("id")
-                .eq("id", str(id_pesquisa))
-                .execute()
+            st.error(
+                "❌ O banco bloqueou a exclusão por falta de permissão. "
+                "Execute o SQL abaixo no Supabase → SQL Editor para corrigir:\n\n"
+                "```sql\nALTER TABLE pesquisas_satisfacao DISABLE ROW LEVEL SECURITY;\n```"
             )
-            if not check.data:
-                # Registro sumiu — o delete funcionou mesmo sem retornar dados
-                st.success("✅ Pesquisa removida com sucesso!")
-                time.sleep(0.8)
-                st.rerun()
-            else:
-                st.error(
-                    "❌ Não foi possível excluir. Verifique as permissões "
-                    "de DELETE na tabela 'pesquisas_satisfacao' no Supabase."
-                )
     except Exception as e:
         st.error(f"Erro ao excluir a pesquisa: {e}")
 
