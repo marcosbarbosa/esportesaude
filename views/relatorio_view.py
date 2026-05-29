@@ -1480,89 +1480,38 @@ def _renderizar_monitoramento_clinico():
         | 9–10 | **Máximo / Emergência — intervir imediatamente** |
         """)
 
-    # ── Editor interativo ─────────────────────────────────────────────────────
-    st.markdown(f"**{len(df_monitor)} aluno(s) exibidos** — edite a coluna **Borg/Risco** (0–10) diretamente na tabela:")
+    # ── Editor Borg (manter editável para classificações) ────────────────────
+    st.markdown(f"**{len(df_monitor)} aluno(s) exibidos** — edite a coluna **Borg/Risco** (0–10) e clique em 💾 Salvar:")
 
     col_config = {
-        "id":         st.column_config.NumberColumn("ID", disabled=True, width="small"),
-        "🔴":         st.column_config.TextColumn("⚠️", width="small"),
-        "Nome":       st.column_config.TextColumn("Nome", disabled=True, width="medium"),
-        "Turma":      st.column_config.TextColumn("Turma", disabled=True, width="small"),
-        "Patologias": st.column_config.TextColumn("Patologias / Saúde", disabled=True, width="large"),
-        "Restrições": st.column_config.TextColumn("Restrições Físicas", disabled=True, width="medium"),
-        "Alergias":   st.column_config.TextColumn("Alergias", disabled=True, width="medium"),
-        "Incômodos":  st.column_config.TextColumn("Incômodos", disabled=True, width="medium"),
+        "id":           st.column_config.NumberColumn("ID", disabled=True, width="small"),
+        "🔴":           st.column_config.TextColumn("⚠️", width="small"),
+        "Nome":         st.column_config.TextColumn("Nome", disabled=True, width="medium"),
+        "Turma":        st.column_config.TextColumn("Turma", disabled=True, width="small"),
+        "Patologias":   st.column_config.TextColumn("Patologias / Saúde", disabled=True, width="large"),
+        "Restrições":   st.column_config.TextColumn("Restrições Físicas", disabled=True, width="medium"),
+        "Alergias":     st.column_config.TextColumn("Alergias", disabled=True, width="medium"),
+        "Incômodos":    st.column_config.TextColumn("Incômodos", disabled=True, width="medium"),
         "Medicamentos": st.column_config.TextColumn("Medicamentos", disabled=True, width="medium"),
-        "Borg/Risco": st.column_config.NumberColumn(
-            "Borg / Risco (0–10)",
-            min_value=0, max_value=10,
-            step=1, width="small",
+        "Borg/Risco":   st.column_config.NumberColumn(
+            "Borg / Risco (0–10)", min_value=0, max_value=10, step=1, width="small",
             help="0 = sem risco  ·  10 = emergência",
         ),
     }
 
     df_editado = st.data_editor(
-        df_monitor,
-        column_config=col_config,
-        use_container_width=True,
-        hide_index=True,
-        key="data_editor_borg",
-        num_rows="fixed",
+        df_monitor, column_config=col_config,
+        use_container_width=True, hide_index=True,
+        key="data_editor_borg", num_rows="fixed",
     )
 
-    # ── Exportar PDF ──────────────────────────────────────────────────────────
-    col_pdf, _ = st.columns([1, 3])
-    with col_pdf:
-        if st.button("📄 Exportar PDF", use_container_width=True, key="mc_exportar_pdf"):
-            with st.spinner("Gerando PDF…"):
-                try:
-                    pdf_bytes = gerar_pdf_monitoramento_clinico(
-                        df_editado.drop(columns=["id"], errors="ignore"),
-                        turma_filtro=turma_filtro,
-                    )
-                    nome_arquivo = (
-                        f"monitoramento_clinico_"
-                        f"{datetime.date.today().strftime('%Y%m%d')}.pdf"
-                    )
-                    st.download_button(
-                        label="⬇️ Baixar PDF",
-                        data=pdf_bytes,
-                        file_name=nome_arquivo,
-                        mime="application/pdf",
-                        use_container_width=True,
-                        key="mc_download_pdf",
-                    )
-                    st.success("PDF gerado com sucesso!")
-                except Exception as _e:
-                    st.error(f"Erro ao gerar PDF: {_e}")
-
-    # ── Aplica destaques visuais pós-edição ───────────────────────────────────
-    alertas_borg = df_editado[df_editado["Borg/Risco"] >= 7]
-    alertas_clin = df_editado[df_editado["🔴"] == "🔴"]
-
-    if not alertas_borg.empty or not alertas_clin.empty:
-        st.markdown("---")
-        st.markdown("### 🚨 Alertas Ativos")
-        col_b, col_c = st.columns(2)
-        with col_b:
-            if not alertas_borg.empty:
-                st.error(f"⚡ **{len(alertas_borg)} aluno(s) com Borg ≥ 7 (alto risco):**")
-                for _, ar in alertas_borg.iterrows():
-                    st.markdown(f"  - **{ar['Nome']}** ({ar['Turma']}) — Borg: `{int(ar['Borg/Risco'])}`")
-        with col_c:
-            if not alertas_clin.empty:
-                st.warning(f"🔴 **{len(alertas_clin)} aluno(s) com palavras-chave clínicas críticas:**")
-                for _, ar in alertas_clin.iterrows():
-                    st.markdown(f"  - **{ar['Nome']}** ({ar['Turma']}) — {ar['Patologias'][:60]}")
-
-    # ── Salvar classificações Borg na session_state ───────────────────────────
-    c_salvar, c_reset = st.columns([2, 1])
+    # ── Botões de ação ────────────────────────────────────────────────────────
+    c_salvar, c_reset, c_pdf, _ = st.columns([2, 1, 2, 1])
     with c_salvar:
-        if st.button("💾 Salvar Classificações Borg (sessão)", type="primary", use_container_width=True, key="mc_salvar"):
+        if st.button("💾 Salvar Borg (sessão)", type="primary", use_container_width=True, key="mc_salvar"):
             for _, row_e in df_editado.iterrows():
-                k = f"borg_mc_{row_e['id']}"
-                st.session_state[k] = int(row_e["Borg/Risco"])
-            st.toast(f"✅ {len(df_editado)} classificações salvas na sessão!", icon="💾")
+                st.session_state[f"borg_mc_{row_e['id']}"] = int(row_e["Borg/Risco"])
+            st.toast(f"✅ {len(df_editado)} classificações salvas!", icon="💾")
     with c_reset:
         if st.button("🔄 Limpar Borg", use_container_width=True, key="mc_reset"):
             for _, row_e in df_editado.iterrows():
@@ -1570,6 +1519,133 @@ def _renderizar_monitoramento_clinico():
                 if k in st.session_state:
                     del st.session_state[k]
             st.rerun()
+    with c_pdf:
+        with st.spinner("Preparando PDF…"):
+            try:
+                _pdf_mc = gerar_pdf_monitoramento_clinico(
+                    df_editado.drop(columns=["id"], errors="ignore"),
+                    turma_filtro=turma_filtro,
+                )
+                st.download_button(
+                    label="📄 Baixar PDF",
+                    data=_pdf_mc,
+                    file_name=f"monitoramento_clinico_{datetime.date.today().strftime('%Y%m%d')}.pdf",
+                    mime="application/pdf",
+                    use_container_width=True,
+                    type="primary",
+                    key="mc_download_pdf",
+                )
+            except Exception as _ep:
+                st.error(f"Erro PDF: {_ep}")
+
+    # ── Preview idêntico ao PDF ────────────────────────────────────────────────
+    st.markdown("---")
+    st.markdown("#### 🖥️ Preview do Relatório (idêntico ao PDF)")
+
+    _hoje_prev = datetime.date.today().strftime("%d/%m/%Y")
+    _hora_prev = datetime.datetime.now().strftime("%H:%M")
+    _n_alertas = int((df_editado["🔴"] == "🔴").sum())
+    _n_borg7   = int((df_editado["Borg/Risco"].fillna(0).astype(int) >= 7).sum())
+
+    # Linhas da tabela HTML
+    _linhas_html = ""
+    for _zi, (_, _row) in enumerate(df_editado.iterrows()):
+        _alerta = str(_row.get("🔴", "")) == "🔴"
+        _bv     = int(_row.get("Borg/Risco", 0) or 0)
+        _borg7  = _bv >= 7
+        if _alerta:
+            _bg = "background:#FEE2E2;"
+        elif _borg7:
+            _bg = "background:#FEF3C7;"
+        elif _zi % 2 == 1:
+            _bg = "background:#F5F7FA;"
+        else:
+            _bg = "background:#FFFFFF;"
+        _icone = "🔴" if _alerta else ""
+        _borg_txt = str(_bv) if _bv > 0 else "—"
+        _linhas_html += (
+            f"<tr style='{_bg}'>"
+            f"<td style='text-align:center;padding:3px 4px;border:1px solid #CBD5E1;font-size:10px;'>{_icone}</td>"
+            f"<td style='padding:3px 5px;border:1px solid #CBD5E1;font-size:10px;font-weight:600;'>{_row.get('Nome','')}</td>"
+            f"<td style='padding:3px 4px;border:1px solid #CBD5E1;font-size:10px;'>{_row.get('Turma','')}</td>"
+            f"<td style='padding:3px 5px;border:1px solid #CBD5E1;font-size:9.5px;'>{_row.get('Patologias','')}</td>"
+            f"<td style='padding:3px 4px;border:1px solid #CBD5E1;font-size:9.5px;'>{_row.get('Restrições','')}</td>"
+            f"<td style='padding:3px 4px;border:1px solid #CBD5E1;font-size:9.5px;'>{_row.get('Alergias','')}</td>"
+            f"<td style='padding:3px 4px;border:1px solid #CBD5E1;font-size:9.5px;'>{_row.get('Incômodos','')}</td>"
+            f"<td style='padding:3px 4px;border:1px solid #CBD5E1;font-size:9.5px;'>{_row.get('Medicamentos','')}</td>"
+            f"<td style='text-align:center;padding:3px 4px;border:1px solid #CBD5E1;font-size:10px;font-weight:700;"
+            f"color:{'#991B1B' if _borg7 else '#0A2540'};'>{_borg_txt}</td>"
+            f"</tr>"
+        )
+
+    _preview_html = f"""
+    <div style="font-family:Arial,sans-serif;background:#fff;border:1px solid #CBD5E1;
+                border-radius:8px;overflow:hidden;padding:12px 14px;margin-top:4px;">
+      <!-- Cabeçalho -->
+      <div style="border-bottom:2px solid #0056b3;padding-bottom:8px;margin-bottom:6px;
+                  display:flex;align-items:center;justify-content:space-between;">
+        <div style="font-size:11px;color:#64748B;">Instituto Muda Brasil</div>
+        <div style="text-align:center;">
+          <div style="font-size:13px;font-weight:900;color:#0A2540;">Monitoramento Clínico — B.I. da Saúde</div>
+          <div style="font-size:9px;color:#64748B;">Emitido em {_hoje_prev} às {_hora_prev} &nbsp;|&nbsp; Turma: {turma_filtro}</div>
+        </div>
+        <div style="font-size:11px;color:#64748B;text-align:right;">{len(df_editado)} alunos</div>
+      </div>
+      <!-- Metadados de alerta -->
+      <div style="font-size:9.5px;color:#991B1B;font-weight:700;margin-bottom:5px;">
+        CONFIDENCIAL — Alertas clínicos: {_n_alertas} &nbsp;|&nbsp; Borg ≥ 7: {_n_borg7}
+      </div>
+      <!-- Legenda -->
+      <div style="font-size:8.5px;margin-bottom:6px;display:flex;gap:12px;">
+        <span><span style="display:inline-block;width:10px;height:10px;background:#FEE2E2;border:1px solid #CBD5E1;vertical-align:middle;"></span> Alerta clínico</span>
+        <span><span style="display:inline-block;width:10px;height:10px;background:#FEF3C7;border:1px solid #CBD5E1;vertical-align:middle;"></span> Borg ≥ 7</span>
+        <span><span style="display:inline-block;width:10px;height:10px;background:#F5F7FA;border:1px solid #CBD5E1;vertical-align:middle;"></span> Normal (zebra)</span>
+      </div>
+      <!-- Tabela -->
+      <table style="width:100%;border-collapse:collapse;">
+        <thead>
+          <tr style="background:#0A2540;color:#fff;">
+            <th style="padding:4px 3px;font-size:9.5px;border:1px solid #1E3A5F;width:3%;">⚠️</th>
+            <th style="padding:4px 5px;font-size:9.5px;border:1px solid #1E3A5F;text-align:left;width:16%;">Nome</th>
+            <th style="padding:4px 4px;font-size:9.5px;border:1px solid #1E3A5F;width:8%;">Turma</th>
+            <th style="padding:4px 5px;font-size:9.5px;border:1px solid #1E3A5F;text-align:left;width:22%;">Patologias / Saúde</th>
+            <th style="padding:4px 4px;font-size:9.5px;border:1px solid #1E3A5F;text-align:left;width:13%;">Restrições</th>
+            <th style="padding:4px 4px;font-size:9.5px;border:1px solid #1E3A5F;text-align:left;width:9%;">Alergias</th>
+            <th style="padding:4px 4px;font-size:9.5px;border:1px solid #1E3A5F;text-align:left;width:10%;">Incômodos</th>
+            <th style="padding:4px 4px;font-size:9.5px;border:1px solid #1E3A5F;text-align:left;width:14%;">Medicamentos</th>
+            <th style="padding:4px 3px;font-size:9.5px;border:1px solid #1E3A5F;width:5%;">Borg</th>
+          </tr>
+        </thead>
+        <tbody>{_linhas_html}</tbody>
+      </table>
+      <!-- Rodapé -->
+      <div style="border-top:1px solid #E2E8F0;margin-top:6px;padding-top:5px;
+                  font-size:8.5px;color:#991B1B;font-weight:700;">
+        Resumo: {len(df_editado)} alunos &nbsp;|&nbsp; {_n_alertas} alertas clínicos &nbsp;|&nbsp; {_n_borg7} com Borg ≥ 7
+      </div>
+      <div style="font-size:7.5px;color:#94A3B8;margin-top:2px;">
+        Documento confidencial — uso restrito à equipe técnica. Proibida reprodução sem autorização.
+      </div>
+    </div>
+    """
+    st.markdown(_preview_html, unsafe_allow_html=True)
+
+    # ── Alertas ativos ────────────────────────────────────────────────────────
+    alertas_borg = df_editado[df_editado["Borg/Risco"] >= 7]
+    alertas_clin = df_editado[df_editado["🔴"] == "🔴"]
+    if not alertas_borg.empty or not alertas_clin.empty:
+        st.markdown("### 🚨 Alertas Ativos")
+        col_b, col_c = st.columns(2)
+        with col_b:
+            if not alertas_borg.empty:
+                st.error(f"⚡ **{len(alertas_borg)} aluno(s) com Borg ≥ 7:**")
+                for _, ar in alertas_borg.iterrows():
+                    st.markdown(f"  - **{ar['Nome']}** ({ar['Turma']}) — Borg: `{int(ar['Borg/Risco'])}`")
+        with col_c:
+            if not alertas_clin.empty:
+                st.warning(f"🔴 **{len(alertas_clin)} aluno(s) com alertas clínicos:**")
+                for _, ar in alertas_clin.iterrows():
+                    st.markdown(f"  - **{ar['Nome']}** ({ar['Turma']}) — {ar['Patologias'][:60]}")
 
     st.info(
         "💡 As classificações Borg são mantidas durante esta sessão. "

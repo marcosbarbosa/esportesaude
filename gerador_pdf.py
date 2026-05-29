@@ -764,131 +764,174 @@ def criar_prestacao_diaria_pdf(data_fmt: str, nomes: list) -> bytes:
 
 
 # ==============================================================================
-# 8. RELATÓRIO: MONITORAMENTO CLÍNICO (B.I. DA SAÚDE)
+# 8. RELATÓRIO: MONITORAMENTO CLÍNICO (B.I. DA SAÚDE)  — versão PRIME
 # ==============================================================================
 def gerar_pdf_monitoramento_clinico(df, turma_filtro="Todas as Turmas"):
     """
-    Gera o PDF do painel de Monitoramento Clínico em A4 paisagem.
-    df deve conter as colunas:
-        🔴, Nome, Turma, Patologias, Restrições, Alergias, Incômodos, Medicamentos, Borg/Risco
-    Linhas com alerta (🔴) recebem fundo vermelho-claro.
-    Linhas com Borg >= 7 recebem fundo laranja-claro.
+    PDF prime do Monitoramento Clínico — A4 Paisagem (FPDF).
+    Usa multi_cell com altura variável por linha para não truncar nenhum texto.
+    Cores de alerta idênticas ao preview da tela.
     """
+
+    # ── widths (paisagem A4 útil ≈ 277 mm com margens 10+10) ──────────────
+    COLUNAS = [
+        ("!",                   5),
+        ("Nome",               48),
+        ("Turma",              22),
+        ("Patologias / Saude", 62),
+        ("Restricoes",         36),
+        ("Alergias",           26),
+        ("Incomodos",          28),
+        ("Medicamentos",       38),
+        ("Borg",               12),
+    ]
+    CHAVES = ["🔴","Nome","Turma","Patologias","Restrições","Alergias","Incômodos","Medicamentos","Borg/Risco"]
+    TOTAL_W = sum(w for _, w in COLUNAS)   # 277 mm
+
+    def _linhas(pdf, texto, largura, fonte_sz=7):
+        """Quantas linhas o texto ocupa em determinada largura."""
+        pdf.set_font("Arial", "", fonte_sz)
+        return max(1, len(pdf.multi_cell(largura, 4.5, texto, split_only=True)))
+
+    def _altura_linha(pdf, valores, fonte_sz=7):
+        """Retorna a altura necessária para a linha mais alta da row."""
+        max_linhas = 1
+        for i, ((_, w), txt) in enumerate(zip(COLUNAS, valores)):
+            n = _linhas(pdf, txt, w - 1, fonte_sz)
+            if n > max_linhas:
+                max_linhas = n
+        return max_linhas * 4.5
+
     pdf = FPDF(orientation="L", unit="mm", format="A4")
-    pdf.set_auto_page_break(auto=True, margin=18)
+    pdf.set_auto_page_break(auto=True, margin=20)
+    pdf.set_margins(10, 10, 10)
     pdf.add_page()
 
     # ── Cabeçalho padrão ──────────────────────────────────────────────────
     _cabecalho_padrao(pdf, subtitulo="Monitoramento Clinico — B.I. da Saude")
 
-    # ── Linha de metadados ────────────────────────────────────────────────
-    pdf.set_font("Arial", "B", 9)
-    pdf.set_text_color(153, 27, 27)   # vermelho escuro
+    # ── Metadados ─────────────────────────────────────────────────────────
     hoje_str = datetime.date.today().strftime("%d/%m/%Y")
-    meta = limpar_texto(
-        f"CONFIDENCIAL — Uso restrito a equipe tecnica  |  "
-        f"Emitido em: {hoje_str}  |  Turma: {turma_filtro}  |  "
-        f"Total de alunos: {len(df)}"
-    )
-    pdf.cell(0, 5, meta, ln=1)
+    hora_str = datetime.datetime.now().strftime("%H:%M")
+    total_alertas  = int((df.get("🔴", pd.Series()) == "🔴").sum())
+    total_borg_alt = int((df.get("Borg/Risco", pd.Series()).fillna(0).astype(int) >= 7).sum())
+
+    pdf.set_font("Arial", "B", 8)
+    pdf.set_text_color(153, 27, 27)
+    pdf.cell(0, 5, limpar_texto(
+        f"CONFIDENCIAL — Restrito a equipe tecnica  |  Emitido: {hoje_str} as {hora_str}"
+        f"  |  Turma: {turma_filtro}  |  Alunos: {len(df)}"
+        f"  |  Alertas clinicos: {total_alertas}  |  Borg >= 7: {total_borg_alt}"
+    ), ln=1)
     pdf.set_text_color(0, 0, 0)
-    pdf.ln(2)
+    pdf.ln(1)
 
-    # ── Legenda de cores ──────────────────────────────────────────────────
-    pdf.set_font("Arial", "", 7.5)
-    pdf.set_fill_color(254, 226, 226)
-    pdf.cell(4, 4, "", border=1, fill=True)
-    pdf.cell(2, 4, "")
-    pdf.cell(0, 4, limpar_texto("Alerta clinico (palavras-chave criticas)"), ln=0)
-    pdf.ln(5)
-    pdf.set_fill_color(254, 243, 199)
-    pdf.cell(4, 4, "", border=1, fill=True)
-    pdf.cell(2, 4, "")
-    pdf.cell(0, 4, limpar_texto("Borg >= 7 (esforco percebido muito alto)"), ln=0)
-    pdf.ln(6)
-
-    # ── Definição das colunas (paisagem A4 = 277mm úteis, margem 10mm) ────
-    colunas = [
-        ("!",              5),
-        ("Nome",          46),
-        ("Turma",         24),
-        ("Patologias / Saude", 58),
-        ("Restricoes Fisicas", 36),
-        ("Alergias",      28),
-        ("Incomodos",     30),
-        ("Medicamentos",  38),
-        ("Borg",          10),
-    ]
-    chaves = [
-        "🔴", "Nome", "Turma", "Patologias",
-        "Restrições", "Alergias", "Incômodos", "Medicamentos", "Borg/Risco",
-    ]
+    # ── Legenda de cores (linha compacta) ─────────────────────────────────
+    pdf.set_font("Arial", "", 7)
+    pdf.set_fill_color(254, 226, 226); pdf.cell(4, 3.5, "", border=1, fill=True)
+    pdf.cell(1, 3.5, ""); pdf.cell(46, 3.5, limpar_texto("Alerta clinico (palavras-chave criticas)"))
+    pdf.set_fill_color(254, 243, 199); pdf.cell(4, 3.5, "", border=1, fill=True)
+    pdf.cell(1, 3.5, ""); pdf.cell(46, 3.5, limpar_texto("Borg >= 7 (esforco percebido alto)"))
+    pdf.set_fill_color(230, 255, 237); pdf.cell(4, 3.5, "", border=1, fill=True)
+    pdf.cell(1, 3.5, ""); pdf.cell(0,  3.5, limpar_texto("Sem alerta"), ln=1)
+    pdf.ln(1.5)
 
     # ── Cabeçalho da tabela ───────────────────────────────────────────────
     pdf.set_font("Arial", "B", 7.5)
     pdf.set_fill_color(10, 37, 64)
     pdf.set_text_color(255, 255, 255)
-    for (label, w) in colunas:
+    for label, w in COLUNAS:
         pdf.cell(w, 6, limpar_texto(label), border=1, fill=True, align="C")
     pdf.ln()
     pdf.set_text_color(0, 0, 0)
 
-    # ── Linhas de dados ───────────────────────────────────────────────────
-    pdf.set_font("Arial", "", 7)
-    row_h = 5.5
-
+    # ── Linhas de dados com multi_cell ────────────────────────────────────
+    zebra = False
     for _, row in df.iterrows():
-        tem_alerta_clin = str(row.get("🔴", "")) == "🔴"
-        borg_val = int(row.get("Borg/Risco", 0) or 0)
-        tem_borg_alto  = borg_val >= 7
+        tem_alerta = str(row.get("🔴", "")) == "🔴"
+        borg_val   = int(row.get("Borg/Risco", 0) or 0)
+        borg_alto  = borg_val >= 7
+
+        # Prepara textos
+        valores = []
+        for ch in CHAVES:
+            v = str(row.get(ch, "") or "").strip()
+            if ch == "🔴":
+                v = "!!!" if tem_alerta else ""
+            elif ch == "Borg/Risco":
+                v = str(borg_val) if borg_val > 0 else "-"
+            valores.append(limpar_texto(v))
+
+        # Altura da linha
+        h_linha = _altura_linha(pdf, valores, fonte_sz=7)
+        h_linha = max(h_linha, 4.5)
+
+        # Quebra de página antecipada
+        if pdf.get_y() + h_linha > pdf.page_break_trigger:
+            pdf.add_page()
+            pdf.set_font("Arial", "B", 7.5)
+            pdf.set_fill_color(10, 37, 64)
+            pdf.set_text_color(255, 255, 255)
+            for label, w in COLUNAS:
+                pdf.cell(w, 6, limpar_texto(label), border=1, fill=True, align="C")
+            pdf.ln()
+            pdf.set_text_color(0, 0, 0)
+            zebra = False
 
         # Cor de fundo
-        if tem_alerta_clin:
-            pdf.set_fill_color(254, 226, 226)   # vermelho-claro
-        elif tem_borg_alto:
-            pdf.set_fill_color(254, 243, 199)   # laranja-claro
+        if tem_alerta:
+            pdf.set_fill_color(254, 226, 226)
+        elif borg_alto:
+            pdf.set_fill_color(254, 243, 199)
+        elif zebra:
+            pdf.set_fill_color(245, 247, 250)
         else:
-            pdf.set_fill_color(255, 255, 255)   # branco
+            pdf.set_fill_color(255, 255, 255)
+        zebra = not zebra
+        fill = True
 
-        fill = tem_alerta_clin or tem_borg_alto
+        x_ini = pdf.get_x()
+        y_ini = pdf.get_y()
 
-        # Monta os textos de cada célula
-        valores = []
-        for ch in chaves:
-            v = str(row.get(ch, "") or "")
-            if ch == "🔴":
-                v = "!!!" if v == "🔴" else ""
-            elif ch == "Borg/Risco":
-                v = str(borg_val) if borg_val > 0 else "—"
-            valores.append(v)
-
-        # Verifica se alguma célula vai quebrar linha (multi_cell)
-        # Para simplicidade usamos cell com truncagem manual
-        for i, ((_label, w), texto) in enumerate(zip(colunas, valores)):
+        # Desenha células com multi_cell simulado via get_x/set_xy
+        for i, ((_, w), texto) in enumerate(zip(COLUNAS, valores)):
             align = "C" if i in (0, 8) else "L"
-            # Trunca o texto para caber sem quebrar
-            max_chars = max(1, int(w / 1.7))
-            texto_curto = limpar_texto(texto[:max_chars])
-            pdf.cell(w, row_h, texto_curto, border=1, fill=fill, align=align)
+            pdf.set_xy(x_ini, y_ini)
+            pdf.rect(x_ini, y_ini, w, h_linha, style="D" if not fill else "FD")
+            if align == "C" or len(texto) <= max(1, int(w / 2.2)):
+                # texto curto: centraliza verticalmente
+                pdf.set_xy(x_ini + 1, y_ini + (h_linha - 4) / 2)
+                pdf.set_font("Arial", "", 7)
+                pdf.cell(w - 2, 4, texto[:max(1, int(w / 1.9))], align=align)
+            else:
+                # texto longo: multi_cell alinhado ao topo
+                pdf.set_xy(x_ini + 1, y_ini + 0.5)
+                pdf.set_font("Arial", "", 6.5)
+                pdf.multi_cell(w - 2, 4, texto, align="L")
+            x_ini += w
 
-        pdf.ln()
+        pdf.set_xy(pdf.l_margin, y_ini + h_linha)
 
-    # ── Totalizadores ─────────────────────────────────────────────────────
-    pdf.ln(3)
-    total_alertas  = int((df["🔴"] == "🔴").sum()) if "🔴" in df.columns else 0
-    total_borg_alt = int((df["Borg/Risco"].fillna(0).astype(int) >= 7).sum()) if "Borg/Risco" in df.columns else 0
+    # ── Rodapé de totalizadores ───────────────────────────────────────────
+    pdf.ln(2)
+    pdf.set_draw_color(0, 86, 179)
+    pdf.set_line_width(0.4)
+    pdf.line(pdf.l_margin, pdf.get_y(), pdf.l_margin + TOTAL_W, pdf.get_y())
+    pdf.set_line_width(0.2); pdf.set_draw_color(0,0,0)
+    pdf.ln(2)
 
     pdf.set_font("Arial", "B", 8)
     pdf.set_text_color(153, 27, 27)
     pdf.cell(0, 5, limpar_texto(
-        f"Resumo: {len(df)} alunos  |  "
+        f"Resumo: {len(df)} alunos monitorados  |  "
         f"{total_alertas} com alerta clinico  |  "
         f"{total_borg_alt} com Borg >= 7"
     ), ln=1)
-    pdf.set_text_color(0, 0, 0)
-    pdf.set_font("Arial", "I", 7)
+    pdf.set_text_color(100, 116, 139)
+    pdf.set_font("Arial", "I", 6.5)
     pdf.cell(0, 4, limpar_texto(
-        "Documento confidencial. Proibida a reproducao ou divulgacao sem autorizacao da coordenacao tecnica."
+        "Documento confidencial — uso restrito a equipe tecnica. "
+        "Proibida reproducao ou divulgacao sem autorizacao da coordenacao."
     ), ln=1)
 
     # ── Saída ─────────────────────────────────────────────────────────────
