@@ -1564,13 +1564,13 @@ def tela_relatorio():
 
     tab_f, tab_id, tab_a, tab_w, tab_diario, tab_sem_av, tab_clinico = st.tabs(
         [
-            "📊 Planilha de Frequência",
-            "🪪 Relatório Cara-Crachá",
-            "🔎 Auditoria de Cadastros",
-            "🏆 Prestação de Conta Pedagógica",
+            "📊 Plan. Frequência",
+            "🪪 Cara-Crachá",
+            "🔎 Auditoria",
+            "🏆 Prestação Pedagógica",
             "📋 Prestação Diária",
-            "🧪 Avaliações Pendentes",
-            "🏥 Monitoramento Clínico",
+            "🧪 Avaliações",
+            "🏥 Monitoramento",
         ]
     )
 
