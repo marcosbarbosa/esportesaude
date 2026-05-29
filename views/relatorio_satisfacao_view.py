@@ -408,25 +408,24 @@ def tela_relatorio_prime_satisfacao():
         df_com = _filtrar_comentarios(_df_com_raw)
 
         # ── BOTÃO DE IMPRESSÃO NO TOPO ────────────────────────────────────────
-        _btn_col, _ = st.columns([1, 4])
+        _btn_col, _info_col = st.columns([1, 3])
         with _btn_col:
-            if st.button("🖨️ Gerar Relatório PDF", key="btn_print_top", use_container_width=True, type="primary"):
-                _html_rel = _gerar_html_print(
-                    df_filtrado, trimestre_sel, ano_sel,
-                    tx_exc, tx_dor, tx_ene, tx_imp, df_com
-                )
-                _html_escaped = _html_rel.replace("\\", "\\\\").replace("`", "\\`")
-                st.components.v1.html(
-                    f"""<script>
-                    var w = window.open('', '_blank');
-                    w.document.open();
-                    w.document.write(`{_html_escaped}`);
-                    w.document.close();
-                    w.focus();
-                    setTimeout(function(){{ w.print(); }}, 800);
-                    </script>""",
-                    height=0,
-                )
+            _html_rel = _gerar_html_print(
+                df_filtrado, trimestre_sel, ano_sel,
+                tx_exc, tx_dor, tx_ene, tx_imp, df_com
+            )
+            _nome_arquivo = f"Relatorio_Satisfacao_{trimestre_sel.replace(' ','_').replace('º','o')}_{ano_sel}.html"
+            st.download_button(
+                label="🖨️ Baixar Relatório (PDF)",
+                data=_html_rel.encode("utf-8"),
+                file_name=_nome_arquivo,
+                mime="text/html",
+                key="btn_download_relatorio",
+                use_container_width=True,
+                type="primary",
+            )
+        with _info_col:
+            st.caption("💡 Baixe o arquivo → abra no navegador → pressione **Ctrl+P** (ou ⌘P no Mac) → Salvar como PDF. O relatório já abre com o botão de impressão no topo.")
 
         st.markdown("<hr style='margin:8px 0;'>", unsafe_allow_html=True)
 
