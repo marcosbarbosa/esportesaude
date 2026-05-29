@@ -66,8 +66,50 @@ def _filtrar_comentarios(df_com: "pd.DataFrame") -> "pd.DataFrame":
 # =============================================================================
 # 🖨️ GERADOR DE HTML PARA IMPRESSÃO EM NOVA JANELA
 # =============================================================================
+def _gerar_graficos_b64(df_filtrado):
+    """Gera os 4 gráficos de pizza como PNG base64 via Kaleido."""
+    import base64
+    mapa = {"Positivo (Excelente)": "#10B981", "Neutro (Mediano)": "#F59E0B", "Atenção (Melhoria)": "#EF4444"}
+    _layout = dict(
+        margin=dict(t=36, b=8, l=8, r=8),
+        font_size=8,
+        legend=dict(font_size=7, orientation="h", y=-0.15),
+        title_font_size=9,
+        paper_bgcolor="white",
+        plot_bgcolor="white",
+    )
+    resultado = {}
+    pares = [
+        ("Sentimento_Q4", "1. Qualidade dos Professores"),
+        ("Sentimento_Q2", "2. Melhora nas Dores"),
+        ("Sentimento_Q1", "3. Disposição e Energia"),
+        ("Sentimento_Q3", "4. Impacto na Vida"),
+    ]
+    for col, titulo in pares:
+        try:
+            if col not in df_filtrado.columns:
+                continue
+            cnt = df_filtrado[col].value_counts().reset_index()
+            cnt.columns = ["Sentimento", "Votos"]
+            cnt = cnt[cnt["Sentimento"] != "Sem Classificação"]
+            if cnt.empty:
+                continue
+            fig = px.pie(
+                cnt, values="Votos", names="Sentimento", hole=0.52,
+                title=titulo, color="Sentimento", color_discrete_map=mapa,
+            )
+            fig.update_traces(textposition="inside", textinfo="percent")
+            fig.update_layout(**_layout)
+            png = fig.to_image(format="png", width=310, height=230, scale=2)
+            resultado[col] = base64.b64encode(png).decode("utf-8")
+        except Exception:
+            pass
+    return resultado
+
+
 def _gerar_html_print(df_filtrado, trimestre_sel, ano_sel,
-                       tx_exc, tx_dor, tx_ene, tx_imp, df_com_print):
+                       tx_exc, tx_dor, tx_ene, tx_imp, df_com_print,
+                       graficos_b64=None):
     agora = datetime.datetime.now().strftime("%d/%m/%Y às %H:%M")
     try:
         from utils.identidade import get_config as _gcfg, get_logo_data_url as _gld
@@ -85,6 +127,21 @@ def _gerar_html_print(df_filtrado, trimestre_sel, ano_sel,
     )
 
     n_resp = len(df_filtrado)
+    graficos_b64 = graficos_b64 or {}
+
+    def _img_tag(gb, col, titulo):
+        b64 = gb.get(col)
+        if b64:
+            return (
+                f"<div style='flex:1;text-align:center;'>"
+                f"<img src='data:image/png;base64,{b64}' "
+                f"style='width:100%;max-width:280px;height:auto;'></div>"
+            )
+        return (
+            f"<div style='flex:1;text-align:center;border:1px dashed #CBD5E1;"
+            f"border-radius:6px;padding:20px 8px;font-size:7.5pt;color:#94A3B8;'>"
+            f"{titulo}</div>"
+        )
 
     def _sent_tabela(col):
         if col not in df_filtrado.columns:
@@ -211,6 +268,14 @@ def _gerar_html_print(df_filtrado, trimestre_sel, ano_sel,
     </div>
   </div>
 
+  <div class="section-title">Análise Gráfica</div>
+  <div style="display:flex;gap:8px;margin-bottom:14px;">
+    {_img_tag(graficos_b64, "Sentimento_Q4", "1. Qualidade dos Professores")}
+    {_img_tag(graficos_b64, "Sentimento_Q2", "2. Melhora nas Dores")}
+    {_img_tag(graficos_b64, "Sentimento_Q1", "3. Disposição e Energia")}
+    {_img_tag(graficos_b64, "Sentimento_Q3", "4. Impacto na Vida")}
+  </div>
+
   <div class="section-title">Análise Detalhada por Indicador</div>
   <div class="tabelas-row">
     <div>{_mini_tabela("1. Qualidade dos Professores", tbl_q4)}</div>
@@ -227,6 +292,24 @@ def _gerar_html_print(df_filtrado, trimestre_sel, ano_sel,
 </body>
 </html>"""
     return html
+
+
+def _gerar_pdf_bytes(html: str) -> bytes | None:
+    """Converte o HTML do relatório em PDF via xhtml2pdf. Retorna None se falhar."""
+    if not _XHTML_SAT:
+        return None
+    try:
+        buf = io.BytesIO()
+        status = pisa.CreatePDF(
+            src=html.encode("utf-8"),
+            dest=buf,
+            encoding="utf-8",
+        )
+        if status.err:
+            return None
+        return buf.getvalue()
+    except Exception:
+        return None
 
 
 def gerar_documento_word(df, periodo, ano, tx_exc, tx_dor, tx_ene, tx_imp):
@@ -407,25 +490,43 @@ def tela_relatorio_prime_satisfacao():
         )
         df_com = _filtrar_comentarios(_df_com_raw)
 
-        # ── BOTÃO DE IMPRESSÃO NO TOPO ────────────────────────────────────────
-        _btn_col, _info_col = st.columns([1, 3])
-        with _btn_col:
-            _html_rel = _gerar_html_print(
-                df_filtrado, trimestre_sel, ano_sel,
-                tx_exc, tx_dor, tx_ene, tx_imp, df_com
-            )
-            _nome_arquivo = f"Relatorio_Satisfacao_{trimestre_sel.replace(' ','_').replace('º','o')}_{ano_sel}.html"
+        # ── BOTÕES DE DOWNLOAD NO TOPO ────────────────────────────────────────
+        with st.spinner("⏳ Gerando gráficos..."):
+            _graficos_b64 = _gerar_graficos_b64(df_filtrado)
+
+        _html_rel = _gerar_html_print(
+            df_filtrado, trimestre_sel, ano_sel,
+            tx_exc, tx_dor, tx_ene, tx_imp, df_com,
+            graficos_b64=_graficos_b64,
+        )
+        _base_nome = f"Relatorio_Satisfacao_{trimestre_sel.replace(' ','_').replace('º','o')}_{ano_sel}"
+
+        _col_pdf, _col_html, _col_info = st.columns([1, 1, 3])
+        with _col_pdf:
+            _pdf_bytes = _gerar_pdf_bytes(_html_rel)
+            if _pdf_bytes:
+                st.download_button(
+                    label="📄 Baixar PDF",
+                    data=_pdf_bytes,
+                    file_name=f"{_base_nome}.pdf",
+                    mime="application/pdf",
+                    key="btn_download_pdf",
+                    use_container_width=True,
+                    type="primary",
+                )
+            else:
+                st.warning("PDF indisponível — use HTML")
+        with _col_html:
             st.download_button(
-                label="🖨️ Baixar Relatório (PDF)",
+                label="🌐 Baixar HTML",
                 data=_html_rel.encode("utf-8"),
-                file_name=_nome_arquivo,
+                file_name=f"{_base_nome}.html",
                 mime="text/html",
-                key="btn_download_relatorio",
+                key="btn_download_html",
                 use_container_width=True,
-                type="primary",
             )
-        with _info_col:
-            st.caption("💡 Baixe o arquivo → abra no navegador → pressione **Ctrl+P** (ou ⌘P no Mac) → Salvar como PDF. O relatório já abre com o botão de impressão no topo.")
+        with _col_info:
+            st.caption("📄 **PDF** — pronto para abrir e compartilhar direto.   🌐 **HTML** — abra no navegador e pressione **Ctrl+P** → Salvar como PDF para máxima qualidade.")
 
         st.markdown("<hr style='margin:8px 0;'>", unsafe_allow_html=True)
 
