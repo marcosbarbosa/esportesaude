@@ -1605,16 +1605,17 @@ def _renderizar_monitoramento_clinico():
         borg_atual = st.session_state.get(borg_key, 0)
 
         registros.append({
-            "id":         str(r["id"]),
-            "🔴":         "🔴" if alerta else "",
-            "Nome":       str(r.get("nome", "")),
-            "Turma":      str(r.get("turma") or ""),
-            "Patologias": patologias[:120],
-            "Restrições": restricoes[:80],
-            "Alergias":   alergias[:60],
-            "Incômodos":  incomodos[:60],
-            "Medicamentos": medicament[:80],
-            "Borg/Risco": borg_atual,
+            "id":             str(r["id"]),
+            "🔴":             "🔴" if alerta else "",
+            "Nome":           str(r.get("nome", "")),
+            "Turma":          str(r.get("turma") or ""),
+            "Patologias":     patologias[:120],
+            "Restrições":     restricoes[:80],
+            "Alergias":       alergias[:60],
+            "Incômodos":      incomodos[:60],
+            "Medicamentos":   medicament[:80],
+            "Ct. Emergência": str(r.get("contato_emergencia", "") or "")[:100],
+            "Borg/Risco":     borg_atual,
         })
 
     df_monitor = pd.DataFrame(registros)
@@ -1643,16 +1644,18 @@ def _renderizar_monitoramento_clinico():
     st.markdown(f"**{len(df_monitor)} aluno(s) exibidos** — edite a coluna **Borg/Risco** (0–10) e clique em 💾 Salvar:")
 
     col_config = {
-        "id":           st.column_config.NumberColumn("ID", disabled=True, width="small"),
-        "🔴":           st.column_config.TextColumn("⚠️", width="small"),
-        "Nome":         st.column_config.TextColumn("Nome", disabled=True, width="medium"),
-        "Turma":        st.column_config.TextColumn("Turma", disabled=True, width="small"),
-        "Patologias":   st.column_config.TextColumn("Patologias / Saúde", disabled=True, width="large"),
-        "Restrições":   st.column_config.TextColumn("Restrições Físicas", disabled=True, width="medium"),
-        "Alergias":     st.column_config.TextColumn("Alergias", disabled=True, width="medium"),
-        "Incômodos":    st.column_config.TextColumn("Incômodos", disabled=True, width="medium"),
-        "Medicamentos": st.column_config.TextColumn("Medicamentos", disabled=True, width="medium"),
-        "Borg/Risco":   st.column_config.NumberColumn(
+        "id":               st.column_config.NumberColumn("ID", disabled=True, width="small"),
+        "🔴":               st.column_config.TextColumn("⚠️", width="small"),
+        "Nome":             st.column_config.TextColumn("Nome", disabled=True, width="medium"),
+        "Turma":            st.column_config.TextColumn("Turma", disabled=True, width="small"),
+        "Patologias":       st.column_config.TextColumn("Patologias / Saúde", disabled=True, width="large"),
+        "Restrições":       st.column_config.TextColumn("Restrições Físicas", disabled=True, width="medium"),
+        "Alergias":         st.column_config.TextColumn("Alergias", disabled=True, width="medium"),
+        "Incômodos":        st.column_config.TextColumn("Incômodos", disabled=True, width="medium"),
+        "Medicamentos":     st.column_config.TextColumn("Medicamentos", disabled=True, width="medium"),
+        "Ct. Emergência":   st.column_config.TextColumn("🚨 Ct. Emergência", disabled=True, width="medium",
+                                help="Contato de emergência — Nome e Telefone cadastrados na ficha do aluno"),
+        "Borg/Risco":       st.column_config.NumberColumn(
             "Borg / Risco (0–10)", min_value=0, max_value=10, step=1, width="small",
             help="0 = sem risco  ·  10 = emergência",
         ),
@@ -1707,6 +1710,30 @@ def _renderizar_monitoramento_clinico():
     _n_borg7   = int((df_editado["Borg/Risco"].fillna(0).astype(int) >= 7).sum())
 
     # Linhas da tabela HTML
+    def _wa_emergencia_html(contato: str) -> str:
+        """Retorna célula HTML com contato de emergência e link WhatsApp se detectar número."""
+        if not contato or contato in ("nan", "None", "—", ""):
+            return "<span style='color:#94A3B8;font-size:9px;'>Não informado</span>"
+        # Tenta extrair número de telefone (sequências de 8–13 dígitos)
+        grupos = re.findall(r"\d{8,13}", contato)
+        wa_url = None
+        if grupos:
+            phone = grupos[-1]
+            if len(phone) <= 11:
+                phone = "55" + phone
+            wa_url = f"https://wa.me/{phone}"
+        # Exibe contato completo; se tiver número, adiciona botão wa.me
+        texto_exib = contato[:60] + ("…" if len(contato) > 60 else "")
+        if wa_url:
+            return (
+                f"<span style='font-size:9px;display:block;'>{texto_exib}</span>"
+                f"<a href='{wa_url}' target='_blank' "
+                f"style='font-size:9px;color:#fff;background:#25D366;padding:1px 6px;"
+                f"border-radius:8px;text-decoration:none;font-weight:700;"
+                f"display:inline-block;margin-top:2px;'>📲 WhatsApp</a>"
+            )
+        return f"<span style='font-size:9px;'>{texto_exib}</span>"
+
     _linhas_html = ""
     for _zi, (_, _row) in enumerate(df_editado.iterrows()):
         _alerta = str(_row.get("🔴", "")) == "🔴"
@@ -1720,8 +1747,9 @@ def _renderizar_monitoramento_clinico():
             _bg = "background:#F5F7FA;"
         else:
             _bg = "background:#FFFFFF;"
-        _icone = "🔴" if _alerta else ""
+        _icone    = "🔴" if _alerta else ""
         _borg_txt = str(_bv) if _bv > 0 else "—"
+        _ct_em_html = _wa_emergencia_html(str(_row.get("Ct. Emergência", "") or ""))
         _linhas_html += (
             f"<tr style='{_bg}'>"
             f"<td style='text-align:center;padding:3px 4px;border:1px solid #CBD5E1;font-size:10px;'>{_icone}</td>"
@@ -1732,6 +1760,7 @@ def _renderizar_monitoramento_clinico():
             f"<td style='padding:3px 4px;border:1px solid #CBD5E1;font-size:9.5px;'>{_row.get('Alergias','')}</td>"
             f"<td style='padding:3px 4px;border:1px solid #CBD5E1;font-size:9.5px;'>{_row.get('Incômodos','')}</td>"
             f"<td style='padding:3px 4px;border:1px solid #CBD5E1;font-size:9.5px;'>{_row.get('Medicamentos','')}</td>"
+            f"<td style='padding:3px 4px;border:1px solid #CBD5E1;font-size:9.5px;'>{_ct_em_html}</td>"
             f"<td style='text-align:center;padding:3px 4px;border:1px solid #CBD5E1;font-size:10px;font-weight:700;"
             f"color:{'#991B1B' if _borg7 else '#0A2540'};'>{_borg_txt}</td>"
             f"</tr>"
@@ -1765,13 +1794,14 @@ def _renderizar_monitoramento_clinico():
         <thead>
           <tr style="background:#0A2540;color:#fff;">
             <th style="padding:4px 3px;font-size:9.5px;border:1px solid #1E3A5F;width:3%;">⚠️</th>
-            <th style="padding:4px 5px;font-size:9.5px;border:1px solid #1E3A5F;text-align:left;width:16%;">Nome</th>
-            <th style="padding:4px 4px;font-size:9.5px;border:1px solid #1E3A5F;width:8%;">Turma</th>
-            <th style="padding:4px 5px;font-size:9.5px;border:1px solid #1E3A5F;text-align:left;width:22%;">Patologias / Saúde</th>
-            <th style="padding:4px 4px;font-size:9.5px;border:1px solid #1E3A5F;text-align:left;width:13%;">Restrições</th>
-            <th style="padding:4px 4px;font-size:9.5px;border:1px solid #1E3A5F;text-align:left;width:9%;">Alergias</th>
-            <th style="padding:4px 4px;font-size:9.5px;border:1px solid #1E3A5F;text-align:left;width:10%;">Incômodos</th>
-            <th style="padding:4px 4px;font-size:9.5px;border:1px solid #1E3A5F;text-align:left;width:14%;">Medicamentos</th>
+            <th style="padding:4px 5px;font-size:9.5px;border:1px solid #1E3A5F;text-align:left;width:14%;">Nome</th>
+            <th style="padding:4px 4px;font-size:9.5px;border:1px solid #1E3A5F;width:7%;">Turma</th>
+            <th style="padding:4px 5px;font-size:9.5px;border:1px solid #1E3A5F;text-align:left;width:18%;">Patologias / Saúde</th>
+            <th style="padding:4px 4px;font-size:9.5px;border:1px solid #1E3A5F;text-align:left;width:10%;">Restrições</th>
+            <th style="padding:4px 4px;font-size:9.5px;border:1px solid #1E3A5F;text-align:left;width:7%;">Alergias</th>
+            <th style="padding:4px 4px;font-size:9.5px;border:1px solid #1E3A5F;text-align:left;width:8%;">Incômodos</th>
+            <th style="padding:4px 4px;font-size:9.5px;border:1px solid #1E3A5F;text-align:left;width:11%;">Medicamentos</th>
+            <th style="padding:4px 4px;font-size:9.5px;border:1px solid #1E3A5F;text-align:left;width:17%;">🚨 Ct. Emergência</th>
             <th style="padding:4px 3px;font-size:9.5px;border:1px solid #1E3A5F;width:5%;">Borg</th>
           </tr>
         </thead>

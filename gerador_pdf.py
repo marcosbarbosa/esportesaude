@@ -874,16 +874,18 @@ def gerar_pdf_monitoramento_clinico(df, turma_filtro="Todas as Turmas"):
     # ── widths (paisagem A4 útil ≈ 277 mm com margens 10+10) ──────────────
     COLUNAS = [
         ("!",                   5),
-        ("Nome",               48),
-        ("Turma",              22),
-        ("Patologias / Saude", 62),
-        ("Restricoes",         36),
-        ("Alergias",           26),
-        ("Incomodos",          28),
-        ("Medicamentos",       38),
-        ("Borg",               12),
+        ("Nome",               44),
+        ("Turma",              20),
+        ("Patologias / Saude", 52),
+        ("Restricoes",         27),
+        ("Alergias",           20),
+        ("Incomodos",          21),
+        ("Medicamentos",       29),
+        ("Ct. Emergencia",     41),
+        ("Borg",               18),
     ]
-    CHAVES = ["🔴","Nome","Turma","Patologias","Restrições","Alergias","Incômodos","Medicamentos","Borg/Risco"]
+    # Total: 5+44+20+52+27+20+21+29+41+18 = 277 mm (A4 landscape útil)
+    CHAVES = ["🔴","Nome","Turma","Patologias","Restrições","Alergias","Incômodos","Medicamentos","Ct. Emergência","Borg/Risco"]
     TOTAL_W = sum(w for _, w in COLUNAS)   # 277 mm
 
     def _linhas(pdf, texto, largura, fonte_sz=7):
@@ -993,7 +995,7 @@ def gerar_pdf_monitoramento_clinico(df, turma_filtro="Todas as Turmas"):
 
         # Desenha células com multi_cell simulado via get_x/set_xy
         for i, ((_, w), texto) in enumerate(zip(COLUNAS, valores)):
-            align = "C" if i in (0, 8) else "L"
+            align = "C" if i in (0, 9) else "L"  # 0=!, 9=Borg
             pdf.set_xy(x_ini, y_ini)
             pdf.rect(x_ini, y_ini, w, h_linha, style="D" if not fill else "FD")
             if align == "C" or len(texto) <= max(1, int(w / 2.2)):
