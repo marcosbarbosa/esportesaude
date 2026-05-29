@@ -70,22 +70,8 @@ def carregar_dados_crm_avaliacoes_senior():
         )
         df_av = pd.DataFrame(res_av.data)
 
-        # Paginação completa — sem limite de 50.000 registros
-        _freq_rows = []
-        _freq_offset = 0
-        while True:
-            _batch = (
-                supabase.from_("frequencia")
-                .select("aluno_id, status, data_aula")
-                .range(_freq_offset, _freq_offset + 9999)
-                .execute()
-            )
-            if _batch.data:
-                _freq_rows.extend(_batch.data)
-            if not _batch.data or len(_batch.data) < 10000:
-                break
-            _freq_offset += 10000
-        df_f_bruto = pd.DataFrame(_freq_rows) if _freq_rows else pd.DataFrame(columns=["aluno_id","status","data_aula"])
+        res_freq = supabase.from_("frequencia").select("aluno_id, status, data_aula").limit(200000).execute()
+        df_f_bruto = pd.DataFrame(res_freq.data) if res_freq.data else pd.DataFrame(columns=["aluno_id","status","data_aula"])
         if not df_f_bruto.empty and "data_aula" in df_f_bruto.columns:
             df_f_bruto["data_aula"] = pd.to_datetime(df_f_bruto["data_aula"], errors="coerce")
         # guarda cópia limpa com datas para uso nos filtros de período
