@@ -1352,19 +1352,24 @@ def get_presentes_periodo_todos(data_ini: str, data_fim: str) -> dict:
     """
     Retorna dict { 'YYYY-MM-DD': ['Nome1', 'Nome2', ...] } para todos os dias
     com pelo menos 1 presente no intervalo [data_ini, data_fim].
-    Usa paginação por .range() para contornar o limite de 1000 linhas
-    que o servidor Supabase impõe independentemente do .limit() do cliente.
-    Ordenado cronologicamente por data, nomes em ordem alfabética por dia.
+
+    Estratégia em 2 passos para garantir paginação correta:
+      1. Pagina 'frequencia' SEM join (só data_aula + aluno_id) — igual a
+         bi_presencas_periodo, que já é comprovadamente correto.
+      2. Busca nomes dos alunos por aluno_id em lote separado.
+    O .range() com join embutido (alunos(nome)) para na 1ª página de 1000
+    independentemente do loop — por isso a abordagem sem join é necessária.
     """
     try:
+        # ── Passo 1: buscar todos os registros PRESENTE com paginação ────────
         PAGE        = 1000
-        MAX_PAGINAS = 50          # guarda: máximo 50.000 registros
-        todos: list = []
+        MAX_PAGINAS = 50        # máx 50.000 registros
+        registros   = []
         offset      = 0
         for _ in range(MAX_PAGINAS):
             res = (
                 supabase.from_("frequencia")
-                .select("data_aula, alunos(nome)")
+                .select("data_aula, aluno_id")
                 .gte("data_aula", data_ini)
                 .lte("data_aula", data_fim)
                 .eq("status", "PRESENTE")
@@ -1373,19 +1378,38 @@ def get_presentes_periodo_todos(data_ini: str, data_fim: str) -> dict:
                 .execute()
             )
             lote = res.data or []
-            todos.extend(lote)
+            registros.extend(lote)
             if len(lote) < PAGE:
-                break          # última página → fim dos dados
+                break
             offset += PAGE
 
+        if not registros:
+            return {}
+
+        # ── Passo 2: buscar nomes dos alunos em lote ────────────────────────
+        aluno_ids = list({r["aluno_id"] for r in registros if r.get("aluno_id")})
+        nomes_map: dict = {}
+        CHUNK = 500
+        for i in range(0, len(aluno_ids), CHUNK):
+            chunk = aluno_ids[i : i + CHUNK]
+            res_n = (
+                supabase.from_("alunos")
+                .select("id, nome")
+                .in_("id", chunk)
+                .execute()
+            )
+            for a in (res_n.data or []):
+                nomes_map[a["id"]] = (a.get("nome") or "").strip()
+
+        # ── Passo 3: montar dict por dia ─────────────────────────────────────
         por_dia: dict = {}
-        for r in todos:
-            data = str(r.get("data_aula", "")).strip()
-            nome = (r.get("alunos") or {}).get("nome", "")
+        for r in registros:
+            data  = str(r.get("data_aula", "")).strip()
+            nome  = nomes_map.get(r.get("aluno_id"), "")
             if not data or not nome:
                 continue
-            por_dia.setdefault(data, set()).add(nome.strip())
-        # Converte para listas ordenadas, dict ordenado por data
+            por_dia.setdefault(data, set()).add(nome)
+
         return {
             d: sorted(por_dia[d])
             for d in sorted(por_dia)
