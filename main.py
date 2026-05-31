@@ -390,6 +390,32 @@ def inicializar_sessao():
 
 inicializar_sessao()
 
+
+def _ebi_base_url():
+    """URL pública do app (https://host) para montar links acionáveis no e-mail."""
+    try:
+        h = st.context.headers.get("host", "")
+        if h:
+            return f"https://{h}"
+    except Exception:
+        pass
+    return ""
+
+
+# ── Deep-link interno: links acionáveis vindos do Email BI ────────────────────
+# (?ir=freq&d=YYYY-MM-DD  → tela de Frequência | ?ir=ficha&id=<id> → ficha do aluno)
+_ir_dl = st.query_params.get("ir")
+if _ir_dl in ("freq", "ficha") and "_pending_deeplink" not in st.session_state:
+    st.session_state["_pending_deeplink"] = {
+        "ir": _ir_dl,
+        "d": st.query_params.get("d", ""),
+        "id": st.query_params.get("id", ""),
+    }
+    try:
+        st.query_params.clear()
+    except Exception:
+        pass
+
 if st.session_state.usuario_logado:
     if time.time() - st.session_state.ultimo_acesso > 28800:
         st.session_state.clear()
@@ -397,6 +423,35 @@ if st.session_state.usuario_logado:
         st.rerun()
 
     st.session_state.ultimo_acesso = time.time()
+
+    # ── Aplica deep-link interno após autenticação ─────────────────────────
+    _dl = st.session_state.pop("_pending_deeplink", None)
+    if _dl:
+        if _dl.get("ir") == "freq":
+            st.session_state.menu_atual = "Frequência"
+            _d_dl = _dl.get("d", "")
+            if _d_dl:
+                try:
+                    st.session_state["_freq_data_alvo"] = datetime.date.fromisoformat(_d_dl[:10])
+                except Exception:
+                    pass
+            st.rerun()
+        elif _dl.get("ir") == "ficha" and _dl.get("id"):
+            try:
+                from database import buscar_aluno_por_id
+                _al_dl = buscar_aluno_por_id(_dl["id"])
+            except Exception:
+                _al_dl = None
+            if _al_dl:
+                st.session_state.aluno_prontuario = _al_dl
+                st.session_state.origem_prontuario = "Principal"
+                st.session_state.menu_atual = "Portal do Aluno"
+            else:
+                st.session_state["_deeplink_erro"] = "⚠️ Aluno do link não encontrado."
+            st.rerun()
+
+    if st.session_state.get("_deeplink_erro"):
+        st.warning(st.session_state.pop("_deeplink_erro"))
 
     # ── Email BI: verificação de envio agendado (1x por sessão) ────────────
     if not st.session_state.get("_ebi_checado"):
@@ -421,7 +476,7 @@ if st.session_state.usuario_logado:
             if _devido:
                 from utils.identidade import get_config as _gid_ebi
                 _nome_org_ebi = _gid_ebi().get("nome_organizacao", "Instituto Muda Brasil")
-                _ok_ebi, _ = enviar_relatorio_bi(_ebi_cfg, _nome_org_ebi)
+                _ok_ebi, _ = enviar_relatorio_bi(_ebi_cfg, _nome_org_ebi, _ebi_base_url())
                 if _ok_ebi:
                     verificar_e_marcar_envio_realizado(_ebi_cfg)
         except Exception:
@@ -895,6 +950,13 @@ def _tela_email_bi():
         type="password", key="ebi_senha",
         help="Gere em myaccount.google.com → Segurança → Senhas de app.",
     )
+    base_url_cfg = st.text_input(
+        "🔗 URL pública do sistema (para os botões de ação do e-mail)",
+        value=cfg.get("base_url", ""),
+        placeholder="https://seusistema.onrender.com",
+        key="ebi_base_url_in",
+        help="Endereço público onde os diretores acessam o sistema. Usado para montar os links 'Lançar frequência' e 'Abrir ficha' no e-mail. Se vazio, o sistema tenta detectar automaticamente.",
+    )
 
     # ── Módulos do relatório ───────────────────────────────────────────────
     st.markdown("### 🧩 Módulos do Relatório")
@@ -946,6 +1008,7 @@ def _tela_email_bi():
             "ebi_mod_dias_sem_registro": "1" if mod_dias_sem else "0",
             "ebi_mod_aniversariantes": "1" if mod_aniver else "0",
             "ebi_assunto_extra": assunto_extra.strip(),
+            "ebi_base_url": base_url_cfg.strip().rstrip("/"),
             "ebi_proximo_envio": str(proximo),
         })
         st.success(f"✅ Configuração salva. Próximo envio agendado para {proximo.strftime('%d/%m/%Y')}.")
@@ -956,7 +1019,7 @@ def _tela_email_bi():
         nome_org = _gid().get("nome_organizacao", "Instituto Muda Brasil")
         cfg_envio = get_config_ebi()
         with st.spinner("Gerando e enviando relatório…"):
-            ok, msg = enviar_relatorio_bi(cfg_envio, nome_org)
+            ok, msg = enviar_relatorio_bi(cfg_envio, nome_org, _ebi_base_url())
         if ok:
             st.success(f"✅ {msg}")
         else:
@@ -975,10 +1038,11 @@ def _tela_email_bi():
             "mod_frequencia_turma": mod_freq_turma,
             "mod_dias_sem_registro": mod_dias_sem,
             "mod_aniversariantes": mod_aniver,
+            "base_url": base_url_cfg.strip().rstrip("/"),
         }
         if st.button("🔄 Gerar pré-visualização", key="ebi_preview_btn"):
             import streamlit.components.v1 as _stc_prev
-            html_prev = gerar_html_relatorio(cfg_prev, nome_org_prev)
+            html_prev = gerar_html_relatorio(cfg_prev, nome_org_prev, _ebi_base_url())
             _stc_prev.html(html_prev, height=700, scrolling=True)
 
 

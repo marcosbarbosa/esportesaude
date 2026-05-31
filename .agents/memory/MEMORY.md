@@ -1,0 +1,2 @@
+- [Email BI deep-links](email-bi-deeplinks.md) — relatórios acionáveis: `?ir=freq&d=` / `?ir=ficha&id=` abrem tela certa; sobrevivem ao login via session_state.
+- [Navegação interna IMBRA](navegacao-imbra.md) — `menu_atual` dirige telas; `?rota=` é só p/ rotas públicas sem login; `origem_prontuario` deve ser rota válida do menu.

@@ -59,6 +59,25 @@ def _tabela(cabecalhos: list, linhas: list, cores_alt: tuple = ("#FFFFFF", "#F8F
     )
 
 
+def _btn(url: str, label: str, cor: str = "#1D4ED8") -> str:
+    """Botão de ação que abre uma tela do sistema. Se não houver URL, mostra '—'."""
+    if not url:
+        return '<span style="color:#94A3B8;font-size:11px;">—</span>'
+    return (
+        f'<a href="{url}" style="background:{cor};color:white;padding:5px 12px;'
+        f'border-radius:6px;text-decoration:none;font-size:11px;font-weight:700;'
+        f'display:inline-block;white-space:nowrap;">{label}</a>'
+    )
+
+
+def _link_freq(base_url: str, data_iso: str) -> str:
+    return f"{base_url}/?ir=freq&d={data_iso}" if base_url else ""
+
+
+def _link_ficha(base_url: str, aluno_id: str) -> str:
+    return f"{base_url}/?ir=ficha&id={aluno_id}" if base_url else ""
+
+
 # ──────────────────────────────────────────────────────────────────────────────
 # MÓDULOS DE CONTEÚDO
 # ──────────────────────────────────────────────────────────────────────────────
@@ -94,7 +113,7 @@ def _bloco_executivo() -> str:
                         f"<p style='color:#94A3B8;font-size:12px;'>Dados indisponíveis: {e}</p>")
 
 
-def _bloco_evasao() -> str:
+def _bloco_evasao(base_url: str = "") -> str:
     try:
         from database import bi_alunos_risco_abandono
         df = bi_alunos_risco_abandono(dias=30)
@@ -114,9 +133,10 @@ def _bloco_evasao() -> str:
             wap      = str(a.get("whatsapp", "") or "")
             num      = formatar_whatsapp_numero(wap) if wap else None
             contato  = (
-                f'<a href="https://wa.me/{num}" style="color:#16A34A;font-size:11px;">📲 WhatsApp</a>'
+                f'<a href="https://wa.me/{num}" style="color:#16A34A;font-size:11px;font-weight:700;">📲 WhatsApp</a>'
                 if num else '<span style="color:#94A3B8;font-size:11px;">—</span>'
             )
+            ficha = _btn(_link_ficha(base_url, str(a.get("id", ""))), "👤 Abrir ficha", _COR_AZUL)
             try:
                 cor_dias = _COR_VERMELHO if int(dias_out or 0) >= 30 else _COR_AMARELO
             except Exception:
@@ -124,9 +144,9 @@ def _bloco_evasao() -> str:
             linhas.append([
                 nome, turma,
                 f"<span style='color:{cor_dias};font-weight:700;'>{dias_out} dias</span>",
-                ultima, contato
+                ultima, contato, ficha
             ])
-        tabela = _tabela(["Aluno", "Turma", "Ausente há", "Última Presença", "Contato"], linhas)
+        tabela = _tabela(["Aluno", "Turma", "Ausente há", "Última Presença", "Contato", "Resolver"], linhas)
         aviso  = (f"<p style='color:{_COR_VERMELHO};font-size:12px;font-weight:700;"
                   f"margin-bottom:10px;'>⚠️ {total} aluno(s) sem presença nos últimos 30 dias</p>")
         return _section("⚠️ Risco de Evasão", _COR_AMARELO, aviso + tabela)
@@ -135,11 +155,11 @@ def _bloco_evasao() -> str:
                         f"<p style='color:#94A3B8;font-size:12px;'>Dados indisponíveis: {e}</p>")
 
 
-def _bloco_auditoria() -> str:
+def _bloco_auditoria(base_url: str = "") -> str:
     try:
         from database import supabase
         res = supabase.from_("alunos").select(
-            "nome,turma,url_foto,cpf,data_nascimento,status"
+            "id,nome,turma,url_foto,cpf,data_nascimento,status"
         ).eq("status", "Ativo").execute()
         alunos = res.data or []
         problemas = []
@@ -155,12 +175,13 @@ def _bloco_auditoria() -> str:
                 problemas.append([
                     str(a.get("nome", "—")).upper(),
                     str(a.get("turma", "—") or "—"),
-                    ", ".join(issues)
+                    ", ".join(issues),
+                    _btn(_link_ficha(base_url, str(a.get("id", ""))), "📝 Completar ficha", _COR_AZUL),
                 ])
         if not problemas:
             return _section("📋 Auditoria de Cadastros", _COR_VERDE,
                             "<p style='color:#16A34A;font-size:12px;'>✅ Todos os cadastros ativos estão completos.</p>")
-        tabela = _tabela(["Aluno", "Turma", "Pendências"], problemas[:25])
+        tabela = _tabela(["Aluno", "Turma", "Pendências", "Resolver"], problemas[:25])
         aviso  = (f"<p style='color:{_COR_VERMELHO};font-size:12px;font-weight:700;"
                   f"margin-bottom:10px;'>📋 {len(problemas)} cadastro(s) com dados incompletos</p>")
         return _section("📋 Auditoria de Cadastros", _COR_VERDE, aviso + tabela)
@@ -193,7 +214,7 @@ def _bloco_frequencia_turma() -> str:
                         f"<p style='color:#94A3B8;font-size:12px;'>Dados indisponíveis: {e}</p>")
 
 
-def _bloco_dias_sem_registro() -> str:
+def _bloco_dias_sem_registro(base_url: str = "") -> str:
     try:
         import datetime as _dt
         from database import get_presentes_periodo_todos, get_dias_sem_aula
@@ -231,8 +252,16 @@ def _bloco_dias_sem_registro() -> str:
                             "<p style='color:#16A34A;font-size:12px;'>✅ Todos os dias úteis da semana têm frequência registrada.</p>")
 
         dias_pt = ["Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado", "Domingo"]
-        linhas  = [[d.strftime("%d/%m/%Y"), dias_pt[d.weekday()], "Sem frequência lançada"] for d in pendentes]
-        tabela  = _tabela(["Data", "Dia", "Situação"], linhas)
+        linhas  = [
+            [
+                d.strftime("%d/%m/%Y"),
+                dias_pt[d.weekday()],
+                "Sem frequência lançada",
+                _btn(_link_freq(base_url, d.isoformat()), "📊 Lançar frequência", _COR_VERMELHO),
+            ]
+            for d in pendentes
+        ]
+        tabela  = _tabela(["Data", "Dia", "Situação", "Resolver"], linhas)
         aviso   = (f"<p style='color:{_COR_VERMELHO};font-size:12px;font-weight:700;"
                    f"margin-bottom:10px;'>⚠️ {len(pendentes)} dia(s) sem frequência registrada esta semana</p>")
         return _section("📅 Dias sem Registro (semana)", _COR_VERMELHO, aviso + tabela)
@@ -301,23 +330,25 @@ def _bloco_aniversariantes() -> str:
 # GERADOR DO HTML COMPLETO
 # ──────────────────────────────────────────────────────────────────────────────
 
-def gerar_html_relatorio(cfg: dict, nome_org: str = "Instituto Muda Brasil") -> str:
+def gerar_html_relatorio(cfg: dict, nome_org: str = "Instituto Muda Brasil",
+                         base_url: str = "") -> str:
     hoje_fmt = datetime.date.today().strftime("%d/%m/%Y")
     freq_label = {"semanal": "Semanal", "quinzenal": "Quinzenal", "mensal": "Mensal"}.get(
         cfg.get("frequencia", "semanal"), "Periódico"
     )
+    base_url = (cfg.get("base_url", "") or base_url or "").rstrip("/")
 
     blocos = ""
     if cfg.get("mod_executivo"):
         blocos += _bloco_executivo()
     if cfg.get("mod_evasao"):
-        blocos += _bloco_evasao()
+        blocos += _bloco_evasao(base_url)
     if cfg.get("mod_auditoria"):
-        blocos += _bloco_auditoria()
+        blocos += _bloco_auditoria(base_url)
     if cfg.get("mod_frequencia_turma"):
         blocos += _bloco_frequencia_turma()
     if cfg.get("mod_dias_sem_registro"):
-        blocos += _bloco_dias_sem_registro()
+        blocos += _bloco_dias_sem_registro(base_url)
     if cfg.get("mod_aniversariantes"):
         blocos += _bloco_aniversariantes()
 
@@ -364,7 +395,8 @@ def gerar_html_relatorio(cfg: dict, nome_org: str = "Instituto Muda Brasil") -> 
 # ENVIO VIA GMAIL SMTP
 # ──────────────────────────────────────────────────────────────────────────────
 
-def enviar_relatorio_bi(cfg: dict, nome_org: str = "Instituto Muda Brasil") -> tuple:
+def enviar_relatorio_bi(cfg: dict, nome_org: str = "Instituto Muda Brasil",
+                        base_url: str = "") -> tuple:
     emails    = cfg.get("emails_destino", [])
     remetente = cfg.get("email_remetente", "").strip()
     senha     = cfg.get("email_senha_app", "").strip()
@@ -384,7 +416,7 @@ def enviar_relatorio_bi(cfg: dict, nome_org: str = "Instituto Muda Brasil") -> t
         assunto += f" | {extra}"
 
     try:
-        html_body = gerar_html_relatorio(cfg, nome_org)
+        html_body = gerar_html_relatorio(cfg, nome_org, base_url)
 
         msg = MIMEMultipart("alternative")
         msg["Subject"] = assunto

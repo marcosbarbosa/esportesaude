@@ -163,8 +163,10 @@ def tela_frequencia():
         )
 
         with col_data:
+            if "_freq_data_alvo" in st.session_state:
+                st.session_state["freq_data_aula"] = st.session_state.pop("_freq_data_alvo")
             data_aula = st.date_input(
-                "📅 Data da Aula:", hoje_check, format="DD/MM/YYYY"
+                "📅 Data da Aula:", hoje_check, format="DD/MM/YYYY", key="freq_data_aula"
             )
 
         dia_semana = data_aula.weekday()
