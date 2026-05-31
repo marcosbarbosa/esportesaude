@@ -78,6 +78,10 @@ def _link_ficha(base_url: str, aluno_id: str) -> str:
     return f"{base_url}/?ir=ficha&id={aluno_id}" if base_url else ""
 
 
+def _link_triagem(base_url: str) -> str:
+    return f"{base_url}/?ir=triagem" if base_url else ""
+
+
 # ──────────────────────────────────────────────────────────────────────────────
 # MÓDULOS DE CONTEÚDO
 # ──────────────────────────────────────────────────────────────────────────────
@@ -187,6 +191,53 @@ def _bloco_auditoria(base_url: str = "") -> str:
         return _section("📋 Auditoria de Cadastros", _COR_VERDE, aviso + tabela)
     except Exception as e:
         return _section("📋 Auditoria de Cadastros", _COR_VERDE,
+                        f"<p style='color:#94A3B8;font-size:12px;'>Dados indisponíveis: {e}</p>")
+
+
+def _bloco_novos_cadastros(base_url: str = "") -> str:
+    try:
+        from database import supabase
+        res = (
+            supabase.from_("pre_cadastros")
+            .select("*")
+            .in_("status", ["Pendente", "Lista de Espera"])
+            .execute()
+        )
+        pendentes = res.data or []
+    except Exception as e:
+        return _section("📥 Novos Cadastros (Aprovação)", "#7C3AED",
+                        f"<p style='color:#94A3B8;font-size:12px;'>Dados indisponíveis: {e}</p>")
+    try:
+        if not pendentes:
+            return _section("📥 Novos Cadastros (Aprovação)", _COR_VERDE,
+                            "<p style='color:#16A34A;font-size:12px;'>✅ Nenhuma inscrição nova aguardando aprovação.</p>")
+        linhas = []
+        for p in pendentes:
+            faltas = []
+            if not p.get("url_foto"):
+                faltas.append("foto")
+            if not p.get("url_rg"):
+                faltas.append("RG")
+            if not p.get("url_atestado_medico"):
+                faltas.append("atestado")
+            if faltas:
+                pend_str = (f"<span style='color:{_COR_VERMELHO};font-weight:700;'>"
+                            f"{', '.join(faltas)}</span>")
+            else:
+                pend_str = "<span style='color:#16A34A;font-weight:700;'>documentos completos</span>"
+            status_p = str(p.get("status", "Pendente") or "Pendente")
+            linhas.append([
+                str(p.get("nome", "—")).upper(),
+                status_p,
+                pend_str,
+                _btn(_link_triagem(base_url), "✅ Triar / Aprovar", _COR_VERDE),
+            ])
+        aviso = (f"<p style='color:{_COR_VERMELHO};font-size:12px;font-weight:700;"
+                 f"margin-bottom:10px;'>📥 {len(pendentes)} inscrição(ões) nova(s) aguardando triagem/aprovação</p>")
+        tabela = _tabela(["Aluno", "Situação", "Documentos pendentes", "Resolver"], linhas)
+        return _section("📥 Novos Cadastros (Aprovação)", "#7C3AED", aviso + tabela)
+    except Exception as e:
+        return _section("📥 Novos Cadastros (Aprovação)", "#7C3AED",
                         f"<p style='color:#94A3B8;font-size:12px;'>Dados indisponíveis: {e}</p>")
 
 
@@ -345,6 +396,8 @@ def gerar_html_relatorio(cfg: dict, nome_org: str = "Instituto Muda Brasil",
         blocos += _bloco_evasao(base_url)
     if cfg.get("mod_auditoria"):
         blocos += _bloco_auditoria(base_url)
+    if cfg.get("mod_novos_cadastros"):
+        blocos += _bloco_novos_cadastros(base_url)
     if cfg.get("mod_frequencia_turma"):
         blocos += _bloco_frequencia_turma()
     if cfg.get("mod_dias_sem_registro"):

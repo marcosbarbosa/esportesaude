@@ -405,7 +405,7 @@ def _ebi_base_url():
 # ── Deep-link interno: links acionáveis vindos do Email BI ────────────────────
 # (?ir=freq&d=YYYY-MM-DD  → tela de Frequência | ?ir=ficha&id=<id> → ficha do aluno)
 _ir_dl = st.query_params.get("ir")
-if _ir_dl in ("freq", "ficha") and "_pending_deeplink" not in st.session_state:
+if _ir_dl in ("freq", "ficha", "triagem") and "_pending_deeplink" not in st.session_state:
     st.session_state["_pending_deeplink"] = {
         "ir": _ir_dl,
         "d": st.query_params.get("d", ""),
@@ -448,6 +448,16 @@ if st.session_state.usuario_logado:
                 st.session_state.menu_atual = "Portal do Aluno"
             else:
                 st.session_state["_deeplink_erro"] = "⚠️ Aluno do link não encontrado."
+            st.rerun()
+        elif _dl.get("ir") == "triagem":
+            if st.session_state.get("perfil") == "SuperAdmin":
+                st.session_state.aluno_prontuario = None
+                st.session_state.menu_atual = "Portal do Aluno"
+                st.session_state["_abrir_triagem"] = True
+            else:
+                st.session_state["_deeplink_erro"] = (
+                    "⚠️ A aprovação de novos cadastros é restrita à coordenação (SuperAdmin)."
+                )
             st.rerun()
 
     if st.session_state.get("_deeplink_erro"):
@@ -964,6 +974,7 @@ def _tela_email_bi():
     mod_executivo = cm1.checkbox("📊 Painel Executivo (KPIs)", value=cfg["mod_executivo"], key="ebi_m_exec")
     mod_evasao = cm1.checkbox("⚠️ Risco de Evasão", value=cfg["mod_evasao"], key="ebi_m_evasao")
     mod_auditoria = cm1.checkbox("📋 Auditoria de Cadastros", value=cfg["mod_auditoria"], key="ebi_m_audit")
+    mod_novos_cad = cm1.checkbox("📥 Novos Cadastros (Aprovação)", value=cfg["mod_novos_cadastros"], key="ebi_m_novos")
     mod_freq_turma = cm2.checkbox("🏆 Frequência por Turma", value=cfg["mod_frequencia_turma"], key="ebi_m_freq")
     mod_dias_sem = cm2.checkbox("📅 Dias sem Registro", value=cfg["mod_dias_sem_registro"], key="ebi_m_dias")
     mod_aniver = cm2.checkbox("🎂 Aniversariantes da Semana", value=cfg["mod_aniversariantes"], key="ebi_m_aniver")
@@ -1004,6 +1015,7 @@ def _tela_email_bi():
             "ebi_mod_executivo": "1" if mod_executivo else "0",
             "ebi_mod_evasao": "1" if mod_evasao else "0",
             "ebi_mod_auditoria": "1" if mod_auditoria else "0",
+            "ebi_mod_novos_cadastros": "1" if mod_novos_cad else "0",
             "ebi_mod_frequencia_turma": "1" if mod_freq_turma else "0",
             "ebi_mod_dias_sem_registro": "1" if mod_dias_sem else "0",
             "ebi_mod_aniversariantes": "1" if mod_aniver else "0",
@@ -1035,6 +1047,7 @@ def _tela_email_bi():
             "mod_executivo": mod_executivo,
             "mod_evasao": mod_evasao,
             "mod_auditoria": mod_auditoria,
+            "mod_novos_cadastros": mod_novos_cad,
             "mod_frequencia_turma": mod_freq_turma,
             "mod_dias_sem_registro": mod_dias_sem,
             "mod_aniversariantes": mod_aniver,

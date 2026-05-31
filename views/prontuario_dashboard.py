@@ -189,6 +189,13 @@ def renderizar_dashboard():
         </div>
     """, unsafe_allow_html=True)
 
+    if st.session_state.pop("_abrir_triagem", False):
+        st.info(
+            "📥 Você chegou pelo relatório para **aprovar novos cadastros**. "
+            "Abra a aba **🆕 NOVOS ALUNOS (Triagem)** abaixo para conferir documentos e aprovar.",
+            icon="👉",
+        )
+
     tab_ag, tab_med, tab_novos, tab_todos, tab_inativos, tab_triagem = st.tabs([
         "🗓️ Agenda da Semana",
         f"📊 Já Medidos ({len(df_medidos)})",
