@@ -398,6 +398,35 @@ if st.session_state.usuario_logado:
 
     st.session_state.ultimo_acesso = time.time()
 
+    # ── Email BI: verificação de envio agendado (1x por sessão) ────────────
+    if not st.session_state.get("_ebi_checado"):
+        st.session_state["_ebi_checado"] = True
+        try:
+            from utils.email_relatorio_config import (
+                get_config_ebi, verificar_e_marcar_envio_realizado,
+            )
+            from utils.email_relatorio import enviar_relatorio_bi
+            _ebi_cfg = get_config_ebi()
+            _hoje_ebi = datetime.date.today()
+            _prox = _ebi_cfg.get("proximo_envio", "")
+            _devido = False
+            if _ebi_cfg.get("habilitado") and _ebi_cfg.get("emails_destino"):
+                if not _prox:
+                    _devido = True
+                else:
+                    try:
+                        _devido = datetime.date.fromisoformat(str(_prox)[:10]) <= _hoje_ebi
+                    except Exception:
+                        _devido = True
+            if _devido:
+                from utils.identidade import get_config as _gid_ebi
+                _nome_org_ebi = _gid_ebi().get("nome_organizacao", "Instituto Muda Brasil")
+                _ok_ebi, _ = enviar_relatorio_bi(_ebi_cfg, _nome_org_ebi)
+                if _ok_ebi:
+                    verificar_e_marcar_envio_realizado(_ebi_cfg)
+        except Exception:
+            pass
+
 # ==============================================================================
 # 🎨 CSS PRIME — MINIMALISTA & EXCELÊNCIA (TEMA CLARO BASE)
 # ==============================================================================
@@ -779,6 +808,179 @@ if not st.session_state.usuario_logado:
 # ==============================================================================
 # 📅 CALENDÁRIO INSTITUCIONAL — Tela de gestão de Dias Sem Aula
 # ==============================================================================
+
+def _tela_email_bi():
+    import json as _json
+    from utils.email_relatorio_config import (
+        get_config_ebi, salvar_config_ebi, calcular_proximo_envio,
+    )
+    from utils.email_relatorio import enviar_relatorio_bi
+
+    cfg = get_config_ebi()
+
+    st.markdown("""
+        <div style='background:#EFF6FF;border-left:4px solid #1D4ED8;
+                    padding:12px 16px;border-radius:6px;margin-bottom:18px;'>
+            <strong style='color:#1E3A8A;'>📧 Email BI — Relatório Gerencial Automático</strong><br>
+            <span style='color:#1D4ED8;font-size:13px;'>
+                Envia automaticamente um relatório gerencial por e-mail para diretores
+                e equipe operacional, na frequência escolhida (ex.: toda sexta-feira).<br>
+                Escolha quais módulos incluir e os destinatários.
+            </span>
+        </div>
+    """, unsafe_allow_html=True)
+
+    # ── Status atual ───────────────────────────────────────────────────────
+    cstat1, cstat2, cstat3 = st.columns(3)
+    cstat1.metric("Status", "🟢 Ativo" if cfg["habilitado"] else "⚪ Inativo")
+    cstat2.metric("Próximo envio", cfg["proximo_envio"] or "—")
+    cstat3.metric("Último envio", (cfg["ultimo_envio"] or "—")[:16].replace("T", " "))
+
+    st.markdown("---")
+
+    # ── Configuração de envio ──────────────────────────────────────────────
+    st.markdown("### ⚙️ Configuração de Envio")
+
+    habilitado = st.toggle(
+        "Ativar envio automático",
+        value=cfg["habilitado"],
+        key="ebi_hab",
+        help="Quando ativo, o relatório é enviado automaticamente ao abrir o sistema na data agendada.",
+    )
+
+    cfreq1, cfreq2 = st.columns(2)
+    freq_opts = {"semanal": "Semanal", "quinzenal": "Quinzenal", "mensal": "Mensal"}
+    freq_keys = list(freq_opts.keys())
+    frequencia = cfreq1.selectbox(
+        "Frequência",
+        options=freq_keys,
+        index=freq_keys.index(cfg["frequencia"]) if cfg["frequencia"] in freq_keys else 0,
+        format_func=lambda k: freq_opts[k],
+        key="ebi_freq",
+    )
+
+    dias_semana = ["Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado", "Domingo"]
+    dia_semana_sel = cfg["dia_semana"]
+    dia_mes_sel = cfg["dia_mes"]
+    if frequencia in ("semanal", "quinzenal"):
+        dia_semana_sel = cfreq2.selectbox(
+            "Dia da semana",
+            options=list(range(7)),
+            index=cfg["dia_semana"] if 0 <= cfg["dia_semana"] <= 6 else 4,
+            format_func=lambda i: dias_semana[i],
+            key="ebi_dia_sem",
+        )
+    else:
+        dia_mes_sel = cfreq2.number_input(
+            "Dia do mês (1–28)", min_value=1, max_value=28,
+            value=cfg["dia_mes"], step=1, key="ebi_dia_mes",
+        )
+
+    # ── Destinatários e remetente ──────────────────────────────────────────
+    st.markdown("### 📬 Destinatários e Remetente")
+    emails_txt = st.text_area(
+        "E-mails de destino (um por linha ou separados por vírgula)",
+        value="\n".join(cfg["emails_destino"]),
+        placeholder="diretoria@exemplo.com\noperacional@exemplo.com",
+        key="ebi_emails",
+        height=90,
+    )
+    cre1, cre2 = st.columns(2)
+    remetente = cre1.text_input(
+        "Gmail remetente", value=cfg["email_remetente"],
+        placeholder="seuemail@gmail.com", key="ebi_remetente",
+    )
+    senha_app = cre2.text_input(
+        "Senha de app do Gmail", value=cfg["email_senha_app"],
+        type="password", key="ebi_senha",
+        help="Gere em myaccount.google.com → Segurança → Senhas de app.",
+    )
+
+    # ── Módulos do relatório ───────────────────────────────────────────────
+    st.markdown("### 🧩 Módulos do Relatório")
+    cm1, cm2 = st.columns(2)
+    mod_executivo = cm1.checkbox("📊 Painel Executivo (KPIs)", value=cfg["mod_executivo"], key="ebi_m_exec")
+    mod_evasao = cm1.checkbox("⚠️ Risco de Evasão", value=cfg["mod_evasao"], key="ebi_m_evasao")
+    mod_auditoria = cm1.checkbox("📋 Auditoria de Cadastros", value=cfg["mod_auditoria"], key="ebi_m_audit")
+    mod_freq_turma = cm2.checkbox("🏆 Frequência por Turma", value=cfg["mod_frequencia_turma"], key="ebi_m_freq")
+    mod_dias_sem = cm2.checkbox("📅 Dias sem Registro", value=cfg["mod_dias_sem_registro"], key="ebi_m_dias")
+    mod_aniver = cm2.checkbox("🎂 Aniversariantes da Semana", value=cfg["mod_aniversariantes"], key="ebi_m_aniver")
+
+    assunto_extra = st.text_input(
+        "Texto extra no assunto (opcional)",
+        value=cfg["assunto_extra"], placeholder="Ex.: Unidade Centro",
+        key="ebi_assunto",
+    )
+
+    # ── Salvar ─────────────────────────────────────────────────────────────
+    st.markdown("---")
+    csave1, csave2 = st.columns([1, 1])
+
+    if csave1.button("💾 Salvar configuração", type="primary", use_container_width=True, key="ebi_save"):
+        emails_lista = [
+            e.strip()
+            for linha in emails_txt.replace(",", "\n").splitlines()
+            for e in [linha]
+            if e.strip()
+        ]
+        cfg_nova = {
+            "habilitado": habilitado,
+            "frequencia": frequencia,
+            "dia_semana": dia_semana_sel,
+            "dia_mes": dia_mes_sel,
+            "emails_destino": emails_lista,
+        }
+        proximo = calcular_proximo_envio(cfg_nova)
+        salvar_config_ebi({
+            "ebi_habilitado": "1" if habilitado else "0",
+            "ebi_frequencia": frequencia,
+            "ebi_dia_semana": str(dia_semana_sel),
+            "ebi_dia_mes": str(dia_mes_sel),
+            "ebi_emails_destino": _json.dumps(emails_lista),
+            "ebi_email_remetente": remetente.strip(),
+            "ebi_email_senha_app": senha_app.strip(),
+            "ebi_mod_executivo": "1" if mod_executivo else "0",
+            "ebi_mod_evasao": "1" if mod_evasao else "0",
+            "ebi_mod_auditoria": "1" if mod_auditoria else "0",
+            "ebi_mod_frequencia_turma": "1" if mod_freq_turma else "0",
+            "ebi_mod_dias_sem_registro": "1" if mod_dias_sem else "0",
+            "ebi_mod_aniversariantes": "1" if mod_aniver else "0",
+            "ebi_assunto_extra": assunto_extra.strip(),
+            "ebi_proximo_envio": str(proximo),
+        })
+        st.success(f"✅ Configuração salva. Próximo envio agendado para {proximo.strftime('%d/%m/%Y')}.")
+        st.rerun()
+
+    if csave2.button("📨 Enviar agora (teste)", use_container_width=True, key="ebi_test"):
+        from utils.identidade import get_config as _gid
+        nome_org = _gid().get("nome_organizacao", "Instituto Muda Brasil")
+        cfg_envio = get_config_ebi()
+        with st.spinner("Gerando e enviando relatório…"):
+            ok, msg = enviar_relatorio_bi(cfg_envio, nome_org)
+        if ok:
+            st.success(f"✅ {msg}")
+        else:
+            st.error(f"❌ {msg}")
+
+    # ── Pré-visualização ───────────────────────────────────────────────────
+    with st.expander("👁️ Pré-visualizar relatório (HTML)", expanded=False):
+        from utils.email_relatorio import gerar_html_relatorio
+        from utils.identidade import get_config as _gid2
+        nome_org_prev = _gid2().get("nome_organizacao", "Instituto Muda Brasil")
+        cfg_prev = {
+            "frequencia": frequencia,
+            "mod_executivo": mod_executivo,
+            "mod_evasao": mod_evasao,
+            "mod_auditoria": mod_auditoria,
+            "mod_frequencia_turma": mod_freq_turma,
+            "mod_dias_sem_registro": mod_dias_sem,
+            "mod_aniversariantes": mod_aniver,
+        }
+        if st.button("🔄 Gerar pré-visualização", key="ebi_preview_btn"):
+            import streamlit.components.v1 as _stc_prev
+            html_prev = gerar_html_relatorio(cfg_prev, nome_org_prev)
+            _stc_prev.html(html_prev, height=700, scrolling=True)
+
 
 def _tela_calendario_institucional():
     from database import (
@@ -1702,7 +1904,7 @@ elif st.session_state.menu_atual in (
         tela_conferencia_facial()
     else:
         _aba_cfg = st.tabs(
-            ["🏫 Turmas", "💬 Mensagens", "🎂 Aniversários", "🎨 Identidade Visual", "🛠️ Admin", "🔀 Mesclar Fichas", "📅 Calendário", "🔒 LGPD"]
+            ["🏫 Turmas", "💬 Mensagens", "🎂 Aniversários", "🎨 Identidade Visual", "🛠️ Admin", "🔀 Mesclar Fichas", "📅 Calendário", "📧 Email BI", "🔒 LGPD"]
         )
         with _aba_cfg[0]:
             from views.turmas_view import tela_gestao_turmas
@@ -1728,6 +1930,8 @@ elif st.session_state.menu_atual in (
         with _aba_cfg[6]:
             _tela_calendario_institucional()
         with _aba_cfg[7]:
+            _tela_email_bi()
+        with _aba_cfg[8]:
             from database import get_logs_lgpd
             st.markdown(
                 "<p style='font-weight:800;color:#0A2540;font-size:1rem;margin-bottom:4px;'>"
