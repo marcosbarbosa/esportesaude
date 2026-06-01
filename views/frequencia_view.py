@@ -10,7 +10,7 @@ import datetime
 import time
 import re
 
-from utils.busca_aluno import busca_aluno_widget as _baw_freq
+from utils.busca_aluno import busca_aluno_widget as _baw_freq, filtrar_alunos_df
 
 # Importação do motor e permissões
 from database import (
@@ -224,10 +224,9 @@ def tela_frequencia():
         df_todos_com_inativos = obter_todos_alunos_com_inativos_cache()
 
         if not df_todos_com_inativos.empty:
-            df_temp_nome = df_todos_com_inativos["nome"].apply(normalizar_fonetica)
-            df_encontrados = df_todos_com_inativos[
-                df_temp_nome.str.contains(busca_limpa, case=False, na=False)
-            ]
+            df_encontrados = filtrar_alunos_df(
+                df_todos_com_inativos, busca_grid, cols=["nome"], min_len=3
+            )
         else:
             df_encontrados = pd.DataFrame()
 

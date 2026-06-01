@@ -1534,7 +1534,7 @@ if st.session_state.menu_atual == "Principal":
             "<p style='font-weight:800;color:#0A2540;font-size:1.05rem;margin:0;'>👥 Alunos Ativos</p>",
             unsafe_allow_html=True,
         )
-        from utils.busca_aluno import busca_aluno_widget as _baw_hg
+        from utils.busca_aluno import busca_aluno_widget as _baw_hg, filtrar_alunos_df as _faf_hg
         _hg_busca = _baw_hg(
             "hg_busca",
             container=_hg_c_busca,
@@ -1592,13 +1592,7 @@ if st.session_state.menu_atual == "Principal":
 
             # Aplicar filtros
             _df_grid = _df_hg.copy()
-            if _hg_busca and len(_hg_busca.strip()) >= 3:
-                from utils.texto import normalizar_fonetica as _nf
-                _b = _nf(_hg_busca.strip())
-                _df_grid = _df_grid[
-                    _df_grid["nome"].fillna("").apply(_nf).str.contains(_b, na=False) |
-                    _df_grid["turma"].fillna("").apply(_nf).str.contains(_b, na=False)
-                ]
+            _df_grid = _faf_hg(_df_grid, _hg_busca, cols=["nome", "turma"], min_len=3)
             if _hg_turma != "Todas":
                 _df_grid = _df_grid[_df_grid["turma"] == _hg_turma]
 

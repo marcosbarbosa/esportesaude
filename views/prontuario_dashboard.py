@@ -30,6 +30,7 @@ from database import (
     supabase,
 )
 from utils.texto import normalizar_fonetica
+from utils.busca_aluno import filtrar_alunos_df
 
 
 # ==============================================================================
@@ -423,10 +424,7 @@ def renderizar_dashboard():
 
             df_exibir = df_inativos.copy()
             if busca_inativo and len(busca_inativo.strip()) >= 2:
-                termo = normalizar_fonetica(busca_inativo.strip())
-                df_exibir = df_exibir[
-                    df_exibir["nome"].fillna("").apply(normalizar_fonetica).str.contains(termo, na=False)
-                ]
+                df_exibir = filtrar_alunos_df(df_exibir, busca_inativo, cols=["nome"], min_len=2)
 
             if df_exibir.empty:
                 st.info("Nenhum aluno encontrado para essa busca.")
@@ -684,15 +682,7 @@ def renderizar_dashboard():
             busca_limpa = normalizar_fonetica(busca).strip()
 
             if len(busca_limpa) >= 3:
-                # Cria colunas temporárias normalizadas para a busca
-                df_temp_nome = df_grid["nome"].apply(normalizar_fonetica)
-                df_temp_turma = df_grid["turma"].apply(normalizar_fonetica)
-
-                # Filtra onde a string limpa bate com os dados limpos
-                df_grid = df_grid[
-                    df_temp_nome.str.contains(busca_limpa, case=False, na=False)
-                    | df_temp_turma.str.contains(busca_limpa, case=False, na=False)
-                ]
+                df_grid = filtrar_alunos_df(df_grid, busca, cols=["nome", "turma"], min_len=3)
             elif len(busca_limpa) > 0:
                 st.caption("⏳ Digite pelo menos 3 letras para iniciar a filtragem rápida...")
 
