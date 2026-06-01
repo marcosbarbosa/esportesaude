@@ -318,25 +318,28 @@ def tela_triagem():
             if not url_ate:
                 docs_faltantes.append("Atestado de Aptidão")
 
-            def _fazer_matricula(faltantes):
+            def _fazer_matricula(faltantes, lotada=False):
                 with st.spinner("A processar matrícula..."):
                     sucesso, msg = aprovar_inscricao_aluno(aluno['id'], turma_real_salvar)
                 if sucesso:
-                    if faltantes:
+                    if faltantes or lotada:
+                        motivos = list(faltantes)
+                        if lotada:
+                            motivos.append("turma lotada")
                         log_ok = registrar_log_matricula_doc(
                             aluno['id'], nome, faltantes,
                             st.session_state.get("usuario_nome", "") or "—",
-                            turma_real_salvar,
+                            turma_real_salvar, lotada,
                         )
                         if log_ok:
                             st.toast(
-                                "📝 Log registrado — matrícula com pendências: " + ", ".join(faltantes),
+                                "📝 Log registrado — matrícula forçada: " + ", ".join(motivos),
                                 icon="📝",
                             )
                         else:
                             # Matrícula concluída mas a trilha de auditoria falhou: avisar de forma persistente.
                             st.session_state["_matricula_audit_fail"] = (
-                                f"⚠️ {nome} foi matriculado(a) com pendências ({', '.join(faltantes)}), "
+                                f"⚠️ {nome} foi matriculado(a) com exceções ({', '.join(motivos)}), "
                                 "mas o LOG DE AUDITORIA FALHOU. Registre manualmente e verifique a conexão."
                             )
                     st.toast(msg, icon="✅")
@@ -355,12 +358,12 @@ def tela_triagem():
                 )
                 turma_real_salvar = mapa_turmas[turma_escolhida_display]
 
+            turma_lotada = "🔴" in turma_escolhida_display
+
             with c_aprovar:
                 if st.button("✅ MATRICULAR", type="primary", use_container_width=True, key=f"btn_ap_{aluno['id']}"):
-                    if "🔴" in turma_escolhida_display:
-                        st.error("Esta turma está LOTADA! Alocação bloqueada para manter a qualidade.")
-                    elif docs_faltantes:
-                        # Não bloqueia: pede confirmação para matricular com pendências
+                    if docs_faltantes or turma_lotada:
+                        # Não bloqueia: pede confirmação para matricular com exceções
                         st.session_state[f"confirm_mat_{aluno['id']}"] = True
                     else:
                         _fazer_matricula([])
@@ -382,14 +385,17 @@ def tela_triagem():
                     else:
                         st.error(msg)
 
-            # ── Confirmação: matricular MESMO com documentos faltando ──────────
+            # ── Confirmação: matricular MESMO com exceções (docs/turma lotada) ─
             if st.session_state.get(f"confirm_mat_{aluno['id']}"):
+                avisos = []
+                if turma_lotada:
+                    avisos.append("a **turma está LOTADA** (capacidade excedida)")
+                if docs_faltantes:
+                    avisos.append("faltam documentos: **" + ", ".join(docs_faltantes) + "**")
                 st.warning(
-                    "⚠️ **Atenção:** não é recomendável matricular sem "
-                    + " e ".join(docs_faltantes)
-                    + ". Você pode matricular mesmo assim — será gerado um **log de matrícula com documentos faltantes** ("
-                    + ", ".join(docs_faltantes)
-                    + ")."
+                    "⚠️ **Atenção:** " + " e ".join(avisos)
+                    + ". Você pode matricular mesmo assim — será gerado um **log da matrícula** "
+                    "com o motivo da exceção."
                 )
                 cf1, cf2 = st.columns([2, 1])
                 if cf1.button(
@@ -398,7 +404,7 @@ def tela_triagem():
                     key=f"force_mat_{aluno['id']}",
                 ):
                     st.session_state.pop(f"confirm_mat_{aluno['id']}", None)
-                    _fazer_matricula(docs_faltantes)
+                    _fazer_matricula(docs_faltantes, turma_lotada)
                 if cf2.button(
                     "Cancelar", use_container_width=True,
                     key=f"cancel_mat_{aluno['id']}",

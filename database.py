@@ -92,6 +92,30 @@ def blindar_float(valor):
         return 0.0
 
 
+def _normalizar_altura(valor):
+    """Altura em metros (coluna numeric(4,2), máx 99.99).
+
+    Valores claramente em centímetros (> 3, ex.: 170) são convertidos para
+    metros para evitar 'numeric field overflow' na migração do aluno.
+    """
+    alt = blindar_float(valor)
+    if alt < 0:                # valor inválido/negativo
+        alt = 0.0
+    if alt > 3:                # digitado em cm (ex.: 170 -> 1.70)
+        alt = alt / 100.0
+    if alt > 99.99:            # teto da coluna numeric(4,2)
+        alt = 99.99
+    return round(alt, 2)
+
+
+def _normalizar_peso(valor):
+    """Peso arredondado a 2 casas (evita excesso de precisão)."""
+    p = blindar_float(valor)
+    if p < 0:
+        p = 0.0
+    return round(p, 2)
+
+
 # ==============================================================================
 # 🔐 AUTENTICAÇÃO, CRM E COMPATIBILIDADE MAIN.PY
 # ==============================================================================
@@ -350,8 +374,8 @@ def aprovar_inscricao_aluno(pre_cadastro_id, turma_selecionada):
             "estado_civil": pre.get("estado_civil", ""),
             "nome_conjuge": pre.get("nome_conjuge", ""),
             "grau_instrucao": pre.get("grau_instrucao", ""),
-            "peso": blindar_float(pre.get("peso")),
-            "altura": blindar_float(pre.get("altura")),
+            "peso": _normalizar_peso(pre.get("peso")),
+            "altura": _normalizar_altura(pre.get("altura")),
             "endereco": pre.get("endereco", ""),
             "complemento": pre.get("complemento", ""),
             "bairro": pre.get("bairro", ""),
@@ -647,8 +671,8 @@ def get_logs_lgpd(limit: int = 300) -> list:
         return []
 
 
-def registrar_log_matricula_doc(aluno_id, aluno_nome, docs_faltantes, operador: str = "", turma: str = "") -> bool:
-    """Registra log de matrícula efetuada com documentos faltantes."""
+def registrar_log_matricula_doc(aluno_id, aluno_nome, docs_faltantes, operador: str = "", turma: str = "", turma_lotada: bool = False) -> bool:
+    """Registra log de matrícula forçada (documentos faltantes e/ou turma lotada)."""
     import json, datetime as _dt
     try:
         ts = _dt.datetime.now().isoformat(timespec="seconds")
@@ -658,6 +682,7 @@ def registrar_log_matricula_doc(aluno_id, aluno_nome, docs_faltantes, operador: 
             "aluno_nome": aluno_nome,
             "docs_faltantes": list(docs_faltantes),
             "turma": turma or "—",
+            "turma_lotada": bool(turma_lotada),
             "operador": operador or "—",
             "timestamp": ts,
         }, ensure_ascii=False)
