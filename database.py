@@ -1813,6 +1813,84 @@ def bi_resumo_studio():
     }
 
 
+@st.cache_data(ttl=300, show_spinner=False)
+def bi_media_alunos_dia():
+    """Média de alunos (distintos) presentes por dia de aula.
+
+    Retorna dict com:
+      - media_periodo : média/dia desde o início do projeto (1ª presença registrada)
+      - media_mes     : média/dia no mês corrente (dia 1 até hoje)
+      - dias_periodo  : nº de dias com aula no período
+      - dias_mes      : nº de dias com aula no mês
+      - inicio_periodo: data (YYYY-MM-DD) da 1ª presença, ou None
+    """
+    hoje = datetime.date.today()
+    vazio = {
+        "media_periodo": 0.0, "media_mes": 0.0,
+        "dias_periodo": 0, "dias_mes": 0, "inicio_periodo": None,
+    }
+    try:
+        r = (supabase.from_("frequencia").select("data_aula")
+             .eq("status", "PRESENTE").order("data_aula").limit(1).execute())
+        if not r.data:
+            return vazio
+        inicio = str(r.data[0]["data_aula"])[:10]
+    except Exception:
+        return vazio
+
+    # Carrega TODAS as presenças do período (início → hoje) com paginação
+    # completa — sem teto artificial, para que a média "desde o início do
+    # projeto" nunca seja calculada sobre dados truncados.
+    try:
+        PAGE = 1000
+        registros = []
+        offset = 0
+        while True:
+            r = (
+                supabase.from_("frequencia")
+                .select("data_aula, aluno_id")
+                .eq("status", "PRESENTE")
+                .gte("data_aula", inicio)
+                .lte("data_aula", hoje.isoformat())
+                .order("data_aula")
+                .range(offset, offset + PAGE - 1)
+                .execute()
+            )
+            lote = r.data or []
+            registros.extend(lote)
+            if len(lote) < PAGE:
+                break
+            offset += PAGE
+    except Exception:
+        return vazio
+
+    if not registros:
+        return vazio
+
+    df = pd.DataFrame(registros)
+    df["dia"] = df["data_aula"].astype(str).str[:10]
+
+    def _calc(sub):
+        if sub.empty:
+            return 0.0, 0
+        if "aluno_id" in sub.columns:
+            por_dia = sub.groupby("dia")["aluno_id"].nunique()
+        else:
+            por_dia = sub.groupby("dia").size()
+        dias = int(len(por_dia))
+        media = round(float(por_dia.mean()), 1) if dias else 0.0
+        return media, dias
+
+    media_per, dias_per = _calc(df)
+    primeiro_mes = hoje.replace(day=1).isoformat()
+    media_mes, dias_mes = _calc(df[df["dia"] >= primeiro_mes])
+    return {
+        "media_periodo": media_per, "media_mes": media_mes,
+        "dias_periodo": dias_per, "dias_mes": dias_mes,
+        "inicio_periodo": inicio,
+    }
+
+
 @st.cache_data(ttl=120, show_spinner=False)
 def bi_evolucao_cadastros():
     try:

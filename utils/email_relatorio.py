@@ -102,10 +102,24 @@ def _bloco_executivo() -> str:
             cor_risco = _COR_VERMELHO if int(risco_v or 0) > 5 else _COR_AMARELO
         except Exception:
             cor_risco = _COR_AMARELO
+
+        # Média de alunos presentes por dia de aula
+        try:
+            from database import bi_media_alunos_dia
+            m = bi_media_alunos_dia() or {}
+            mp = m.get("media_periodo", 0)
+            mm = m.get("media_mes", 0)
+            media_per = f"{mp:.1f}".replace(".", ",") if isinstance(mp, (int, float)) else str(mp)
+            media_mes = f"{mm:.1f}".replace(".", ",") if isinstance(mm, (int, float)) else str(mm)
+        except Exception:
+            media_per = media_mes = "—"
+
         kpis = (
             _kpi("Alunos Ativos", str(ativos), _COR_AZUL) +
             _kpi("Inativos", str(inativos), "#64748B") +
             _kpi("Freq. 30 dias", str(taxa), _COR_VERDE) +
+            _kpi("Média/dia (período)", media_per, "#0891B2") +
+            _kpi("Média/dia (mês)", media_mes, "#0891B2") +
             _kpi("Risco 🔴", str(risco_v), cor_risco) +
             _kpi("Risco 🟡", str(risco_a), _COR_AMARELO) +
             _kpi("Sem aula 15d", str(sem_pres), "#64748B")
