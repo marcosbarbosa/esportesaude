@@ -978,6 +978,7 @@ def _tela_email_bi():
     mod_freq_turma = cm2.checkbox("🏆 Frequência por Turma", value=cfg["mod_frequencia_turma"], key="ebi_m_freq")
     mod_dias_sem = cm2.checkbox("📅 Dias sem Registro", value=cfg["mod_dias_sem_registro"], key="ebi_m_dias")
     mod_aniver = cm2.checkbox("🎂 Aniversariantes da Semana", value=cfg["mod_aniversariantes"], key="ebi_m_aniver")
+    mod_presencas_mes = cm2.checkbox("📈 Presenças no Ano (por mês)", value=cfg["mod_presencas_mes"], key="ebi_m_presmes")
 
     assunto_extra = st.text_input(
         "Texto extra no assunto (opcional)",
@@ -1019,6 +1020,7 @@ def _tela_email_bi():
             "ebi_mod_frequencia_turma": "1" if mod_freq_turma else "0",
             "ebi_mod_dias_sem_registro": "1" if mod_dias_sem else "0",
             "ebi_mod_aniversariantes": "1" if mod_aniver else "0",
+            "ebi_mod_presencas_mes": "1" if mod_presencas_mes else "0",
             "ebi_assunto_extra": assunto_extra.strip(),
             "ebi_base_url": base_url_cfg.strip().rstrip("/"),
             "ebi_proximo_envio": str(proximo),
@@ -1051,6 +1053,7 @@ def _tela_email_bi():
             "mod_frequencia_turma": mod_freq_turma,
             "mod_dias_sem_registro": mod_dias_sem,
             "mod_aniversariantes": mod_aniver,
+            "mod_presencas_mes": mod_presencas_mes,
             "base_url": base_url_cfg.strip().rstrip("/"),
         }
         if st.button("🔄 Gerar pré-visualização", key="ebi_preview_btn"):

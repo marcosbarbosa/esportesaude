@@ -23,6 +23,7 @@ _CHAVES = [
     "ebi_mod_frequencia_turma",
     "ebi_mod_dias_sem_registro",
     "ebi_mod_aniversariantes",
+    "ebi_mod_presencas_mes",
     "ebi_assunto_extra",
     "ebi_base_url",
 ]
@@ -88,6 +89,7 @@ def get_config_ebi() -> dict:
         "mod_frequencia_turma":  cfg.get("ebi_mod_frequencia_turma", "1") == "1",
         "mod_dias_sem_registro": cfg.get("ebi_mod_dias_sem_registro", "1") == "1",
         "mod_aniversariantes":   cfg.get("ebi_mod_aniversariantes", "1") == "1",
+        "mod_presencas_mes":     cfg.get("ebi_mod_presencas_mes", "1") == "1",
         "assunto_extra":         cfg.get("ebi_assunto_extra", ""),
         "base_url":              cfg.get("ebi_base_url", ""),
     }

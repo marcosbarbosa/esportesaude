@@ -1891,6 +1891,60 @@ def bi_media_alunos_dia():
     }
 
 
+@st.cache_data(ttl=300, show_spinner=False)
+def bi_presencas_por_mes():
+    """Total de presenças (registros PRESENTE) no ANO corrente, detalhado por mês.
+
+    Retorna dict com:
+      - total_ano : total de presenças desde 01/jan do ano atual até hoje
+      - por_mes   : lista [(rótulo_mes, total), ...] de Janeiro até o mês atual
+                    (inclui meses com 0 presenças)
+      - ano       : ano de referência (int)
+    """
+    hoje = datetime.date.today()
+    ano = hoje.year
+    inicio_ano = datetime.date(ano, 1, 1).isoformat()
+    meses_pt = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun",
+                "Jul", "Ago", "Set", "Out", "Nov", "Dez"]
+    vazio = {"total_ano": 0, "por_mes": [], "ano": ano}
+
+    try:
+        PAGE = 1000
+        registros = []
+        offset = 0
+        while True:
+            r = (
+                supabase.from_("frequencia")
+                .select("data_aula")
+                .eq("status", "PRESENTE")
+                .gte("data_aula", inicio_ano)
+                .lte("data_aula", hoje.isoformat())
+                .order("data_aula")
+                .range(offset, offset + PAGE - 1)
+                .execute()
+            )
+            lote = r.data or []
+            registros.extend(lote)
+            if len(lote) < PAGE:
+                break
+            offset += PAGE
+    except Exception:
+        return vazio
+
+    total = len(registros)
+    cont = {}
+    if registros:
+        df = pd.DataFrame(registros)
+        df["mes"] = df["data_aula"].astype(str).str[5:7]
+        cont = df.groupby("mes").size().to_dict()
+
+    por_mes = [
+        (f"{meses_pt[m - 1]}/{str(ano)[2:]}", int(cont.get(f"{m:02d}", 0)))
+        for m in range(1, hoje.month + 1)
+    ]
+    return {"total_ano": total, "por_mes": por_mes, "ano": ano}
+
+
 @st.cache_data(ttl=120, show_spinner=False)
 def bi_evolucao_cadastros():
     try:

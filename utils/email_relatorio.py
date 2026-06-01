@@ -131,6 +131,40 @@ def _bloco_executivo() -> str:
                         f"<p style='color:#94A3B8;font-size:12px;'>Dados indisponíveis: {e}</p>")
 
 
+def _bloco_presencas_mes() -> str:
+    try:
+        from database import bi_presencas_por_mes
+        d = bi_presencas_por_mes() or {}
+        total   = d.get("total_ano", 0)
+        por_mes = d.get("por_mes", [])
+        ano     = d.get("ano", "")
+
+        kpi = _kpi(f"Total no ano {ano}", f"{total:,}".replace(",", "."), _COR_VERDE)
+
+        if por_mes:
+            total_seguro = total if total > 0 else 1
+            linhas = []
+            for nome_mes, qtd in por_mes:
+                pct = qtd / total_seguro * 100
+                qtd_fmt = f"{qtd:,}".replace(",", ".")
+                linhas.append([
+                    nome_mes,
+                    f"<span style='font-weight:700;color:#0A2540;'>{qtd_fmt}</span>",
+                    f"<span style='color:#64748B;'>{pct:.1f}%</span>",
+                ])
+            tabela = _tabela(["Mês", "Total de presenças", "% do ano"], linhas)
+        else:
+            tabela = ("<p style='color:#94A3B8;font-size:12px;'>"
+                      "Sem presenças registradas neste ano.</p>")
+
+        conteudo = (f"<div style='text-align:center;margin-bottom:14px;'>{kpi}</div>"
+                    + tabela)
+        return _section(f"📈 Presenças no Ano ({ano})", _COR_VERDE, conteudo)
+    except Exception as e:
+        return _section("📈 Presenças no Ano", _COR_VERDE,
+                        f"<p style='color:#94A3B8;font-size:12px;'>Dados indisponíveis: {e}</p>")
+
+
 def _bloco_evasao(base_url: str = "") -> str:
     try:
         from database import bi_alunos_risco_abandono
@@ -406,6 +440,8 @@ def gerar_html_relatorio(cfg: dict, nome_org: str = "Instituto Muda Brasil",
     blocos = ""
     if cfg.get("mod_executivo"):
         blocos += _bloco_executivo()
+    if cfg.get("mod_presencas_mes"):
+        blocos += _bloco_presencas_mes()
     if cfg.get("mod_evasao"):
         blocos += _bloco_evasao(base_url)
     if cfg.get("mod_auditoria"):
