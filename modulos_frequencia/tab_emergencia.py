@@ -163,10 +163,8 @@ def renderizar_aba_emergencia(df_alunos_tab, turma_selecionada):
     else:
         df_exibir = df_alunos_tab.copy() if not df_alunos_tab.empty else pd.DataFrame()
 
-    if ordenacao == "Z-A":
-        df_exibir = df_exibir.sort_values("nome", ascending=False)
-    else:
-        df_exibir = df_exibir.sort_values("nome", ascending=True)
+    if not df_exibir.empty and "nome" in df_exibir.columns:
+        df_exibir = df_exibir.sort_values("nome", ascending=(ordenacao != "Z-A"))
 
     # ── PDF ──────────────────────────────────────────────────────────────────
     if c_export.button("🖨️ Exportar PDF", use_container_width=True, type="primary", key="em_pdf_btn"):
