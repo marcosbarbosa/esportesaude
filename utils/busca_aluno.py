@@ -87,5 +87,5 @@ def filtrar_alunos_df(
     mask = pd.Series(False, index=df.index)
     for col in cols:
         if col in df.columns:
-            mask |= df[col].fillna("").apply(normalizar_fonetica).str.contains(t, na=False)
+            mask |= df[col].fillna("").apply(normalizar_fonetica).str.contains(t, na=False, regex=False)
     return df[mask]

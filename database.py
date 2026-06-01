@@ -511,7 +511,7 @@ def buscar_alunos_geral(termo="", incluir_inativos=False):
             alvo = normalizar_fonetica(termo)
             if alvo:
                 df = df[
-                    df["nome"].fillna("").apply(normalizar_fonetica).str.contains(alvo, na=False)
+                    df["nome"].fillna("").apply(normalizar_fonetica).str.contains(alvo, na=False, regex=False)
                 ]
         return df
     except Exception:

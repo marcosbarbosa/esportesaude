@@ -743,7 +743,7 @@ def tela_impressao_ficha():
             termo_norm = normalizar_fonetica(termo_busca)
             df_alunos["nome_norm"] = df_alunos["nome"].apply(normalizar_fonetica)
             df_view = df_alunos[
-                df_alunos["nome_norm"].str.contains(termo_norm, case=False, na=False)
+                df_alunos["nome_norm"].str.contains(termo_norm, case=False, na=False, regex=False)
             ].sort_values("nome")
 
             if df_view.empty:
