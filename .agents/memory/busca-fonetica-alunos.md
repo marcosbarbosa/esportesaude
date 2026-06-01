@@ -21,7 +21,17 @@ Preserve o gatilho mínimo de caracteres específico de cada tela (alguns usam 2
 `buscar_alunos_geral(termo)` NÃO usa mais `.ilike` server-side. Carrega a base
 paginada (mantendo `neq status Inativo`) e filtra com `normalizar_fonetica` em
 Python. **Why:** `.ilike` é sensível à grafia/acentos e quebrava a unificação.
-**Tradeoff:** para `termo != ""` o backend transfere a base inteira antes de
-filtrar (mais latência). Se o volume crescer muito, avaliar coluna fonética
-persistida no banco para voltar ao filtro server-side — mas hoje NÃO há acesso
-ao schema do Supabase a partir do Replit.
+
+O download paginado mora em `_carregar_base_alunos(incluir_inativos)`, cacheado
+APENAS por `incluir_inativos`. `buscar_alunos_geral` chama esse loader e só faz o
+filtro fonético em Python por cima. **Why:** o `@st.cache_data` chaveia por
+`termo`, então antes cada termo distinto re-baixava a base inteira do Supabase;
+separando download (1x por TTL) do filtro (barato em memória), termos diferentes
+reusam o mesmo download. **How to apply:** `_inv_alunos()` precisa limpar TAMBÉM
+`_carregar_base_alunos` (já incluído) — senão mutações em alunos servem base
+velha. Resultados são idênticos: o filtro não mudou, só o de onde vêm os dados.
+
+**Server-side ainda bloqueado:** uma coluna fonética persistida (filtro no banco)
+seria o passo escalável seguinte, mas exige DDL e hoje NÃO há acesso ao schema do
+Supabase a partir do Replit. Um pré-filtro `.ilike` no servidor NÃO serve: perde
+resultados foneticamente diferentes (ex.: "Phelipe" vs "Felipe").

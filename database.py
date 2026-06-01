@@ -488,22 +488,36 @@ def rejeitar_inscricao_aluno(pre_cadastro_id):
 # 👨‍🎓 GESTÃO DE ALUNOS E DIÁRIOS
 # ==============================================================================
 @st.cache_data(ttl=300, show_spinner=False)
+def _carregar_base_alunos(incluir_inativos=False):
+    """Download paginado da base de alunos (sem filtro de termo) — supera o
+    limite de 1000 linhas do PostgREST.
+
+    Cacheado APENAS por `incluir_inativos`. Assim, buscas por termos diferentes
+    reutilizam o mesmo download em vez de re-baixar a base inteira a cada busca
+    (o filtro fonético acontece em Python sobre este resultado já em memória).
+    """
+    todos = []
+    inicio = 0
+    while True:
+        query = supabase.from_("alunos").select("*")
+        if not incluir_inativos:
+            query = query.neq("status", "Inativo")
+        res = query.order("nome").range(inicio, inicio + 999).execute()
+        if res.data:
+            todos.extend(res.data)
+        if not res.data or len(res.data) < 1000:
+            break
+        inicio += 1000
+    return pd.DataFrame(todos)
+
+
+@st.cache_data(ttl=300, show_spinner=False)
 def buscar_alunos_geral(termo="", incluir_inativos=False):
-    """Busca alunos com paginação automática — supera o limite de 1000 linhas do PostgREST."""
+    """Busca alunos. A base é baixada uma única vez (cache de
+    `_carregar_base_alunos`) e filtrada em Python — buscas por termos distintos
+    NÃO re-baixam a base inteira a cada vez."""
     try:
-        todos = []
-        inicio = 0
-        while True:
-            query = supabase.from_("alunos").select("*")
-            if not incluir_inativos:
-                query = query.neq("status", "Inativo")
-            res = query.order("nome").range(inicio, inicio + 999).execute()
-            if res.data:
-                todos.extend(res.data)
-            if not res.data or len(res.data) < 1000:
-                break
-            inicio += 1000
-        df = pd.DataFrame(todos)
+        df = _carregar_base_alunos(incluir_inativos)
         # Busca por termo: filtro FONÉTICO + sem acentos (não usa ilike, que é
         # sensível à grafia). Mantém consistência com as buscas das telas.
         if termo and not df.empty and "nome" in df.columns:
@@ -540,7 +554,7 @@ def buscar_aluno_por_id(aluno_id):
 def _inv_alunos():
     """Caches de lista/perfil de alunos, prontuários e BI de risco."""
     for fn in (
-        buscar_alunos_geral, buscar_aluno_por_id, get_alunos_por_turma,
+        _carregar_base_alunos, buscar_alunos_geral, buscar_aluno_por_id, get_alunos_por_turma,
         get_avaliacoes_aluno, get_atestados_temporarios,
         get_estatisticas_frequencia_aluno, get_historico_aulas_aluno,
         bi_resumo_studio, bi_distribuicao_risco, bi_alunos_risco_abandono,
