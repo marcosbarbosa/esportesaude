@@ -17,6 +17,7 @@ from database import (
     registrar_log_matricula_doc,
     get_todas_turmas,
     get_ocupacao_turmas,
+    verificar_aluno_existente,
     supabase,
     upload_midia,
 )
@@ -146,8 +147,20 @@ def tela_triagem():
                     st.error("❌ Esta turma está LOTADA! Alocação bloqueada para manter a qualidade.")
                 else:
                     try:
+                        nome_norm = nome_exp.upper().strip()
+                        existente = verificar_aluno_existente(
+                            nome_norm, str(nasc_exp), cpf_exp.strip()
+                        )
+                        if existente:
+                            st.error(
+                                f"⚠️ '{nome_norm}' já está cadastrado(a) "
+                                f"(turma {existente.get('turma') or '—'}, status {existente.get('status') or '—'}). "
+                                "Cadastro cancelado para não criar duplicado. "
+                                "Abra a ficha do aluno existente ou use 'Unificar Alunos' se precisar."
+                            )
+                            st.stop()
                         aluno_payload = {
-                            "nome": nome_exp.upper().strip(),
+                            "nome": nome_norm,
                             "turma": mapa_turmas[turma_exp_display],
                             "data_nascimento": str(nasc_exp),
                             "whatsapp": whats_exp.strip(),

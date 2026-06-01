@@ -346,6 +346,44 @@ def get_pre_cadastros_pendentes():
         return []
 
 
+def _so_digitos(valor):
+    return "".join(ch for ch in str(valor or "") if ch.isdigit())
+
+
+def verificar_aluno_existente(nome="", data_nascimento=None, cpf=None):
+    """Retorna o primeiro aluno já cadastrado que parece ser a MESMA pessoa
+    (mesmo CPF, ou mesmo nome + data de nascimento, ou mesmo nome exato quando
+    não há nascimento/CPF para comparar). Retorna None se não houver.
+
+    Usado para impedir cadastros duplicados na aprovação e na inclusão manual.
+    """
+    try:
+        nome_n = str(nome or "").upper().strip()
+        if not nome_n:
+            return None
+        res = (
+            supabase.from_("alunos")
+            .select("id, nome, turma, status, data_nascimento, cpf")
+            .ilike("nome", nome_n)
+            .execute()
+        )
+        candidatos = res.data or []
+        cpf_n = _so_digitos(cpf)
+        nasc_n = str(data_nascimento) if data_nascimento else ""
+        for c in candidatos:
+            c_cpf = _so_digitos(c.get("cpf"))
+            if cpf_n and c_cpf and cpf_n == c_cpf:
+                return c
+            if nasc_n and c.get("data_nascimento") and str(c.get("data_nascimento")) == nasc_n:
+                return c
+        # Sem CPF nem nascimento para desempatar: nome exato já basta como alerta
+        if not cpf_n and not nasc_n and candidatos:
+            return candidatos[0]
+        return None
+    except Exception:
+        return None
+
+
 def aprovar_inscricao_aluno(pre_cadastro_id, turma_selecionada):
     try:
         res_pre = (
@@ -400,10 +438,27 @@ def aprovar_inscricao_aluno(pre_cadastro_id, turma_selecionada):
             "status": "Ativo",
         }
 
+        # Proteção anti-duplicidade: se já existe aluno com este CPF (ou nome +
+        # nascimento), NÃO cria outro. Arquiva a inscrição e avisa o operador.
+        existente = verificar_aluno_existente(
+            novo_aluno["nome"], novo_aluno.get("data_nascimento"), novo_aluno.get("cpf")
+        )
+        if existente:
+            supabase.from_("pre_cadastros").update({"status": "Aprovado"}).eq(
+                "id", pre_cadastro_id
+            ).execute()
+            _inv_alunos()
+            return False, (
+                f"⚠️ '{novo_aluno['nome']}' já está cadastrado(a) "
+                f"(turma {existente.get('turma') or '—'}, status {existente.get('status') or '—'}). "
+                "Inscrição arquivada sem criar duplicado."
+            )
+
         supabase.from_("alunos").insert(novo_aluno).execute()
         supabase.from_("pre_cadastros").update({"status": "Aprovado"}).eq(
             "id", pre_cadastro_id
         ).execute()
+        _inv_alunos()
         return True, f"Aluno {novo_aluno['nome']} matriculado na {turma_selecionada}!"
     except Exception as e:
         return False, f"Erro ao migrar aluno: {str(e)}"
