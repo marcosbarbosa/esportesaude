@@ -1979,7 +1979,9 @@ def bi_dados_individuais(aluno_id):
 
 def atualizar_turma_aluno(aluno_id, nova_turma):
     try:
-        supabase.from_("alunos").update({"turma": nova_turma}).eq("id", str(aluno_id)).execute()
+        dados = {"turma": nova_turma, "turma_id": _resolver_turma_id(nova_turma)}
+        supabase.from_("alunos").update(dados).eq("id", str(aluno_id)).execute()
+        _inv_alunos()
         return True
     except Exception:
         return False
