@@ -358,6 +358,20 @@ def verificar_aluno_existente(nome="", data_nascimento=None, cpf=None):
     Usado para impedir cadastros duplicados na aprovação e na inclusão manual.
     """
     try:
+        cpf_n = _so_digitos(cpf)
+        # 1. CPF é identificador forte: verifica GLOBALMENTE, independente do nome
+        #    (pega duplicado mesmo com nome digitado diferente).
+        if cpf_n:
+            res_cpf = (
+                supabase.from_("alunos")
+                .select("id, nome, turma, status, data_nascimento, cpf")
+                .eq("cpf", cpf_n)
+                .execute()
+            )
+            if res_cpf.data:
+                return res_cpf.data[0]
+
+        # 2. Sem CPF (ou CPF não bateu): compara por nome + data de nascimento.
         nome_n = str(nome or "").upper().strip()
         if not nome_n:
             return None
@@ -368,12 +382,8 @@ def verificar_aluno_existente(nome="", data_nascimento=None, cpf=None):
             .execute()
         )
         candidatos = res.data or []
-        cpf_n = _so_digitos(cpf)
         nasc_n = str(data_nascimento) if data_nascimento else ""
         for c in candidatos:
-            c_cpf = _so_digitos(c.get("cpf"))
-            if cpf_n and c_cpf and cpf_n == c_cpf:
-                return c
             if nasc_n and c.get("data_nascimento") and str(c.get("data_nascimento")) == nasc_n:
                 return c
         # Sem CPF nem nascimento para desempatar: nome exato já basta como alerta

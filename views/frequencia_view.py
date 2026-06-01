@@ -90,6 +90,16 @@ def obter_todos_alunos_com_inativos_cache():
     return buscar_alunos_geral("", incluir_inativos=True)
 
 
+def _limpar_cache_busca_global():
+    """Invalida os caches locais usados pela Busca Global após transferir/reativar
+    um aluno, garantindo que ele apareça imediatamente na turma correta."""
+    for fn in (obter_todos_alunos_cache, obter_todos_alunos_com_inativos_cache):
+        try:
+            fn.clear()
+        except Exception:
+            pass
+
+
 @st.cache_data(ttl=300, show_spinner=False)
 def verificar_aniversariante_hoje_cache() -> bool:
     """Retorna True se há algum aluno aniversariando hoje. Cache de 5 min."""
@@ -320,6 +330,7 @@ def tela_frequencia():
                                     ):
                                         alterar_status_aluno(aluno["id"], "Ativo")
                                         atualizar_turma_aluno(aluno["id"], turma_selecionada)
+                                        _limpar_cache_busca_global()
                                         st.toast(
                                             f"{aluno['nome'].split()[0]} reativado(a) e transferido(a)!",
                                             icon="♻️",
@@ -376,6 +387,7 @@ def tela_frequencia():
                                         help="Move o aluno permanentemente para esta turma",
                                     ):
                                         atualizar_turma_aluno(aluno["id"], turma_selecionada)
+                                        _limpar_cache_busca_global()
                                         st.toast(
                                             f"{aluno['nome'].split()[0]} transferido(a) "
                                             f"para {turma_selecionada}!",

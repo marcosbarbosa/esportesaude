@@ -1,2 +1,2 @@
-- [Email BI deep-links](email-bi-deeplinks.md) — relatórios acionáveis: `?ir=freq&d=` / `?ir=ficha&id=` abrem tela certa; sobrevivem ao login via session_state.
-- [Navegação interna IMBRA](navegacao-imbra.md) — `menu_atual` dirige telas; `?rota=` é só p/ rotas públicas sem login; `origem_prontuario` deve ser rota válida do menu.
+- [Cache invalidation de alunos](cache-invalidation-alunos.md) — mutações em `alunos` exigem `_inv_alunos()`; caches locais da Busca Global em `frequencia_view` NÃO são cobertos e precisam de clear próprio.
+- [Colunas numéricas Supabase](supabase-numeric-colunas.md) — `altura` é numeric(4,2) em metros; valor em cm estoura (22003). Não há acesso ao schema do Supabase a partir do Replit.
