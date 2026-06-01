@@ -647,6 +647,53 @@ def get_logs_lgpd(limit: int = 300) -> list:
         return []
 
 
+def registrar_log_matricula_doc(aluno_id, aluno_nome, docs_faltantes, operador: str = "", turma: str = "") -> bool:
+    """Registra log de matrícula efetuada com documentos faltantes."""
+    import json, datetime as _dt
+    try:
+        ts = _dt.datetime.now().isoformat(timespec="seconds")
+        chave = f"matricula_doc_log_{ts}_{aluno_id}"
+        valor = json.dumps({
+            "aluno_id": str(aluno_id),
+            "aluno_nome": aluno_nome,
+            "docs_faltantes": list(docs_faltantes),
+            "turma": turma or "—",
+            "operador": operador or "—",
+            "timestamp": ts,
+        }, ensure_ascii=False)
+        supabase.table("configuracoes_sistema").upsert(
+            {"chave": chave, "valor": valor}, on_conflict="chave"
+        ).execute()
+        get_logs_matricula_docs.clear()
+        return True
+    except Exception:
+        return False
+
+
+@st.cache_data(ttl=60, show_spinner=False)
+def get_logs_matricula_docs(limit: int = 300) -> list:
+    """Retorna logs de matrículas com documentos faltantes (mais recente primeiro)."""
+    import json
+    try:
+        res = (
+            supabase.table("configuracoes_sistema")
+            .select("chave,valor")
+            .like("chave", "matricula_doc_log_%")
+            .order("chave", desc=True)
+            .limit(limit)
+            .execute()
+        )
+        logs = []
+        for r in (res.data or []):
+            try:
+                logs.append(json.loads(r["valor"]))
+            except Exception:
+                pass
+        return logs
+    except Exception:
+        return []
+
+
 def atualizar_data_nascimento(aluno_id, data_nascimento):
     """Atualiza somente a data de nascimento do aluno. Retorna (bool, msg)."""
     try:

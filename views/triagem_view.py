@@ -14,6 +14,7 @@ from database import (
     get_pre_cadastros_pendentes, 
     aprovar_inscricao_aluno, 
     rejeitar_inscricao_aluno,
+    registrar_log_matricula_doc,
     get_todas_turmas,
     get_ocupacao_turmas,
     supabase,
@@ -181,6 +182,9 @@ def tela_triagem():
 
     pendentes = get_pre_cadastros_pendentes()
 
+    if st.session_state.get("_matricula_audit_fail"):
+        st.error(st.session_state.pop("_matricula_audit_fail"))
+
     if not pendentes:
         st.info("✅ Excelente! A caixa de entrada do MoveRight está limpa. Nenhuma inscrição pendente.")
         return
@@ -307,6 +311,39 @@ def tela_triagem():
             # ==========================================
             st.markdown("### ⚖️ Decisão da Coordenação")
 
+            # Documentos obrigatórios em falta (RG e Atestado de Aptidão)
+            docs_faltantes = []
+            if not url_rg:
+                docs_faltantes.append("RG")
+            if not url_ate:
+                docs_faltantes.append("Atestado de Aptidão")
+
+            def _fazer_matricula(faltantes):
+                with st.spinner("A processar matrícula..."):
+                    sucesso, msg = aprovar_inscricao_aluno(aluno['id'], turma_real_salvar)
+                if sucesso:
+                    if faltantes:
+                        log_ok = registrar_log_matricula_doc(
+                            aluno['id'], nome, faltantes,
+                            st.session_state.get("usuario_nome", "") or "—",
+                            turma_real_salvar,
+                        )
+                        if log_ok:
+                            st.toast(
+                                "📝 Log registrado — matrícula com pendências: " + ", ".join(faltantes),
+                                icon="📝",
+                            )
+                        else:
+                            # Matrícula concluída mas a trilha de auditoria falhou: avisar de forma persistente.
+                            st.session_state["_matricula_audit_fail"] = (
+                                f"⚠️ {nome} foi matriculado(a) com pendências ({', '.join(faltantes)}), "
+                                "mas o LOG DE AUDITORIA FALHOU. Registre manualmente e verifique a conexão."
+                            )
+                    st.toast(msg, icon="✅")
+                    st.rerun()
+                else:
+                    st.error(msg)
+
             c_turma, c_aprovar, c_espera, c_rejeitar = st.columns([2.5, 1.5, 1.5, 1.5], vertical_alignment="bottom")
 
             with c_turma:
@@ -320,18 +357,13 @@ def tela_triagem():
 
             with c_aprovar:
                 if st.button("✅ MATRICULAR", type="primary", use_container_width=True, key=f"btn_ap_{aluno['id']}"):
-                    if not url_ate:
-                        st.error("Não é possível matricular sem Atestado de Aptidão!")
-                    elif "🔴" in turma_escolhida_display:
+                    if "🔴" in turma_escolhida_display:
                         st.error("Esta turma está LOTADA! Alocação bloqueada para manter a qualidade.")
+                    elif docs_faltantes:
+                        # Não bloqueia: pede confirmação para matricular com pendências
+                        st.session_state[f"confirm_mat_{aluno['id']}"] = True
                     else:
-                        with st.spinner("A processar matrícula..."):
-                            sucesso, msg = aprovar_inscricao_aluno(aluno['id'], turma_real_salvar)
-                            if sucesso:
-                                st.success(msg)
-                                st.rerun()
-                            else:
-                                st.error(msg)
+                        _fazer_matricula([])
 
             with c_espera:
                 if status_atual != "Lista de Espera":
@@ -349,3 +381,27 @@ def tela_triagem():
                         st.rerun()
                     else:
                         st.error(msg)
+
+            # ── Confirmação: matricular MESMO com documentos faltando ──────────
+            if st.session_state.get(f"confirm_mat_{aluno['id']}"):
+                st.warning(
+                    "⚠️ **Atenção:** não é recomendável matricular sem "
+                    + " e ".join(docs_faltantes)
+                    + ". Você pode matricular mesmo assim — será gerado um **log de matrícula com documentos faltantes** ("
+                    + ", ".join(docs_faltantes)
+                    + ")."
+                )
+                cf1, cf2 = st.columns([2, 1])
+                if cf1.button(
+                    "✅ Matricular mesmo assim (registrar log)",
+                    type="primary", use_container_width=True,
+                    key=f"force_mat_{aluno['id']}",
+                ):
+                    st.session_state.pop(f"confirm_mat_{aluno['id']}", None)
+                    _fazer_matricula(docs_faltantes)
+                if cf2.button(
+                    "Cancelar", use_container_width=True,
+                    key=f"cancel_mat_{aluno['id']}",
+                ):
+                    st.session_state.pop(f"confirm_mat_{aluno['id']}", None)
+                    st.rerun()
