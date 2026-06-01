@@ -42,6 +42,12 @@ def injetar_css_tema():
     if "tema_operador" not in st.session_state:
         st.session_state.tema_operador = "Claro"
 
+    # Esconde o indicador "Running..." (status widget) do Streamlit em todas as telas
+    st.markdown(
+        "<style>[data-testid='stStatusWidget']{display:none !important;}</style>",
+        unsafe_allow_html=True,
+    )
+
     if st.session_state.tema_operador == "Escuro":
         st.markdown("""
 <style>
