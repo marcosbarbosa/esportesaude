@@ -32,7 +32,7 @@ from modulos_frequencia.tab_lgpd import renderizar_aba_lgpd
 from modulos_frequencia.tab_atestado import renderizar_aba_atestado
 from modulos_frequencia.tab_niver import renderizar_aba_niver
 from modulos_frequencia.tab_admin import renderizar_aba_admin
-from utils.texto import remover_acentos
+from utils.texto import normalizar_fonetica
 
 
 # ==============================================================================
@@ -217,14 +217,14 @@ def tela_frequencia():
 
     bloqueio_ativo = False
 
-    busca_limpa = remover_acentos(busca_grid).strip() if busca_grid else ""
+    busca_limpa = normalizar_fonetica(busca_grid).strip() if busca_grid else ""
     mostrar_todos_horario = False
 
     if len(busca_limpa) >= 3:
         df_todos_com_inativos = obter_todos_alunos_com_inativos_cache()
 
         if not df_todos_com_inativos.empty:
-            df_temp_nome = df_todos_com_inativos["nome"].apply(remover_acentos)
+            df_temp_nome = df_todos_com_inativos["nome"].apply(normalizar_fonetica)
             df_encontrados = df_todos_com_inativos[
                 df_temp_nome.str.contains(busca_limpa, case=False, na=False)
             ]

@@ -1726,7 +1726,7 @@ def _renderizar_monitoramento_clinico():
         df_raw = df_raw[df_raw["turma"] == turma_filtro]
 
     if busca_mc and len(busca_mc.strip()) >= 2:
-        from utils.texto import remover_acentos as _ra
+        from utils.texto import normalizar_fonetica as _ra
         mask = df_raw["nome"].apply(_ra).str.contains(_ra(busca_mc), case=False, na=False)
         df_raw = df_raw[mask]
 

@@ -1593,10 +1593,11 @@ if st.session_state.menu_atual == "Principal":
             # Aplicar filtros
             _df_grid = _df_hg.copy()
             if _hg_busca and len(_hg_busca.strip()) >= 3:
-                _b = _hg_busca.strip().lower()
+                from utils.texto import normalizar_fonetica as _nf
+                _b = _nf(_hg_busca.strip())
                 _df_grid = _df_grid[
-                    _df_grid["nome"].str.lower().str.contains(_b, na=False) |
-                    _df_grid["turma"].str.lower().str.contains(_b, na=False)
+                    _df_grid["nome"].fillna("").apply(_nf).str.contains(_b, na=False) |
+                    _df_grid["turma"].fillna("").apply(_nf).str.contains(_b, na=False)
                 ]
             if _hg_turma != "Todas":
                 _df_grid = _df_grid[_df_grid["turma"] == _hg_turma]

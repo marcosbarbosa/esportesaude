@@ -1,2 +1,3 @@
 - [Cache invalidation de alunos](cache-invalidation-alunos.md) — mutações em `alunos` exigem `_inv_alunos()`; caches locais da Busca Global em `frequencia_view` NÃO são cobertos e precisam de clear próprio.
 - [Colunas numéricas Supabase](supabase-numeric-colunas.md) — `altura` é numeric(4,2) em metros; valor em cm estoura (22003). Não há acesso ao schema do Supabase a partir do Replit.
+- [Busca fonética de alunos](busca-fonetica-alunos.md) — toda busca livre de nome usa `normalizar_fonetica` (padrão `filtrar_alunos_df`); `buscar_alunos_geral` filtra em Python (sem `.ilike`).

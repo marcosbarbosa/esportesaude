@@ -29,7 +29,7 @@ from database import (
     alterar_status_aluno,
     supabase,
 )
-from utils.texto import remover_acentos
+from utils.texto import normalizar_fonetica
 
 
 # ==============================================================================
@@ -423,8 +423,10 @@ def renderizar_dashboard():
 
             df_exibir = df_inativos.copy()
             if busca_inativo and len(busca_inativo.strip()) >= 2:
-                termo = busca_inativo.strip().lower()
-                df_exibir = df_exibir[df_exibir["nome"].str.lower().str.contains(termo, na=False)]
+                termo = normalizar_fonetica(busca_inativo.strip())
+                df_exibir = df_exibir[
+                    df_exibir["nome"].fillna("").apply(normalizar_fonetica).str.contains(termo, na=False)
+                ]
 
             if df_exibir.empty:
                 st.info("Nenhum aluno encontrado para essa busca.")
@@ -679,12 +681,12 @@ def renderizar_dashboard():
         df_grid = df_base_periodo.copy()
 
         if busca:
-            busca_limpa = remover_acentos(busca).strip()
+            busca_limpa = normalizar_fonetica(busca).strip()
 
             if len(busca_limpa) >= 3:
                 # Cria colunas temporárias normalizadas para a busca
-                df_temp_nome = df_grid["nome"].apply(remover_acentos)
-                df_temp_turma = df_grid["turma"].apply(remover_acentos)
+                df_temp_nome = df_grid["nome"].apply(normalizar_fonetica)
+                df_temp_turma = df_grid["turma"].apply(normalizar_fonetica)
 
                 # Filtra onde a string limpa bate com os dados limpos
                 df_grid = df_grid[
