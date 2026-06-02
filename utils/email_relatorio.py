@@ -502,7 +502,9 @@ def enviar_relatorio_bi(cfg: dict, nome_org: str = "Instituto Muda Brasil",
                         base_url: str = "") -> tuple:
     emails    = cfg.get("emails_destino", [])
     remetente = cfg.get("email_remetente", "").strip()
-    senha     = cfg.get("email_senha_app", "").strip()
+    # Remove TODOS os espaços: a senha de app do Gmail é exibida como
+    # "abcd efgh ijkl mnop"; colada com espaços, o login falha (535 BadCredentials).
+    senha     = "".join(cfg.get("email_senha_app", "").split())
 
     if not emails:
         return False, "Nenhum e-mail de destino configurado."
