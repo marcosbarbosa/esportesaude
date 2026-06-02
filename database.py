@@ -464,7 +464,7 @@ def aprovar_inscricao_aluno(pre_cadastro_id, turma_selecionada):
                 "Inscrição arquivada sem criar duplicado."
             )
 
-        supabase.from_("alunos").insert(novo_aluno).execute()
+        supabase.from_("alunos").insert(_com_fonetica(novo_aluno)).execute()
         supabase.from_("pre_cadastros").update({"status": "Aprovado"}).eq(
             "id", pre_cadastro_id
         ).execute()
@@ -511,25 +511,134 @@ def _carregar_base_alunos(incluir_inativos=False):
     return pd.DataFrame(todos)
 
 
+@st.cache_data(ttl=600, show_spinner=False)
+def _coluna_fonetica_disponivel() -> bool:
+    """Detecta se a coluna persistida `nome_fonetica` já existe em `alunos`.
+
+    Enquanto ela não existir (criação exige DDL no Supabase), TODO o caminho cai
+    no comportamento atual (download da base + filtro em Python), sem regressão.
+    Assim que a coluna for criada, o filtro server-side e a sincronização em
+    insert/update passam a funcionar automaticamente."""
+    try:
+        supabase.from_("alunos").select("nome_fonetica").limit(1).execute()
+        return True
+    except Exception:
+        return False
+
+
+@st.cache_data(ttl=600, show_spinner=False)
+def _coluna_fonetica_pronta(incluir_inativos=False) -> bool:
+    """True apenas quando a coluna existe E está 100% preenchida (nenhum aluno no
+    escopo com `nome_fonetica` nulo). Garante que o filtro server-side nunca
+    perca alunos antigos ainda não retro-preenchidos (`backfill_nome_fonetica`)."""
+    try:
+        q = supabase.from_("alunos").select("id").is_("nome_fonetica", "null")
+        if not incluir_inativos:
+            q = q.neq("status", "Inativo")
+        res = q.limit(1).execute()
+        return not res.data
+    except Exception:
+        return False
+
+
+def _escape_like(s: str) -> str:
+    """Escapa os curingas de LIKE/ILIKE (`\\`, `%`, `_`) para que o filtro
+    server-side faça correspondência literal de substring, idêntica ao
+    `str.contains(..., regex=False)` usado no filtro em Python."""
+    return s.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
+
+def _com_fonetica(dados: dict) -> dict:
+    """Acrescenta `nome_fonetica` ao payload quando há 'nome' e a coluna existe.
+
+    No-op seguro quando a coluna ainda não foi criada — evita o erro
+    'column does not exist' que quebraria qualquer insert/update de aluno."""
+    if dados and dados.get("nome") and _coluna_fonetica_disponivel():
+        from utils.texto import normalizar_fonetica
+        return {**dados, "nome_fonetica": normalizar_fonetica(dados["nome"])}
+    return dados
+
+
+def _buscar_alunos_serverside(alvo, incluir_inativos):
+    """Filtra alunos no banco por `nome_fonetica` (ILIKE substring), paginando
+    para superar o limite de 1000 linhas do PostgREST. Só baixa os alunos que
+    casam com o termo — escala sem trazer a base inteira."""
+    padrao = f"%{_escape_like(alvo)}%"
+    todos = []
+    inicio = 0
+    while True:
+        query = supabase.from_("alunos").select("*").ilike("nome_fonetica", padrao)
+        if not incluir_inativos:
+            query = query.neq("status", "Inativo")
+        res = query.order("nome").range(inicio, inicio + 999).execute()
+        if res.data:
+            todos.extend(res.data)
+        if not res.data or len(res.data) < 1000:
+            break
+        inicio += 1000
+    return pd.DataFrame(todos)
+
+
 @st.cache_data(ttl=300, show_spinner=False)
 def buscar_alunos_geral(termo="", incluir_inativos=False):
-    """Busca alunos. A base é baixada uma única vez (cache de
-    `_carregar_base_alunos`) e filtrada em Python — buscas por termos distintos
-    NÃO re-baixam a base inteira a cada vez."""
+    """Busca alunos por termo (filtro FONÉTICO tolerante a acentos/grafia).
+
+    Quando a coluna persistida `nome_fonetica` existe e está preenchida, filtra
+    SERVER-SIDE (só baixa os alunos que casam — escala com a base). Caso
+    contrário, mantém o caminho atual: base baixada uma única vez (cache de
+    `_carregar_base_alunos`) e filtrada em Python. Resultados são idênticos nos
+    dois caminhos."""
     try:
+        from utils.texto import normalizar_fonetica
+        alvo = normalizar_fonetica(termo) if termo else ""
+
+        # Caminho escalável: filtro no banco pela coluna fonética persistida.
+        if alvo and _coluna_fonetica_pronta(incluir_inativos):
+            return _buscar_alunos_serverside(alvo, incluir_inativos)
+
+        # Fallback (coluna ausente/incompleta): download único + filtro em Python.
         df = _carregar_base_alunos(incluir_inativos)
-        # Busca por termo: filtro FONÉTICO + sem acentos (não usa ilike, que é
-        # sensível à grafia). Mantém consistência com as buscas das telas.
-        if termo and not df.empty and "nome" in df.columns:
-            from utils.texto import normalizar_fonetica
-            alvo = normalizar_fonetica(termo)
-            if alvo:
-                df = df[
-                    df["nome"].fillna("").apply(normalizar_fonetica).str.contains(alvo, na=False, regex=False)
-                ]
+        if alvo and not df.empty and "nome" in df.columns:
+            df = df[
+                df["nome"].fillna("").apply(normalizar_fonetica).str.contains(alvo, na=False, regex=False)
+            ]
         return df
     except Exception:
         return pd.DataFrame()
+
+
+def backfill_nome_fonetica():
+    """Retro-preenche `alunos.nome_fonetica` para os alunos já existentes.
+
+    Requisito: a coluna `nome_fonetica` já deve existir no Supabase (criação por
+    DDL). Após rodar, `_coluna_fonetica_pronta` passa a True e a busca usa o
+    filtro server-side. Idempotente: só atualiza linhas com valor ausente/divergente.
+    Retorna (bool, msg)."""
+    if not _coluna_fonetica_disponivel():
+        return False, (
+            "Coluna 'nome_fonetica' não existe. Crie-a no Supabase "
+            "(ALTER TABLE alunos ADD COLUMN nome_fonetica text;) antes do backfill."
+        )
+    from utils.texto import normalizar_fonetica
+    try:
+        df = _carregar_base_alunos(incluir_inativos=True)
+        if df.empty:
+            return True, "Nenhum aluno para preencher."
+        atualizados = 0
+        for _, row in df.iterrows():
+            nome = row.get("nome")
+            alvo = normalizar_fonetica(nome) if nome else ""
+            atual = row.get("nome_fonetica") if "nome_fonetica" in df.columns else None
+            if (atual or "") == alvo:
+                continue
+            supabase.from_("alunos").update({"nome_fonetica": alvo}).eq(
+                "id", str(row["id"])
+            ).execute()
+            atualizados += 1
+        _inv_alunos()
+        return True, f"Backfill concluído: {atualizados} aluno(s) atualizado(s)."
+    except Exception as e:
+        return False, str(e)
 
 
 @st.cache_data(ttl=120, show_spinner=False)
@@ -554,7 +663,8 @@ def buscar_aluno_por_id(aluno_id):
 def _inv_alunos():
     """Caches de lista/perfil de alunos, prontuários e BI de risco."""
     for fn in (
-        _carregar_base_alunos, buscar_alunos_geral, buscar_aluno_por_id, get_alunos_por_turma,
+        _carregar_base_alunos, buscar_alunos_geral, _coluna_fonetica_pronta,
+        buscar_aluno_por_id, get_alunos_por_turma,
         get_avaliacoes_aluno, get_atestados_temporarios,
         get_estatisticas_frequencia_aluno, get_historico_aulas_aluno,
         bi_resumo_studio, bi_distribuicao_risco, bi_alunos_risco_abandono,
@@ -605,7 +715,7 @@ def atualizar_dados_sociais_aluno(aluno_id, dados_atualizados):
             for k, v in dados_atualizados.items()
             if v is not None and str(v).strip() not in ("", "nan", "None")
         }
-        supabase.from_("alunos").update(dados_limpos).eq("id", str(aluno_id)).execute()
+        supabase.from_("alunos").update(_com_fonetica(dados_limpos)).eq("id", str(aluno_id)).execute()
         _inv_alunos()
         return True, "Perfil atualizado!"
     except Exception as e:
@@ -656,7 +766,7 @@ def cadastrar_novo_aluno(nome, turma, **kwargs):
         payload = {"nome": str(nome).strip(), "turma": str(turma).strip(),
                    "status": "Ativo"}
         payload.update({k: v for k, v in kwargs.items() if v is not None})
-        supabase.from_("alunos").insert(payload).execute()
+        supabase.from_("alunos").insert(_com_fonetica(payload)).execute()
         _inv_alunos()
         return True
     except Exception:
@@ -677,7 +787,7 @@ def atualizar_perfil_aluno(aluno_id, nome, data_nascimento, peso, altura,
         if obs:
             dados["observacoes"] = str(obs).strip()
         dados_limpos = {k: v for k, v in dados.items() if v is not None}
-        supabase.from_("alunos").update(dados_limpos).eq("id", str(aluno_id)).execute()
+        supabase.from_("alunos").update(_com_fonetica(dados_limpos)).eq("id", str(aluno_id)).execute()
         _inv_alunos()
         return True, "Perfil atualizado!"
     except Exception as e:
@@ -691,7 +801,7 @@ def atualizar_perfil_aluno_dict(aluno_id, payload: dict):
                         if v is not None and str(v).strip() not in ("", "nan", "None")}
         if not dados_limpos:
             return False, "Nenhum campo para atualizar."
-        supabase.from_("alunos").update(dados_limpos).eq("id", str(aluno_id)).execute()
+        supabase.from_("alunos").update(_com_fonetica(dados_limpos)).eq("id", str(aluno_id)).execute()
         _inv_alunos()
         return True, "Dados atualizados."
     except Exception as e:
@@ -703,7 +813,7 @@ def atualizar_aluno_completo(aluno_id, dados: dict):
     try:
         dados_limpos = {k: v for k, v in dados.items()
                         if v is not None and str(v).strip() not in ("", "nan", "None")}
-        supabase.from_("alunos").update(dados_limpos).eq("id", str(aluno_id)).execute()
+        supabase.from_("alunos").update(_com_fonetica(dados_limpos)).eq("id", str(aluno_id)).execute()
         _inv_alunos()
         return True, "Aluno atualizado."
     except Exception as e:

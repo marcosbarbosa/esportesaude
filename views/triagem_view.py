@@ -20,6 +20,7 @@ from database import (
     verificar_aluno_existente,
     supabase,
     upload_midia,
+    _com_fonetica,
 )
 
 
@@ -170,7 +171,7 @@ def tela_triagem():
                             "medicamentos": "A preencher na anamnese."
                         }
                         # Inserção direta no banco OFICIAL
-                        res = supabase.table("alunos").insert(aluno_payload).execute()
+                        res = supabase.table("alunos").insert(_com_fonetica(aluno_payload)).execute()
 
                         if res.data:
                             novo_aluno = res.data[0]

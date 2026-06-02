@@ -62,7 +62,8 @@ def _sanitize_payload(d: dict) -> dict:
 
 def atualizar_perfil_aluno_dict_seguro(aluno_id, dados_atualizados):
     try:
-        supabase.from_("alunos").update(_sanitize_payload(dados_atualizados)).eq("id", str(aluno_id)).execute()
+        from database import _com_fonetica
+        supabase.from_("alunos").update(_com_fonetica(_sanitize_payload(dados_atualizados))).eq("id", str(aluno_id)).execute()
         from database import buscar_aluno_por_id, buscar_alunos_geral, get_alunos_por_turma
         for fn in (buscar_aluno_por_id, buscar_alunos_geral, get_alunos_por_turma):
             try:
