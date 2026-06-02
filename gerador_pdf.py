@@ -764,16 +764,142 @@ def criar_prestacao_diaria_pdf(data_fmt: str, nomes: list) -> bytes:
         return bytes(pdf.output())
 
 
-def criar_prestacao_periodo_pdf(dias: dict) -> bytes:
+def _pagina_capa_prestacao(pdf: FPDF, resumo: dict):
+    """
+    Renderiza a CAPA do relatório de Prestação de Contas: totalizadores
+    (dias com aula, dias sem aula, total de presenças, média por dia) e a
+    tabela de dias sem aula do Calendário Institucional — para apresentar
+    como folha de rosto da prestação de contas.
+    """
+    _cabecalho_padrao(pdf, subtitulo="PRESTACAO DE CONTAS - RELATORIO DE FREQUENCIA")
+
+    periodo_ini     = resumo.get("periodo_ini", "")
+    periodo_fim     = resumo.get("periodo_fim", "")
+    total_dias      = resumo.get("total_dias", 0)
+    total_presencas = resumo.get("total_presencas", 0)
+    media_dia       = resumo.get("media_dia", "0")
+    dias_sem_aula   = resumo.get("dias_sem_aula", []) or []
+
+    # ── Título grande ─────────────────────────────────────────────────────
+    pdf.ln(4)
+    pdf.set_font("Arial", "B", 18)
+    pdf.set_text_color(10, 37, 64)
+    pdf.cell(0, 10, limpar_texto("PRESTACAO DE CONTAS"), align="C", ln=1)
+    pdf.set_font("Arial", "", 11)
+    pdf.set_text_color(100, 116, 139)
+    pdf.cell(0, 6, limpar_texto(f"Periodo: {periodo_ini}  a  {periodo_fim}"), align="C", ln=1)
+    pdf.ln(8)
+
+    # ── Cards de totalizadores (4 colunas) ────────────────────────────────
+    cards = [
+        ("DIAS COM AULA",        str(total_dias),      (30, 58, 95)),
+        ("DIAS SEM AULA",        str(len(dias_sem_aula)), (180, 83, 9)),
+        ("TOTAL DE PRESENCAS",   str(total_presencas), (22, 101, 52)),
+        ("MEDIA POR DIA",        str(media_dia),       (109, 40, 173)),
+    ]
+    card_w  = 45
+    gap     = 4
+    total_w = card_w * 4 + gap * 3
+    x0      = (210 - total_w) / 2.0
+    y0      = pdf.get_y()
+    card_h  = 26
+    for i, (label, valor, cor) in enumerate(cards):
+        x = x0 + i * (card_w + gap)
+        pdf.set_fill_color(*cor)
+        pdf.rect(x, y0, card_w, card_h, style="F")
+        pdf.set_text_color(255, 255, 255)
+        pdf.set_xy(x, y0 + 4)
+        pdf.set_font("Arial", "B", 20)
+        pdf.cell(card_w, 12, limpar_texto(valor), align="C")
+        pdf.set_xy(x, y0 + 16)
+        pdf.set_font("Arial", "B", 7)
+        pdf.multi_cell(card_w, 4, limpar_texto(label), align="C")
+    pdf.set_y(y0 + card_h + 10)
+    pdf.set_text_color(0, 0, 0)
+
+    # ── Tabela: dias SEM AULA (Calendário Institucional) ──────────────────
+    pdf.set_font("Arial", "B", 12)
+    pdf.set_text_color(22, 101, 52)
+    pdf.cell(0, 8, limpar_texto(
+        f"Dias SEM AULA registrados no Calendario Institucional ({len(dias_sem_aula)})"
+    ), ln=1)
+    pdf.ln(1)
+
+    if dias_sem_aula:
+        W_NUM, W_DATA, W_MOT = 14, 70, 106
+        LINE_H = 5.5
+
+        def _header_tabela():
+            pdf.set_fill_color(22, 163, 74)
+            pdf.set_text_color(255, 255, 255)
+            pdf.set_font("Arial", "B", 9)
+            pdf.cell(W_NUM, 7, "#", border=1, fill=True, align="C")
+            pdf.cell(W_DATA, 7, limpar_texto("DATA"), border=1, fill=True, align="C")
+            pdf.cell(W_MOT, 7, limpar_texto("MOTIVO"), border=1, fill=True, align="L")
+            pdf.ln()
+            pdf.set_text_color(0, 0, 0)
+
+        _header_tabela()
+        for i, item in enumerate(dias_sem_aula, 1):
+            data_txt = limpar_texto(item.get("data", ""))
+            mot_txt  = limpar_texto(item.get("motivo", "") or "-")
+
+            # altura da linha = nº de linhas que o MOTIVO ocupa
+            pdf.set_font("Arial", "", 9)
+            n_linhas = max(1, len(pdf.multi_cell(W_MOT, LINE_H, mot_txt, split_only=True)))
+            row_h = n_linhas * LINE_H
+
+            # quebra de página manual, reimprimindo o cabeçalho da tabela
+            if pdf.get_y() + row_h > (pdf.h - 22):
+                pdf.add_page()
+                _header_tabela()
+
+            if i % 2 == 0:
+                pdf.set_fill_color(240, 253, 244)
+            else:
+                pdf.set_fill_color(255, 255, 255)
+
+            x_ini, y_ini = pdf.get_x(), pdf.get_y()
+            pdf.set_font("Arial", "B", 8)
+            pdf.cell(W_NUM, row_h, str(i), border=1, fill=True, align="C")
+            pdf.set_font("Arial", "", 9)
+            pdf.cell(W_DATA, row_h, data_txt, border=1, fill=True, align="C")
+            # MOTIVO com quebra automática de texto, alinhado à mesma linha
+            pdf.set_xy(x_ini + W_NUM + W_DATA, y_ini)
+            pdf.multi_cell(W_MOT, LINE_H, mot_txt, border=1, fill=True, align="L")
+            pdf.set_xy(x_ini, y_ini + row_h)
+    else:
+        pdf.set_font("Arial", "", 10)
+        pdf.set_text_color(100, 116, 139)
+        pdf.cell(0, 7, limpar_texto("Nenhum dia sem aula registrado no periodo."), ln=1)
+
+    # ── Rodapé de emissão ─────────────────────────────────────────────────
+    hoje_fmt = datetime.date.today().strftime("%d/%m/%Y")
+    pdf.ln(6)
+    pdf.set_font("Arial", "I", 8)
+    pdf.set_text_color(100, 100, 100)
+    pdf.cell(0, 5, limpar_texto(
+        f"Emitido em: {hoje_fmt}  |  Sistema IMBRA - Gestao Inteligente MoveRight"
+    ), ln=1)
+    pdf.set_text_color(0, 0, 0)
+
+
+def criar_prestacao_periodo_pdf(dias: dict, resumo: dict = None) -> bytes:
     """
     Gera PDF multi-página da Prestação de Contas por Período.
     dias: dict ordenado { 'YYYY-MM-DD': ['Nome1', 'Nome2', ...] }
+    resumo (opcional): dados da CAPA (totalizadores + dias sem aula). Quando
+      informado, uma folha de rosto é adicionada como primeira página.
     Cada dia ocupa uma nova página com cabeçalho completo.
     Sábados, domingos e feriados já devem ter sido removidos antes de chamar.
     """
     import datetime as _dt
     pdf = PDF()
     pdf.set_auto_page_break(auto=True, margin=18)
+
+    if resumo:
+        pdf.add_page()
+        _pagina_capa_prestacao(pdf, resumo)
 
     for data_iso, nomes in dias.items():
         pdf.add_page()

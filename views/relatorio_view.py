@@ -1622,8 +1622,29 @@ CREATE POLICY "allow_all" ON dias_sem_aula
 
     st.markdown("<hr style='margin:12px 0;border-color:#E2E8F0;'>", unsafe_allow_html=True)
 
+    # Monta os dados da CAPA (folha de rosto da prestação de contas)
+    dias_sem_aula_capa = []
+    for d in dias_calendario:
+        try:
+            motivo_d = motivos_map.get(d, "")
+        except NameError:
+            motivo_d = ""
+        dias_sem_aula_capa.append({
+            "data": f"{d.strftime('%d/%m/%Y')} ({_dia_da_semana_pt(d)})",
+            "motivo": motivo_d or "—",
+        })
+
+    resumo_capa = {
+        "periodo_ini": ini_fmt,
+        "periodo_fim": fim_fmt,
+        "total_dias": total_dias,
+        "total_presencas": total_alunos,
+        "media_dia": f"{total_alunos / total_dias:.1f}",
+        "dias_sem_aula": dias_sem_aula_capa,
+    }
+
     with st.spinner("Gerando PDF…"):
-        pdf_bytes = criar_prestacao_periodo_pdf(por_dia)
+        pdf_bytes = criar_prestacao_periodo_pdf(por_dia, resumo=resumo_capa)
 
     st.download_button(
         label=f"📄 Baixar PDF — {total_dias} dia(s) / {total_alunos} presenças",
