@@ -1309,20 +1309,34 @@ def get_presencas_dia(data_aula, lista_ids):
         return {}
 
 
-def upload_midia(file_bytes, file_name, mime_type, bucket="documentos_alunos"):
-    try:
-        nome_u = f"{uuid.uuid4()}.{file_name.split('.')[-1]}"
-        supabase.storage.from_(bucket).upload(
-            file=file_bytes, path=nome_u, file_options={"content-type": mime_type}
-        )
-        url = supabase.storage.from_(bucket).get_public_url(nome_u)
-        if not url or str(url).strip() in ("", "None", "null"):
-            print(f"[upload_midia] AVISO: URL vazia após upload de '{nome_u}' no bucket '{bucket}'")
-            return None
-        return url
-    except Exception as e:
-        print(f"[upload_midia] ERRO ao enviar '{file_name}' para bucket '{bucket}': {e}")
-        return None
+def upload_midia(file_bytes, file_name, mime_type, bucket="documentos_alunos", tentativas=3):
+    """Envia um arquivo ao Storage do Supabase com novas tentativas em caso de
+    falha transitória (rede/timeout). Retorna a URL pública ou None se todas as
+    tentativas falharem."""
+    ext = (file_name.rsplit(".", 1)[-1] if "." in file_name else "bin").lower()
+    ultimo_erro = None
+    for tentativa in range(1, tentativas + 1):
+        try:
+            nome_u = f"{uuid.uuid4()}.{ext}"
+            supabase.storage.from_(bucket).upload(
+                file=file_bytes,
+                path=nome_u,
+                file_options={"content-type": mime_type or "application/octet-stream"},
+            )
+            url = supabase.storage.from_(bucket).get_public_url(nome_u)
+            if not url or str(url).strip() in ("", "None", "null"):
+                ultimo_erro = "URL pública vazia após upload"
+                print(f"[upload_midia] AVISO (tentativa {tentativa}/{tentativas}): "
+                      f"URL vazia após upload de '{nome_u}' no bucket '{bucket}'")
+                continue
+            return url
+        except Exception as e:
+            ultimo_erro = str(e)
+            print(f"[upload_midia] tentativa {tentativa}/{tentativas} falhou ao enviar "
+                  f"'{file_name}' para bucket '{bucket}': {e}")
+    print(f"[upload_midia] ERRO definitivo ao enviar '{file_name}' para "
+          f"bucket '{bucket}': {ultimo_erro}")
+    return None
 
 
 def salvar_diario(

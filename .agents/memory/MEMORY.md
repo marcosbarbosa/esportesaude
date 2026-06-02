@@ -2,3 +2,4 @@
 - [Colunas numéricas Supabase](supabase-numeric-colunas.md) — `altura` é numeric(4,2) em metros; valor em cm estoura (22003). Não há acesso ao schema do Supabase a partir do Replit.
 - [Busca fonética de alunos](busca-fonetica-alunos.md) — toda busca livre de nome usa `normalizar_fonetica` (padrão `filtrar_alunos_df`); `buscar_alunos_geral` filtra em Python (sem `.ilike`).
 - [Paginação da frequencia](paginacao-frequencia.md) — `bi_presencas_periodo`/`get_presentes_periodo_todos` têm teto de páginas e truncam; métricas históricas completas precisam de paginação própria sem teto.
+- [Cadastro x uploads](cadastro-uploads.md) — gravar o pré-cadastro nunca pode depender do sucesso dos uploads; docs que falham viram pendentes, sem bloquear o save.

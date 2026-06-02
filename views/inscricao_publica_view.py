@@ -295,7 +295,8 @@ def tela_inscricao_publica_move_right():
                 )
             with c_up_atest:
                 atestado_file = st.file_uploader(
-                    "3. Atestado de Aptidão *", type=["jpg", "jpeg", "png", "pdf"]
+                    "3. Atestado de Aptidão (anexe agora ou depois)",
+                    type=["jpg", "jpeg", "png", "pdf"],
                 )
 
             st.markdown(
@@ -334,10 +335,6 @@ def tela_inscricao_publica_move_right():
                     st.error(
                         "⚠️ Por favor, preencha todos os campos obrigatórios (marcados com *)."
                     )
-                elif not atestado_file:
-                    st.error(
-                        "⚠️ O Atestado Médico é obrigatório para concluir a inscrição."
-                    )
                 elif not termo:
                     st.error("⚠️ O consentimento da LGPD é obrigatório pela lei.")
                 else:
@@ -345,7 +342,7 @@ def tela_inscricao_publica_move_right():
                         "A processar documentos e a registar assinatura digital..."
                     ):
                         url_rg, url_receita, url_atestado = None, None, None
-                        _upload_ok = True
+                        falhas_upload = []
 
                         if rg_file:
                             b_rg, n_rg, t_rg = processar_documento(
@@ -353,8 +350,7 @@ def tela_inscricao_publica_move_right():
                             )
                             url_rg = upload_midia(b_rg, n_rg, t_rg)
                             if url_rg is None:
-                                st.error("❌ Falha ao enviar o RG. Verifique sua conexão e tente novamente.")
-                                _upload_ok = False
+                                falhas_upload.append("Cópia do RG/CPF")
 
                         if receita_file:
                             b_rec, n_rec, t_rec = processar_documento(
@@ -364,7 +360,7 @@ def tela_inscricao_publica_move_right():
                             )
                             url_receita = upload_midia(b_rec, n_rec, t_rec)
                             if url_receita is None:
-                                st.warning("⚠️ Falha ao enviar o Receituário — o restante será salvo normalmente.")
+                                falhas_upload.append("Receituário Médico")
 
                         if atestado_file:
                             b_at, n_at, t_at = processar_documento(
@@ -374,12 +370,9 @@ def tela_inscricao_publica_move_right():
                             )
                             url_atestado = upload_midia(b_at, n_at, t_at)
                             if url_atestado is None:
-                                st.error("❌ Falha ao enviar o Atestado Médico. Verifique sua conexão e tente novamente.")
-                                _upload_ok = False
-
-                        if not _upload_ok:
-                            st.info("ℹ️ A inscrição NÃO foi salva. Corrija os erros acima e envie novamente.")
-                            st.stop()
+                                falhas_upload.append("Atestado de Aptidão")
+                        else:
+                            falhas_upload.append("Atestado de Aptidão (não anexado)")
 
                         contato_emergencia_final = (
                             f"{emergencia_nome.strip()} - {emergencia_tel.strip()}"
@@ -437,10 +430,21 @@ def tela_inscricao_publica_move_right():
                                 nome.split()[0],
                                 datetime.datetime.now().strftime("%d/%m/%Y %H:%M:%S"),
                             )
-                            st.success(
-                                "✅ **Inscrição validada e assinada!** Uma cópia do termo foi enviada para o seu e-mail."
-                            )
-                            st.balloons()
+                            if falhas_upload:
+                                st.success(
+                                    "✅ **Inscrição salva com sucesso!** Seus dados foram gravados — nada foi perdido."
+                                )
+                                st.warning(
+                                    "⚠️ Os seguintes documentos ainda **não** foram enviados e precisarão ser "
+                                    "entregues depois: "
+                                    + ", ".join(falhas_upload)
+                                    + "."
+                                )
+                            else:
+                                st.success(
+                                    "✅ **Inscrição validada e assinada!** Uma cópia do termo foi enviada para o seu e-mail."
+                                )
+                                st.balloons()
                         except Exception as e:
                             st.error(
                                 f"Erro ao salvar: {e}. Verifique se todas as novas colunas foram criadas na tabela 'pre_cadastros' do Supabase."
