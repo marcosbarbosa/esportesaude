@@ -27,7 +27,7 @@ def tela_gestao_templates():
     with col1:
         st.markdown("### 🚨 Retenção e Evasão")
         for _, t in df_templates[
-            df_templates["gatilho"].str.contains("evasao|assiduo")
+            df_templates["gatilho"].str.contains("evasao|assiduo", regex=True)
         ].iterrows():
             with st.expander(f"📌 {t['titulo']}"):
                 nova_msg = st.text_area(
@@ -52,7 +52,7 @@ def tela_gestao_templates():
     with col2:
         st.markdown("### 🎂 Parabenizações (Aniversários)")
         for _, t in df_templates[
-            df_templates["gatilho"].str.contains("niver")
+            df_templates["gatilho"].str.contains("niver", regex=False)
         ].iterrows():
             with st.expander(f"🎉 {t['titulo']}"):
                 nova_msg = st.text_area(
