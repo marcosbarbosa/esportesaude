@@ -4,3 +4,4 @@
 - [Paginação da frequencia](paginacao-frequencia.md) — `bi_presencas_periodo`/`get_presentes_periodo_todos` têm teto de páginas e truncam; métricas históricas completas precisam de paginação própria sem teto.
 - [Cadastro x uploads](cadastro-uploads.md) — gravar o pré-cadastro nunca pode depender do sucesso dos uploads; docs que falham viram pendentes, sem bloquear o save.
 - [Busca fonética server-side](busca-fonetica-serverside.md) — caminho server-side só liga após DDL no Supabase (coluna `nome_fonetica` + índice trgm) e backfill via botão admin na aba Admin da Frequência.
+- [Interpretador Python p/ testes](python-interpreter-tests.md) — use `.pythonlibs/bin/python3.11` (não o `python` 3.12); importar `database.py` precisa de secrets, rode da raiz.
