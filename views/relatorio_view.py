@@ -1634,6 +1634,45 @@ CREATE POLICY "allow_all" ON dias_sem_aula
             "motivo": motivo_d or "—",
         })
 
+    # Séries da capa: diária (gráfico de linhas) + totais semanais/mensais
+    _MESES_ABREV = ["jan", "fev", "mar", "abr", "mai", "jun",
+                    "jul", "ago", "set", "out", "nov", "dez"]
+    serie_diaria = []
+    tot_semana, dias_semana, ord_semana = {}, {}, []
+    tot_mes, ord_mes = {}, []
+    for _iso, _nomes in por_dia.items():
+        try:
+            _d = datetime.date.fromisoformat(_iso)
+        except Exception:
+            continue
+        _n = len(_nomes)
+        serie_diaria.append({"data": _d.strftime("%d/%m"), "valor": _n})
+        _isc = _d.isocalendar()
+        _csem = (_isc[0], _isc[1])
+        if _csem not in tot_semana:
+            tot_semana[_csem] = 0
+            dias_semana[_csem] = []
+            ord_semana.append(_csem)
+        tot_semana[_csem] += _n
+        dias_semana[_csem].append(_d)
+        _cmes = (_d.year, _d.month)
+        if _cmes not in tot_mes:
+            tot_mes[_cmes] = 0
+            ord_mes.append(_cmes)
+        tot_mes[_cmes] += _n
+
+    totais_semana = []
+    for _ch in ord_semana:
+        _ds = sorted(dias_semana[_ch])
+        totais_semana.append({
+            "label": f"{_ds[0].strftime('%d/%m')}-{_ds[-1].strftime('%d/%m')}",
+            "valor": tot_semana[_ch],
+        })
+    totais_mes = [
+        {"label": f"{_MESES_ABREV[_m - 1]}/{_a}", "valor": tot_mes[(_a, _m)]}
+        for (_a, _m) in ord_mes
+    ]
+
     resumo_capa = {
         "periodo_ini": ini_fmt,
         "periodo_fim": fim_fmt,
@@ -1641,6 +1680,9 @@ CREATE POLICY "allow_all" ON dias_sem_aula
         "total_presencas": total_alunos,
         "media_dia": f"{total_alunos / total_dias:.1f}",
         "dias_sem_aula": dias_sem_aula_capa,
+        "serie_diaria": serie_diaria,
+        "totais_semana": totais_semana,
+        "totais_mes": totais_mes,
     }
 
     with st.spinner("Gerando PDF…"):

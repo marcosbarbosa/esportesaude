@@ -764,11 +764,148 @@ def criar_prestacao_diaria_pdf(data_fmt: str, nomes: list) -> bytes:
         return bytes(pdf.output())
 
 
+def _grafico_linha_presencas(pdf: FPDF, serie: list, x: float, y: float,
+                             w: float, h: float):
+    """
+    Desenha um gráfico de LINHAS (vetorial) com a variação do nº de presenças
+    ao longo dos dias do período. serie: [{'data': 'DD/MM', 'valor': int}, ...]
+    """
+    import math
+    if not serie:
+        return
+    valores = [max(0, int(p.get("valor", 0) or 0)) for p in serie]
+    rotulos = [limpar_texto(p.get("data", "")) for p in serie]
+    n = len(valores)
+    vmax = max(valores) if valores else 0
+    passo = max(1, int(math.ceil((vmax if vmax > 0 else 1) / 4.0)))
+    topo = passo * 4
+
+    pad_l, pad_r, pad_t, pad_b = 13.0, 3.0, 4.0, 9.0
+    px, py = x + pad_l, y + pad_t
+    pw, ph = w - pad_l - pad_r, h - pad_t - pad_b
+
+    # moldura
+    pdf.set_draw_color(220, 226, 232)
+    pdf.set_line_width(0.2)
+    pdf.rect(x, y, w, h)
+
+    # gridlines horizontais + rótulos do eixo Y
+    pdf.set_font("Arial", "", 6)
+    pdf.set_text_color(130, 140, 150)
+    for k in range(5):
+        val = topo * k / 4.0
+        gy = py + ph - (val / topo) * ph
+        pdf.set_draw_color(238, 240, 243)
+        pdf.line(px, gy, px + pw, gy)
+        pdf.set_xy(x, gy - 1.6)
+        pdf.cell(pad_l - 2.0, 3.2, str(int(round(val))), align="R")
+
+    # coordenadas dos pontos
+    if n == 1:
+        xs = [px + pw / 2.0]
+    else:
+        xs = [px + pw * i / (n - 1) for i in range(n)]
+    ys = [py + ph - (v / topo) * ph for v in valores]
+
+    # área sob a linha (preenchimento suave translúcido)
+    if n >= 2:
+        try:
+            pts = [(xs[0], py + ph)] + list(zip(xs, ys)) + [(xs[-1], py + ph)]
+            pdf.set_fill_color(191, 219, 254)
+            with pdf.local_context(fill_opacity=0.35):
+                pdf.polygon(pts, style="F")
+        except Exception:
+            pass
+
+    # linha principal
+    pdf.set_draw_color(37, 99, 235)
+    pdf.set_line_width(0.6)
+    for i in range(n - 1):
+        pdf.line(xs[i], ys[i], xs[i + 1], ys[i + 1])
+
+    # marcadores + rótulo de valor (só quando há poucos pontos)
+    pdf.set_fill_color(37, 99, 235)
+    mostra_valor = n <= 18
+    for i in range(n):
+        r = 0.85
+        pdf.ellipse(xs[i] - r, ys[i] - r, 2 * r, 2 * r, style="F")
+        if mostra_valor:
+            pdf.set_font("Arial", "B", 5.5)
+            pdf.set_text_color(30, 58, 95)
+            pdf.set_xy(xs[i] - 6, ys[i] - 4.4)
+            pdf.cell(12, 3, str(valores[i]), align="C")
+
+    # rótulos do eixo X (subamostrados para não poluir)
+    pdf.set_font("Arial", "", 5.5)
+    pdf.set_text_color(130, 140, 150)
+    step = max(1, int(math.ceil(n / 12.0)))
+    for i in range(n):
+        if i % step != 0 and i != n - 1:
+            continue
+        pdf.set_xy(xs[i] - 8, py + ph + 1.5)
+        pdf.cell(16, 3, rotulos[i], align="C")
+
+    pdf.set_line_width(0.2)
+    pdf.set_text_color(0, 0, 0)
+
+
+def _grid_totais(pdf: FPDF, titulo: str, itens: list, cor: tuple, cols: int = 6):
+    """
+    Renderiza um grid compacto de mini-totalizadores (várias colunas), usado
+    para os totais semanais e mensais de presenças na capa.
+    itens: [{'label': str, 'valor': int}, ...]
+    """
+    if not itens:
+        return
+    pdf.set_font("Arial", "B", 11)
+    pdf.set_text_color(*cor)
+    pdf.cell(0, 7, limpar_texto(titulo), ln=1)
+    pdf.set_text_color(0, 0, 0)
+
+    gap = 3.0
+    full = pdf.w - pdf.l_margin - pdf.r_margin
+    cell_w = (full - gap * (cols - 1)) / cols
+    cell_h = 13.0
+    x_start = pdf.l_margin
+    row_y = pdf.get_y()
+
+    for idx, it in enumerate(itens):
+        col = idx % cols
+        if col == 0:
+            if pdf.get_y() + cell_h > (pdf.h - 22):
+                pdf.add_page()
+            row_y = pdf.get_y()
+        x = x_start + col * (cell_w + gap)
+
+        pdf.set_fill_color(246, 249, 252)
+        pdf.set_draw_color(*cor)
+        pdf.set_line_width(0.2)
+        pdf.rect(x, row_y, cell_w, cell_h, style="DF")
+
+        pdf.set_xy(x, row_y + 1.6)
+        pdf.set_font("Arial", "B", 12)
+        pdf.set_text_color(*cor)
+        pdf.cell(cell_w, 6, limpar_texto(str(it.get("valor", 0))), align="C")
+
+        pdf.set_xy(x, row_y + 7.8)
+        pdf.set_font("Arial", "", 6.5)
+        pdf.set_text_color(90, 100, 110)
+        pdf.cell(cell_w, 4, limpar_texto(str(it.get("label", ""))), align="C")
+
+        if col == cols - 1 or idx == len(itens) - 1:
+            pdf.set_y(row_y + cell_h + gap)
+
+    pdf.set_text_color(0, 0, 0)
+    pdf.set_line_width(0.2)
+    pdf.ln(2)
+
+
 def _pagina_capa_prestacao(pdf: FPDF, resumo: dict):
     """
     Renderiza a CAPA do relatório de Prestação de Contas: totalizadores
-    (dias com aula, dias sem aula, total de presenças, média por dia) e a
-    tabela de dias sem aula do Calendário Institucional — para apresentar
+    (dias com aula, dias sem aula, total de presenças, média por dia), grids
+    de totais semanais/mensais, um gráfico de linhas da variação de presenças
+    e a tabela de dias sem aula do Calendário Institucional — para apresentar
     como folha de rosto da prestação de contas.
     """
     _cabecalho_padrao(pdf, subtitulo="PRESTACAO DE CONTAS - RELATORIO DE FREQUENCIA")
@@ -816,6 +953,33 @@ def _pagina_capa_prestacao(pdf: FPDF, resumo: dict):
         pdf.multi_cell(card_w, 4, limpar_texto(label), align="C")
     pdf.set_y(y0 + card_h + 10)
     pdf.set_text_color(0, 0, 0)
+
+    serie_diaria  = resumo.get("serie_diaria", []) or []
+    totais_semana = resumo.get("totais_semana", []) or []
+    totais_mes    = resumo.get("totais_mes", []) or []
+
+    # ── Gráfico de linhas: variação de presenças no período ────────────────
+    if serie_diaria:
+        graf_h = 50.0
+        if pdf.get_y() + graf_h + 14 > (pdf.h - 22):
+            pdf.add_page()
+        pdf.set_font("Arial", "B", 12)
+        pdf.set_text_color(30, 58, 95)
+        pdf.cell(0, 8, limpar_texto("Variacao de presencas no periodo"), ln=1)
+        pdf.set_text_color(0, 0, 0)
+        gx = pdf.l_margin
+        gy = pdf.get_y()
+        gw = pdf.w - pdf.l_margin - pdf.r_margin
+        _grafico_linha_presencas(pdf, serie_diaria, gx, gy, gw, graf_h)
+        pdf.set_y(gy + graf_h + 8)
+
+    # ── Grids de totais semanais e mensais ────────────────────────────────
+    if totais_semana:
+        _grid_totais(pdf, f"Totais por semana ({len(totais_semana)})",
+                     totais_semana, (30, 58, 95), cols=6)
+    if totais_mes:
+        _grid_totais(pdf, f"Totais por mes ({len(totais_mes)})",
+                     totais_mes, (22, 101, 52), cols=6)
 
     # ── Tabela: dias SEM AULA (Calendário Institucional) ──────────────────
     pdf.set_font("Arial", "B", 12)
