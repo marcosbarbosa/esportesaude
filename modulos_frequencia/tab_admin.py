@@ -12,6 +12,9 @@ from database import (
     bi_presencas_periodo,
     bi_frequencia_turmas,
     bi_resumo_studio,
+    backfill_nome_fonetica,
+    _coluna_fonetica_disponivel,
+    _coluna_fonetica_pronta,
     ADMIN_MASTER,
 )
 
@@ -75,6 +78,68 @@ def _classificar_anomalia(dt: datetime.date, feriados: dict) -> str:
     return " + ".join(alertas) if alertas else ""
 
 
+def _renderizar_bloco_fonetica():
+    """Painel admin para ativar a busca rápida (índice fonético no banco).
+
+    A coluna `alunos.nome_fonetica` precisa ser criada por DDL no Supabase
+    (não há acesso ao schema a partir daqui). Depois de criada, este painel
+    retro-preenche os alunos existentes via `backfill_nome_fonetica`, ativando
+    o filtro server-side em `buscar_alunos_geral`."""
+    with st.expander("🔎 Busca rápida (índice fonético)", expanded=False):
+        coluna_existe = _coluna_fonetica_disponivel()
+        coluna_pronta = _coluna_fonetica_pronta() if coluna_existe else False
+
+        if not coluna_existe:
+            st.warning(
+                "A coluna `nome_fonetica` ainda **não existe** no Supabase. "
+                "Enquanto isso, a busca usa o caminho atual (baixa a base inteira "
+                "e filtra no app) — sem regressão, porém menos escalável."
+            )
+            st.markdown(
+                "**Passo 1 — rodar no Supabase (SQL Editor):**\n"
+                "```sql\n"
+                "ALTER TABLE alunos ADD COLUMN nome_fonetica text;\n"
+                "CREATE EXTENSION IF NOT EXISTS pg_trgm;\n"
+                "CREATE INDEX idx_alunos_nome_fonetica_trgm\n"
+                "  ON alunos USING gin (nome_fonetica gin_trgm_ops);\n"
+                "```\n"
+                "**Passo 2** — voltar aqui e clicar em **Retro-preencher** abaixo."
+            )
+        elif coluna_pronta:
+            st.success(
+                "✅ Coluna `nome_fonetica` criada e **100% preenchida**. "
+                "A busca já roda **server-side** (escalável)."
+            )
+            st.caption(
+                "Rode o retro-preenchimento novamente apenas se importar alunos "
+                "em massa por fora do app."
+            )
+        else:
+            st.info(
+                "A coluna `nome_fonetica` existe, mas há alunos **sem preenchimento**. "
+                "Clique em **Retro-preencher** para ativar a busca server-side."
+            )
+
+        if st.button(
+            "🔁 Retro-preencher índice fonético",
+            use_container_width=True,
+            key="admin_btn_backfill_fonetica",
+            disabled=not coluna_existe,
+        ):
+            with st.spinner("Retro-preenchendo `nome_fonetica`..."):
+                ok, msg = backfill_nome_fonetica()
+            if ok:
+                st.success(f"✅ {msg}")
+                for fn in (_coluna_fonetica_disponivel, _coluna_fonetica_pronta):
+                    try:
+                        fn.clear()
+                    except Exception:
+                        pass
+                st.rerun()
+            else:
+                st.error(f"❌ {msg}")
+
+
 def renderizar_aba_admin():
     email_op = (
         st.session_state.get("usuario_email")
@@ -85,6 +150,8 @@ def renderizar_aba_admin():
     if email_op != ADMIN_MASTER:
         st.error("🔒 Acesso restrito — apenas o Administrador Mestre pode usar este painel.")
         return
+
+    _renderizar_bloco_fonetica()
 
     st.markdown(
         """<div style='background:#FEF2F2;border:1.5px solid #FCA5A5;border-radius:10px;
