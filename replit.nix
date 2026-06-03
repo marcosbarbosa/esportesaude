@@ -1,5 +1,7 @@
 {pkgs}: {
   deps = [
+    pkgs.hello
+    pkgs.lacus
     pkgs.openjpeg
     pkgs.libwebp
     pkgs.lcms2
