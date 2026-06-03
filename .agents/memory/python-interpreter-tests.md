@@ -22,15 +22,12 @@ e já usa o toolchain 3.11).
   `.replit`/`replit.nix` direto é bloqueado pela plataforma. Logo, remover o `lacus`
   programaticamente é IMPOSSÍVEL a partir do Replit; só dá pela UI de Dependencies
   (painel System Dependencies) ou por correção da plataforma no tool.
-- Shells em modo agent/workflow e scripts não-interativos (`bash x.sh`) NÃO herdam
-  o fix do `.config/bashrc`; nesses casos use `.pythonlibs/bin/python3.11`.
-- Para rodar scripts ad-hoc com o 3.11 sem a poluição do lacus, use
-  `PYTHONPATH= PYTHONNOUSERSITE=1 .pythonlibs/bin/python3.11 script.py` da raiz — o
-  `PYTHONPATH` herdado injeta os site-packages do python3.12 (lacus) e quebra imports
-  como `pydantic_core._pydantic_core`.
-- O workflow do Streamlit ("IMBRA Chamada (main.py)") tem o command iniciando com
-  `PYTHONPATH=""` justamente para não herdar essa poluição; sem isso o app crasha no
-  import do supabase/pydantic. Se reconfigurar o workflow, MANTENHA o `PYTHONPATH=""`.
+- Shells em modo agent/workflow e scripts não-interativos NÃO herdam o fix do
+  `.config/bashrc`; nesses casos use `.pythonlibs/bin/python3.11`.
+- O `PYTHONPATH` herdado do ambiente injeta os site-packages do python3.12 e quebra
+  imports do 3.11 (ex.: `pydantic_core._pydantic_core`). Para rodar scripts ad-hoc:
+  prefixe `PYTHONPATH=`. O workflow do Streamlit precisa iniciar com `PYTHONPATH=""`
+  pelo mesmo motivo — se reconfigurar o workflow, MANTENHA esse prefixo.
 
 Importar `database.py` exige `.streamlit/secrets.toml` (lido por `init_connection`
 via `st.secrets`) — só é encontrado quando o cwd é a raiz do projeto. Rodar de
