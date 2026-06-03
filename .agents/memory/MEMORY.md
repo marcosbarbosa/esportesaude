@@ -5,3 +5,4 @@
 - [Cadastro x uploads](cadastro-uploads.md) — gravar o pré-cadastro nunca pode depender do sucesso dos uploads; docs que falham viram pendentes, sem bloquear o save.
 - [Busca fonética server-side](busca-fonetica-serverside.md) — caminho server-side só liga após DDL no Supabase (coluna `nome_fonetica` + índice trgm) e backfill via botão admin na aba Admin da Frequência.
 - [Interpretador Python p/ testes](python-interpreter-tests.md) — use `.pythonlibs/bin/python3.11` (não o `python` 3.12); importar `database.py` precisa de secrets, rode da raiz.
+- [Supabase storage buckets](supabase-storage-buckets.md) — só 'diario_midias_imbra' funciona com a chave anon; 'documentos_alunos' não existe e anon não cria bucket.

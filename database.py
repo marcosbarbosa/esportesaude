@@ -1419,7 +1419,7 @@ def get_presencas_dia(data_aula, lista_ids):
         return {}
 
 
-def upload_midia(file_bytes, file_name, mime_type, bucket="documentos_alunos", tentativas=3):
+def upload_midia(file_bytes, file_name, mime_type, bucket="diario_midias_imbra", tentativas=3):
     """Envia um arquivo ao Storage do Supabase com novas tentativas em caso de
     falha transitória (rede/timeout). Retorna a URL pública ou None se todas as
     tentativas falharem."""

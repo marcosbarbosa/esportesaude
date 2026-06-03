@@ -35,7 +35,7 @@ def _salvar_doc_pre_cadastro(pre_id: str, campo: str, arquivo) -> tuple[bool, st
         mime = arquivo.type
         url = upload_midia(b, nome, mime)
         if not url:
-            return False, "Falha no upload — verifique o bucket 'documentos_alunos' no Supabase."
+            return False, "Falha no upload — verifique o bucket 'diario_midias_imbra' no Supabase."
         supabase.table("pre_cadastros").update({campo: url}).eq("id", str(pre_id)).execute()
         get_pre_cadastros_pendentes.clear()
         return True, url
