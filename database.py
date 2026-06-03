@@ -1513,7 +1513,24 @@ def get_relatorio_periodo(data_inicio, data_fim, turma_filtro="Todas"):
             inicio += 1000
         return todos
 
+    # Normaliza qualquer valor (date puro 'YYYY-MM-DD' OU timestamp
+    # 'YYYY-MM-DDTHH:MM:SS+00:00') para a string de data pura 'YYYY-MM-DD'.
+    # CRÍTICO: diario_aulas.data_aula pode vir como timestamp e frequencia.data_aula
+    # como date — sem normalizar, comparações de igualdade e filtros de intervalo
+    # silenciosamente falham (ver listar_datas_aulas_registradas).
+    def _norm_data(v):
+        return str(v)[:10] if v is not None else ""
+
     try:
+        di_str = _norm_data(data_inicio)
+        df_str = _norm_data(data_fim)
+        # Limite superior exclusivo (df + 1 dia) para que filtros .lt() capturem
+        # tanto 'YYYY-MM-DD' quanto 'YYYY-MM-DDTHH:MM:SS+00:00' do último dia.
+        try:
+            df_excl = (pd.to_datetime(df_str) + pd.Timedelta(days=1)).strftime("%Y-%m-%d")
+        except Exception:
+            df_excl = df_str
+
         # ── Alunos ──────────────────────────────────────────────────────────
         def _q_al(i, f):
             q = supabase.table("alunos").select("id, nome, turma").neq("status", "Inativo")
@@ -1529,40 +1546,68 @@ def get_relatorio_periodo(data_inicio, data_fim, turma_filtro="Todas"):
             return (
                 supabase.table("frequencia")
                 .select("aluno_id, data_aula, status")
-                .gte("data_aula", str(data_inicio))
-                .lte("data_aula", str(data_fim))
+                .gte("data_aula", di_str)
+                .lt("data_aula", df_excl)
                 .range(i, f)
             )
         df_freq = pd.DataFrame(_paginar(_q_fr))
+        if not df_freq.empty:
+            df_freq["aluno_id"] = df_freq["aluno_id"].astype(str)
+            df_freq["data_aula"] = df_freq["data_aula"].astype(str).str[:10]
 
         # ── Diário ───────────────────────────────────────────────────────────
         def _q_di(i, f):
             q = (
                 supabase.table("diario_aulas")
                 .select("turma, data_aula")
-                .gte("data_aula", str(data_inicio))
-                .lte("data_aula", str(data_fim))
+                .gte("data_aula", di_str)
+                .lt("data_aula", df_excl)
             )
             if turma_filtro and turma_filtro != "Todas":
                 q = q.eq("turma", turma_filtro)
             return q.range(i, f)
         df_diario = pd.DataFrame(_paginar(_q_di))
+        if not df_diario.empty:
+            df_diario["data_aula"] = df_diario["data_aula"].astype(str).str[:10]
 
-        if df_diario.empty:
+        # ── Dias de aula por turma — UNIÃO Diário ∪ Frequência ───────────────
+        # ANTI-FURO REVERSO: se houve registro de frequência num dia, então houve
+        # aula — mesmo que o professor não tenha criado a linha no Diário. Sem isto,
+        # presenças lançadas sem diário ficam invisíveis no relatório (causa raiz do
+        # bug "Não foram encontradas aulas no Diário"). frequencia não tem coluna
+        # turma → mapeamos aluno_id → turma pelos alunos carregados.
+        id_para_turma = {
+            str(r_id): r_turma
+            for r_id, r_turma in zip(df_alunos["id"], df_alunos["turma"])
+        }
+        dias_por_turma = {}
+        if not df_diario.empty:
+            for _, r in df_diario.iterrows():
+                d = _norm_data(r["data_aula"])
+                if di_str <= d <= df_str:
+                    dias_por_turma.setdefault(r["turma"], set()).add(d)
+        if not df_freq.empty:
+            for _, r in df_freq.iterrows():
+                t = id_para_turma.get(str(r["aluno_id"]))
+                if not t:
+                    continue
+                d = _norm_data(r["data_aula"])
+                if di_str <= d <= df_str:
+                    dias_por_turma.setdefault(t, set()).add(d)
+
+        if not dias_por_turma:
             return pd.DataFrame()
 
         resultados = []
         for _, aluno in df_alunos.iterrows():
-            aluno_id    = aluno["id"]
+            aluno_id    = str(aluno["id"])
             turma_aluno = aluno["turma"]
 
-            # Dias reais de aula desta turma no período (fonte: Diário)
-            dias_aula_turma = sorted(set(
-                df_diario[df_diario["turma"] == turma_aluno]["data_aula"].tolist()
-            ))
+            # Dias reais de aula desta turma no período (Diário ∪ Frequência)
+            dias_aula_turma = sorted(dias_por_turma.get(turma_aluno, set()))
             total_aulas_turma = len(dias_aula_turma)
             if total_aulas_turma == 0:
-                continue  # turma sem diário no período → pula aluno
+                continue  # turma sem aula no período → pula aluno
 
             linha = {"Nome": aluno["nome"], "Turma": turma_aluno}
             faltas, presencas, justificadas = 0, 0, 0
@@ -1572,7 +1617,7 @@ def get_relatorio_periodo(data_inicio, data_fim, turma_filtro="Todas"):
 
                 if not df_freq.empty:
                     reg = df_freq[
-                        (df_freq["aluno_id"] == str(aluno_id))
+                        (df_freq["aluno_id"] == aluno_id)
                         & (df_freq["data_aula"] == dia)
                     ]
                     if not reg.empty:
