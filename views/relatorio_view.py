@@ -2084,13 +2084,13 @@ def tela_relatorio():
         unsafe_allow_html=True,
     )
 
-    tab_f, tab_id, tab_a, tab_w, tab_diario, tab_sem_av, tab_clinico = st.tabs(
+    tab_diario, tab_f, tab_id, tab_a, tab_w, tab_sem_av, tab_clinico = st.tabs(
         [
+            "📋 Lista Frequência Oficial",
             "📊 Plan. Frequência",
             "🪪 Cara-Crachá",
             "🔎 Auditoria",
             "🏆 Prestação Pedagógica",
-            "📋 Prestação Diária",
             "🧪 Avaliações",
             "🏥 Monitoramento",
         ]
