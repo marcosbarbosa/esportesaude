@@ -1685,13 +1685,40 @@ CREATE POLICY "allow_all" ON dias_sem_aula
         "totais_mes": totais_mes,
     }
 
+    # ── Opções de capa (folha de rosto) ─────────────────────────────────────
+    periodo_unico_dia = (data_ini == data_fim)
+    cc1, cc2 = st.columns(2)
+    incluir_capa = cc1.checkbox(
+        "📑 Incluir capa (folha de rosto)",
+        value=not periodo_unico_dia,
+        help="A capa traz os totais do período, o gráfico diário e os dias sem "
+             "aula. É desmarcada automaticamente quando o período é de um único dia.",
+        key="pd_incluir_capa",
+    )
+    somente_capa = cc2.checkbox(
+        "🗂️ Gerar somente a capa",
+        value=False,
+        help="Gera um PDF contendo apenas a folha de rosto, sem as páginas diárias.",
+        key="pd_somente_capa",
+    )
+
+    if somente_capa:
+        _dias_pdf, _resumo_pdf = {}, resumo_capa
+        _label_pdf = "📄 Baixar PDF — somente a capa"
+        _arq_pdf   = f"Prestacao_Capa_{sufixo}.pdf"
+    else:
+        _dias_pdf  = por_dia
+        _resumo_pdf = resumo_capa if incluir_capa else None
+        _label_pdf = f"📄 Baixar PDF — {total_dias} dia(s) / {total_alunos} presenças"
+        _arq_pdf   = f"Presenca_Periodo_{sufixo}.pdf"
+
     with st.spinner("Gerando PDF…"):
-        pdf_bytes = criar_prestacao_periodo_pdf(por_dia, resumo=resumo_capa)
+        pdf_bytes = criar_prestacao_periodo_pdf(_dias_pdf, resumo=_resumo_pdf)
 
     st.download_button(
-        label=f"📄 Baixar PDF — {total_dias} dia(s) / {total_alunos} presenças",
+        label=_label_pdf,
         data=pdf_bytes,
-        file_name=f"Presenca_Periodo_{sufixo}.pdf",
+        file_name=_arq_pdf,
         mime="application/pdf",
         type="primary",
         use_container_width=True,
