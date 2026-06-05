@@ -16,7 +16,11 @@ google-generativeai
 xlsxwriter
 python-docx==0.8.11
 lxml==4.9.4
-xhtml2pdf
+# xhtml2pdf fixado em 0.2.11 + svglib<1.6 para evitar o build nativo do pycairo
+# (svglib>=1.6 puxa rlpycairo -> pycairo, que falha sem cairo/pkg-config no Nix).
+# Os relatórios PDF usam HTML/CSS puro + imagens base64, nunca SVG, portanto cairo é desnecessário.
+xhtml2pdf==0.2.11
+svglib<1.6
 reportlab
 fpdf2
 

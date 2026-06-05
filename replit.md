@@ -119,3 +119,12 @@ Ficheiros de imagem na raiz do projecto:
 - O import do DeepFace é **lazy** (dentro da função `detectar_presenca_facial`) para não bloquear o arranque.
 - `gerar_excel_planilha_frequencia()` ainda recebe `caminho_logo_muda, caminho_logo_sec` como parâmetros por compatibilidade, mas usa `get_config()` internamente — os parâmetros são ignorados.
 - O `identidade.json` persiste entre restarts do servidor; não é necessária uma tabela Supabase para as configurações de branding.
+
+---
+
+## Ambiente Python (uv vs `.pythonlibs`)
+
+- O projeto padroniza no toolchain **gerido pelo Replit em `.pythonlibs` (Python 3.11)**, instalado via package management. Esse diretório **não é um venv do uv** (não tem `pyvenv.cfg`).
+- O `uv` **não** é o gestor do ambiente aqui: o Replit define `UV_PROJECT_ENVIRONMENT=.pythonlibs`, `UV_PYTHON_PREFERENCE=only-system` e `UV_PYTHON_DOWNLOADS=never`. Por isso `uv sync`/`uv run` (com sync automático) tentam escrever no Python do nix-store (somente leitura) e falham com *permission denied* — isto é estrutural, não relacionado ao pycairo.
+- Para correr código pelo uv contra o ambiente já instalado, use **`uv run --no-sync ...`** (funciona: `uv run --no-sync python -c "import pandas"`).
+- **Resolução de dependências (`uv lock`) funciona** e está limpa: `xhtml2pdf` está fixado em `0.2.11` e `svglib` em `<1.6` (1.5.1) tanto em `pyproject.toml` quanto em `requirements.txt`. Isso remove a cadeia `svglib>=1.6 → rlpycairo → pycairo`, cujo build nativo falhava por falta de `cairo`/`pkg-config` no Nix. Os PDFs usam HTML/CSS puro + imagens base64 (nunca SVG), então o cairo é desnecessário.

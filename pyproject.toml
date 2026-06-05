@@ -16,6 +16,7 @@ dependencies = [
     "streamlit-keyup>=0.3.0",
     "supabase>=2.28.2",
     "tf-keras>=2.19.0",
-    "xhtml2pdf>=0.2.11",
+    "xhtml2pdf==0.2.11",
+    "svglib<1.6",
     "xlsxwriter>=3.2.9",
 ]
