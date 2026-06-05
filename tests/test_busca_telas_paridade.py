@@ -107,22 +107,16 @@ def _filtro_emergencia(termo):
 
 
 def _filtro_ficha(termo):
-    """Replica a reimplementação INLINE de `views/ficha_aluno_view.py`.
+    """Replica a busca por nome de `views/ficha_aluno_view.py`.
 
-    df_alunos = buscar_alunos_geral("")
-    termo_norm = normalizar_fonetica(termo)
-    df_alunos["nome_norm"] = df_alunos["nome"].apply(normalizar_fonetica)
-    df_view = df_alunos[nome_norm.str.contains(termo_norm, case=False, regex=False)]
+    A Ficha agora usa o helper compartilhado:
+        df_alunos = buscar_alunos_geral("")
+        df_view = filtrar_alunos_df(df_alunos, termo, cols=["nome"])
     """
     df_alunos = db.buscar_alunos_geral("").copy()
     if not termo or len(termo) < 3:
         return _ids(df_alunos)
-    termo_norm = normalizar_fonetica(termo)
-    df_alunos["nome_norm"] = df_alunos["nome"].apply(normalizar_fonetica)
-    df_view = df_alunos[
-        df_alunos["nome_norm"].str.contains(termo_norm, case=False, na=False, regex=False)
-    ]
-    return _ids(df_view)
+    return _ids(filtrar_alunos_df(df_alunos, termo, cols=["nome"]))
 
 
 # ─────────────────────────────────────────────────────────────────────────────

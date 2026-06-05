@@ -10,7 +10,7 @@ import datetime
 import base64
 import io
 from database import buscar_alunos_geral, get_ultima_presenca_batch
-from utils.texto import normalizar_fonetica
+from utils.busca_aluno import filtrar_alunos_df
 from utils.imagem import get_base64_image
 
 try:
@@ -740,11 +740,7 @@ def tela_impressao_ficha():
                 )
 
         if termo_busca and len(termo_busca) >= 3:
-            termo_norm = normalizar_fonetica(termo_busca)
-            df_alunos["nome_norm"] = df_alunos["nome"].apply(normalizar_fonetica)
-            df_view = df_alunos[
-                df_alunos["nome_norm"].str.contains(termo_norm, case=False, na=False, regex=False)
-            ].sort_values("nome")
+            df_view = filtrar_alunos_df(df_alunos, termo_busca, cols=["nome"]).sort_values("nome")
 
             if df_view.empty:
                 st.warning("⚠️ Nenhum aluno encontrado.")
