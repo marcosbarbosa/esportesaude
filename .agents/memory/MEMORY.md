@@ -8,3 +8,4 @@
 - [Supabase storage buckets](supabase-storage-buckets.md) — só 'diario_midias_imbra' funciona com a chave anon; 'documentos_alunos' não existe e anon não cria bucket.
 - [Relatório frequência = Diário ∪ Frequência](relatorio-frequencia-uniao.md) — `get_relatorio_periodo` não pode depender só de `diario_aulas`; presença sem diário some. Normalizar datas str[:10].
 - [uv vs .pythonlibs](uv-vs-pythonlibs.md) — uv NÃO reconstrói o env (`.pythonlibs` não é venv; sync falha permission denied). Use `uv run --no-sync`; package mgmt do Replit para instalar; `uv lock` funciona.
+- [Dias sem aula vs feriados](dias-sem-aula-feriados.md) — lista do Calendário Institucional deve mostrar todos os dias registrados; NÃO intersectar com dias úteis (some quem cai em feriado nacional, ex. Corpus Christi).

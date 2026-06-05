@@ -34,6 +34,7 @@ from database import (
     get_presentes_periodo_todos,
     get_dias_sem_aula,
     get_dias_sem_aula_periodo_df,
+    get_primeira_data_frequencia,
     registrar_dia_sem_aula,
     remover_dia_sem_aula,
 )
@@ -1467,12 +1468,37 @@ CREATE POLICY "allow_all" ON dias_sem_aula
             """, language="sql")
 
     # ── Formulário de busca ───────────────────────────────────────────────────
+    # Data inicial é auto-preenchida e travada no 1º dia de frequência do sistema:
+    # não faz sentido (e gera relatórios vazios/incorretos) consultar período
+    # anterior ao início real do projeto.
+    primeira_freq = get_primeira_data_frequencia()
+    _default_ini = primeira_freq if primeira_freq else hoje
+    # data_fim nunca pode ser < min_value (evita value<min_value se a 1ª
+    # frequência for futura) nem < data inicial padrão.
+    _default_fim = max(hoje, _default_ini)
+
+    # Corrige valores antigos no session_state que sejam anteriores ao novo
+    # mínimo (senão o date_input lança StreamlitValueBelowMinError).
+    if primeira_freq:
+        for _k, _flr in (("pd_data_ini", _default_ini), ("pd_data_fim", _default_fim)):
+            _v = st.session_state.get(_k)
+            if isinstance(_v, datetime.date) and _v < primeira_freq:
+                st.session_state[_k] = _flr
+
+    if primeira_freq:
+        st.caption(
+            f"ℹ️ Primeiro dia de frequência registrado no sistema: "
+            f"**{primeira_freq.strftime('%d/%m/%Y')}** — datas anteriores não são permitidas."
+        )
+
     c_ini, c_fim, c_btn = st.columns([2, 2, 1], vertical_alignment="bottom")
     data_ini = c_ini.date_input(
-        "📅 Data Inicial:", value=hoje, format="DD/MM/YYYY", key="pd_data_ini"
+        "📅 Data Inicial:", value=_default_ini, min_value=primeira_freq,
+        format="DD/MM/YYYY", key="pd_data_ini",
     )
     data_fim = c_fim.date_input(
-        "📅 Data Final:", value=hoje, format="DD/MM/YYYY", key="pd_data_fim"
+        "📅 Data Final:", value=_default_fim, min_value=primeira_freq,
+        format="DD/MM/YYYY", key="pd_data_fim",
     )
     gerar = c_btn.button("🔍 Buscar Presenças", type="primary",
                          use_container_width=True, key="pd_buscar")
@@ -1543,8 +1569,11 @@ CREATE POLICY "allow_all" ON dias_sem_aula
     # ── Classifica os dias úteis sem frequência ───────────────────────────────
     datas_com_frequencia = {datetime.date.fromisoformat(iso) for iso in por_dia}
 
-    # Dias sem aula registrados no Calendário Institucional (no período)
-    dias_calendario = sorted(d for d in dias_uteis_range if d in dias_sem_aula_set)
+    # Dias sem aula registrados no Calendário Institucional (no período).
+    # Lista TODOS os dias registrados pelo usuário no período — inclusive os que
+    # coincidem com feriados nacionais (ex.: Corpus Christi). O filtro de dias
+    # úteis NÃO se aplica aqui: se o operador registrou o dia, ele deve aparecer.
+    dias_calendario = sorted(dias_sem_aula_set)
     # Dias úteis REAIS sem frequência e sem justificativa no calendário
     dias_sem_frequencia = [
         d for d in dias_uteis_range

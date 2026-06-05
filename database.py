@@ -1704,6 +1704,29 @@ def get_dias_sem_aula(data_ini: str = None, data_fim: str = None) -> set:
         return set()
 
 
+def get_primeira_data_frequencia():
+    """
+    Retorna a data (datetime.date) do PRIMEIRO dia com frequência registrada no
+    sistema, ou None se ainda não houver nenhum registro. Usada para auto-preencher
+    e travar a data inicial dos relatórios (não permitir período anterior ao início
+    real da frequência).
+    """
+    import datetime as _dt
+    try:
+        r = (
+            supabase.from_("frequencia")
+            .select("data_aula")
+            .order("data_aula")
+            .limit(1)
+            .execute()
+        )
+        if not r.data:
+            return None
+        return _dt.date.fromisoformat(str(r.data[0]["data_aula"])[:10])
+    except Exception:
+        return None
+
+
 def registrar_dia_sem_aula(data_iso: str, motivo: str = "", criado_por: str = "") -> bool:
     """
     Registra um dia como SEM AULA no calendário institucional.
