@@ -1363,11 +1363,50 @@ def _render_pdf_options_prestacao(
         use_container_width=True, key="pd_download",
     )
 
+    # ── Preview visual (opcional) — pode ser desligado para poupar processamento ─
+    gerar_preview = st.checkbox(
+        "🖥️ Gerar preview visual na tela",
+        value=False,
+        key="pd_gerar_preview",
+        help="O preview renderiza um bloco por dia e pode ser lento em períodos "
+             "longos. Desmarcado por padrão para poupar processamento — o PDF "
+             "acima já contém o relatório completo.",
+    )
+    if gerar_preview:
+        st.markdown("<hr style='margin:14px 0 10px 0;border-color:#E2E8F0;'>",
+                    unsafe_allow_html=True)
+        _render_preview_prestacao(por_dia, total_dias)
 
-def _renderizar_aba_prestacao_diaria():
+
+def _render_preview_prestacao(por_dia: dict, total_dias: int) -> None:
+    """Renderiza o preview visual do relatório — um bloco por dia."""
     from utils.identidade import get_config as _gcfg
     from utils.imagem import get_base64_image
 
+    st.markdown(f"#### 🖥️ Preview do Relatório — {total_dias} página(s)")
+
+    cfg         = _gcfg()
+    logo_p      = get_base64_image(cfg.get("logo_principal",  "logo-imbra.png"))
+    logo_s      = get_base64_image(cfg.get("logo_secundaria", "logo-secretaria.png"))
+    img_p       = (f"<img src='data:image/png;base64,{logo_p}' style='height:48px;object-fit:contain;'>") if logo_p else ""
+    img_s       = (f"<img src='data:image/png;base64,{logo_s}' style='height:48px;object-fit:contain;'>") if logo_s else ""
+    nome_org    = cfg.get("nome_organizacao",  "INSTITUTO MUDA BRASIL").upper()
+    titulo_proj = cfg.get("titulo_projeto", "ESPORTE E SAÚDE NA COMUNIDADE - FASE 2").upper()
+    hoje_fmt    = datetime.date.today().strftime("%d/%m/%Y")
+
+    for idx, (data_iso, nomes) in enumerate(por_dia.items(), 1):
+        try:
+            data_fmt = datetime.date.fromisoformat(data_iso).strftime("%d/%m/%Y")
+        except Exception:
+            data_fmt = data_iso
+        bloco = _bloco_preview_dia(
+            data_fmt, nomes, img_s, img_p, nome_org, titulo_proj, hoje_fmt,
+            numero_dia=idx, total_dias=total_dias,
+        )
+        st.markdown(bloco, unsafe_allow_html=True)
+
+
+def _renderizar_aba_prestacao_diaria():
     st.markdown("""
         <div style='background:#EFF6FF;border-left:4px solid #1E88E5;
                     padding:12px 16px;border-radius:6px;margin-bottom:12px;'>
@@ -1793,31 +1832,6 @@ CREATE POLICY "allow_all" ON dias_sem_aula
     _render_pdf_options_prestacao(
         por_dia, resumo_capa, sufixo, total_dias, total_alunos, (data_ini == data_fim)
     )
-
-    st.markdown("<hr style='margin:14px 0 10px 0;border-color:#E2E8F0;'>", unsafe_allow_html=True)
-
-    # ── Preview visual — um bloco por dia ────────────────────────────────────
-    st.markdown(f"#### 🖥️ Preview do Relatório — {total_dias} página(s)")
-
-    cfg         = _gcfg()
-    logo_p      = get_base64_image(cfg.get("logo_principal",  "logo-imbra.png"))
-    logo_s      = get_base64_image(cfg.get("logo_secundaria", "logo-secretaria.png"))
-    img_p       = (f"<img src='data:image/png;base64,{logo_p}' style='height:48px;object-fit:contain;'>") if logo_p else ""
-    img_s       = (f"<img src='data:image/png;base64,{logo_s}' style='height:48px;object-fit:contain;'>") if logo_s else ""
-    nome_org    = cfg.get("nome_organizacao",  "INSTITUTO MUDA BRASIL").upper()
-    titulo_proj = cfg.get("titulo_projeto", "ESPORTE E SAÚDE NA COMUNIDADE - FASE 2").upper()
-    hoje_fmt    = hoje.strftime("%d/%m/%Y")
-
-    for idx, (data_iso, nomes) in enumerate(por_dia.items(), 1):
-        try:
-            data_fmt = datetime.date.fromisoformat(data_iso).strftime("%d/%m/%Y")
-        except Exception:
-            data_fmt = data_iso
-        bloco = _bloco_preview_dia(
-            data_fmt, nomes, img_s, img_p, nome_org, titulo_proj, hoje_fmt,
-            numero_dia=idx, total_dias=total_dias,
-        )
-        st.markdown(bloco, unsafe_allow_html=True)
 
 
 # ==============================================================================
