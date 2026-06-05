@@ -1563,10 +1563,11 @@ if st.session_state.menu_atual == "Principal":
 
         # Templates WhatsApp — carregados uma vez, fora do loop.
         # Cada gatilho da tabela crm_templates (painel Configurações > Mensagens)
-        # é mapeado com exatidão: niver_hoje / niver_futuro / niver_passou /
+        # é mapeado com exatidão: niver_hoje (Dia Exato) / niver_passou (Atrasado) /
         # evasao_nunca / evasao_60 / evasao_80 / assiduo_top.
+        # "Aviso Prévio" (niver_futuro) foi descontinuado: futuros não recebem parabéns.
         try:
-            from utils.niver_automatico import montar_link_whatsapp, personalizar_mensagem, get_parabenizados_dict
+            from utils.niver_automatico import montar_link_whatsapp, personalizar_mensagem, montar_mensagem_niver, get_parabenizados_dict
             from database import get_crm_templates
             _df_tpl = get_crm_templates()
             # Dicionário {gatilho: mensagem} — fonte única e auditada
@@ -1801,16 +1802,17 @@ if st.session_state.menu_atual == "Principal":
                                 )
                             else:
                                 _wap_n = str(_r.get("whatsapp") or "").strip()
-                                if _wap_n:
-                                    # Escolhe o gatilho correto conforme o momento do aniversário
-                                    if _mes_n == _hoje_mes and _dia_n == _hoje_dia:
-                                        _niver_key = "niver_hoje"
-                                    elif _dia_n > _hoje_dia:
-                                        _niver_key = "niver_futuro"
-                                    else:
-                                        _niver_key = "niver_passou"
-                                    _tpl_n = _tpl_map.get(_niver_key, "🎉 Parabéns, {nome}!")
-                                    _msg_n = personalizar_mensagem(_tpl_n, str(_r.get("nome", "")))
+                                # Texto idêntico ao painel admin conforme status:
+                                # Dia Exato (niver_hoje) ou Atrasado (niver_passou).
+                                # Aniversários futuros não recebem parabéns antecipado.
+                                if _mes_n == _hoje_mes and _dia_n == _hoje_dia:
+                                    _niver_status = "hoje"
+                                elif _dia_n < _hoje_dia:
+                                    _niver_status = "passou"
+                                else:
+                                    _niver_status = None
+                                if _wap_n and _niver_status:
+                                    _msg_n = montar_mensagem_niver(_niver_status, str(_r.get("nome", "")))
                                     _link_n = montar_link_whatsapp(_wap_n, _msg_n)
                                     if _link_n:
                                         _niver_html += (

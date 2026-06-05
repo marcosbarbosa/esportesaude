@@ -24,7 +24,8 @@ from utils.niver_automatico import (
     marcar_parabenizado,
     desmarcar_parabenizado,
     montar_link_whatsapp,
-    personalizar_mensagem,
+    montar_mensagem_niver,
+    status_niver_por_delta,
     enviar_email_aniversariantes,
     disparar_zapi_aniversariantes,
 )
@@ -439,17 +440,21 @@ def renderizar_aba_niver():
                     key="btn_wa_todos",
                     help="Abre uma aba do WhatsApp para cada aniversariante com a mensagem pronta",
                 ):
-                    template = cfg_niver["mensagem_padrao"]
                     links_gerados = []
                     sem_wap = []
                     for _, r in df_hoje.iterrows():
                         nome = str(r.get("nome", "")).strip()
                         wap = str(r.get("whatsapp", "") or "").strip()
-                        msg = personalizar_mensagem(template, nome)
+                        # Texto idêntico ao painel admin conforme status.
+                        # Futuros (status None) não recebem parabéns antecipado.
+                        _status = status_niver_por_delta(int(r.get("dias_para_niver", 0) or 0))
+                        if _status is None:
+                            continue
+                        msg = montar_mensagem_niver(_status, nome)
                         link = montar_link_whatsapp(wap, msg) if wap else None
                         if link:
                             links_gerados.append((nome, link))
-                        else:
+                        elif wap == "":
                             sem_wap.append(nome)
 
                     if links_gerados:
@@ -542,11 +547,15 @@ def renderizar_aba_niver():
 
     # ── LISTA DE ANIVERSARIANTES ─────────────────────────────────────────────
     cfg_niver = get_config_niver()
-    template_msg = cfg_niver["mensagem_padrao"]
     parab_dict = get_parabenizados_dict()
 
     for _, r in df_mes.iterrows():
-        aniv_data = datetime.date(hoje.year, int(r["mes"]), int(r["dia"]))
+        _mes_r, _dia_r = int(r["mes"]), int(r["dia"])
+        try:
+            aniv_data = datetime.date(hoje.year, _mes_r, _dia_r)
+        except ValueError:
+            # 29/02 em ano não bissexto → considera 28/02 para o cálculo.
+            aniv_data = datetime.date(hoje.year, _mes_r, 28)
         delta = (aniv_data - hoje).days
         aluno_id = str(r.get("id", ""))
         ja_parab = aluno_id in parab_dict
@@ -585,14 +594,18 @@ def renderizar_aba_niver():
                         unsafe_allow_html=True,
                     )
                 else:
-                    msg_pessoal = personalizar_mensagem(template_msg, str(r.get("nome", "")))
-                    link_w = montar_link_whatsapp(str(r.get("whatsapp", "") or ""), msg_pessoal)
-                    if link_w:
-                        st.markdown(
-                            f'<a href="{link_w}" target="_blank" title="Enviar parabéns via WhatsApp" '
-                            f'style="font-size:20px;text-decoration:none;">💬</a>',
-                            unsafe_allow_html=True,
-                        )
+                    # Texto idêntico ao painel admin conforme status do aniversário:
+                    # Dia Exato (hoje) ou Atrasado (passou). Futuros não recebem link.
+                    _status_w = status_niver_por_delta(delta)
+                    if _status_w is not None:
+                        msg_pessoal = montar_mensagem_niver(_status_w, str(r.get("nome", "")))
+                        link_w = montar_link_whatsapp(str(r.get("whatsapp", "") or ""), msg_pessoal)
+                        if link_w:
+                            st.markdown(
+                                f'<a href="{link_w}" target="_blank" title="Enviar parabéns via WhatsApp" '
+                                f'style="font-size:20px;text-decoration:none;">💬</a>',
+                                unsafe_allow_html=True,
+                            )
 
             with c_parab:
                 if ja_parab:

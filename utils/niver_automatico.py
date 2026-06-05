@@ -194,6 +194,61 @@ def personalizar_mensagem(template: str, nome: str) -> str:
 
 
 # ──────────────────────────────────────────────────────────────────────────────
+# 3b. FONTE ÚNICA DE TEXTO — painel admin "Mensagens" (crm_templates)
+#     Garante que TODO módulo (Gestão de Fluxo, lista de aniversários, e-mail,
+#     Z-API) use exatamente o mesmo texto cadastrado pelo administrador, de
+#     acordo com o status do aniversário: "Dia Exato" (niver_hoje) ou
+#     "Atrasado" (niver_passou). O status "Aviso Prévio" foi descontinuado.
+# ──────────────────────────────────────────────────────────────────────────────
+
+@st.cache_data(ttl=60, show_spinner=False)
+def _ler_templates_crm_niver() -> dict:
+    """Lê {gatilho: mensagem} dos textos de aniversário do painel admin."""
+    from database import get_crm_templates
+    try:
+        df = get_crm_templates()
+        out = {}
+        if df is not None and not df.empty and "gatilho" in df.columns:
+            for _, r in df.iterrows():
+                out[str(r.get("gatilho", ""))] = str(r.get("mensagem", "") or "")
+        return out
+    except Exception:
+        return {}
+
+
+def status_niver_por_delta(delta: int) -> str | None:
+    """Mapeia dias-até-aniversário em status de mensagem.
+
+    delta == 0 → 'hoje' (Dia Exato) · delta < 0 → 'passou' (Atrasado) ·
+    delta > 0 → None (aniversário futuro não recebe parabéns antecipado).
+    """
+    if delta == 0:
+        return "hoje"
+    if delta < 0:
+        return "passou"
+    return None
+
+
+def get_template_niver_por_status(status: str) -> str:
+    """Texto do template conforme status: 'hoje' (niver_hoje) ou 'passou' (niver_passou).
+
+    Fonte única: painel admin 'Mensagens' (crm_templates). Se o texto estiver
+    vazio/ausente, cai para a mensagem padrão configurada em Aniversários.
+    """
+    tpl_map = _ler_templates_crm_niver()
+    gatilho = "niver_passou" if status == "passou" else "niver_hoje"
+    template = (tpl_map.get(gatilho) or "").strip()
+    if not template:
+        template = get_config_niver()["mensagem_padrao"]
+    return template
+
+
+def montar_mensagem_niver(status: str, nome: str) -> str:
+    """Mensagem de aniversário personalizada conforme status ('hoje'/'passou')."""
+    return personalizar_mensagem(get_template_niver_por_status(status), nome)
+
+
+# ──────────────────────────────────────────────────────────────────────────────
 # 4. DISPARO DE E-MAIL
 # ──────────────────────────────────────────────────────────────────────────────
 
@@ -217,7 +272,6 @@ def enviar_email_aniversariantes(df_hoje, cfg: dict | None = None) -> tuple[bool
     if df_hoje is None or len(df_hoje) == 0:
         return False, "Nenhum aniversariante hoje."
 
-    template = cfg["mensagem_padrao"]
     hoje_str = datetime.date.today().strftime("%d/%m/%Y")
 
     # Montar HTML dos aniversariantes
@@ -226,7 +280,12 @@ def enviar_email_aniversariantes(df_hoje, cfg: dict | None = None) -> tuple[bool
         nome = str(r.get("nome", "")).strip()
         turma = str(r.get("turma", "") or "").strip()
         wap = r.get("whatsapp", "")
-        msg_pessoal = personalizar_mensagem(template, nome)
+        # Texto idêntico ao painel admin conforme status (Dia Exato / Atrasado).
+        # Aniversários futuros não recebem parabéns antecipado.
+        _status = status_niver_por_delta(int(r.get("dias_para_niver", 0) or 0))
+        if _status is None:
+            continue
+        msg_pessoal = montar_mensagem_niver(_status, nome)
         link = montar_link_whatsapp(str(wap), msg_pessoal) if wap else None
 
         btn = (
@@ -332,7 +391,6 @@ def disparar_zapi_aniversariantes(df_hoje, cfg: dict | None = None) -> list[dict
     if cfg is None:
         cfg = get_config_niver()
 
-    template = cfg["mensagem_padrao"]
     resultados = []
     for _, r in df_hoje.iterrows():
         nome = str(r.get("nome", "")).strip()
@@ -340,7 +398,12 @@ def disparar_zapi_aniversariantes(df_hoje, cfg: dict | None = None) -> list[dict
         if not wap:
             resultados.append({"nome": nome, "sucesso": False, "msg": "Sem WhatsApp"})
             continue
-        mensagem = personalizar_mensagem(template, nome)
+        # Texto idêntico ao painel admin conforme status (Dia Exato / Atrasado).
+        # Aniversários futuros não recebem parabéns antecipado.
+        _status = status_niver_por_delta(int(r.get("dias_para_niver", 0) or 0))
+        if _status is None:
+            continue
+        mensagem = montar_mensagem_niver(_status, nome)
         ok, msg = disparar_zapi(wap, mensagem, cfg)
         resultados.append({"nome": nome, "sucesso": ok, "msg": msg})
     return resultados
