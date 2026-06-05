@@ -6,3 +6,4 @@
 - [Busca fonética server-side](busca-fonetica-serverside.md) — caminho server-side só liga após DDL no Supabase (coluna `nome_fonetica` + índice trgm) e backfill via botão admin na aba Admin da Frequência.
 - [Interpretador Python p/ testes](python-interpreter-tests.md) — use `.pythonlibs/bin/python3.11` (não o `python` 3.12); importar `database.py` precisa de secrets, rode da raiz.
 - [Supabase storage buckets](supabase-storage-buckets.md) — só 'diario_midias_imbra' funciona com a chave anon; 'documentos_alunos' não existe e anon não cria bucket.
+- [Relatório frequência = Diário ∪ Frequência](relatorio-frequencia-uniao.md) — `get_relatorio_periodo` não pode depender só de `diario_aulas`; presença sem diário some. Normalizar datas str[:10].

@@ -15,11 +15,19 @@ NÃO é afetado (workflow roda em modo agent/workflow e não carrega `.config/ba
 e já usa o toolchain 3.11).
 
 **Cuidados:**
-- `uninstallSystemDependencies({packages:["lacus"]})` retorna success mas NÃO edita o
-  `.replit` (no-op); editar `.replit`/`replit.nix` direto é bloqueado. Por isso a
-  correção é via `.config/bashrc`, não pela remoção do `lacus`.
-- Shells em modo agent/workflow e scripts não-interativos (`bash x.sh`) NÃO herdam
-  o fix do `.config/bashrc`; nesses casos use `.pythonlibs/bin/python3.11`.
+- O caminho de package-management para `[nix].packages` do `.replit` está QUEBRADO
+  nos dois sentidos: `uninstallSystemDependencies({packages:["lacus"]})` E
+  `installSystemDependencies(...)` retornam success mas NÃO editam o `.replit` (no-op
+  total — confirmado com teste de controle instalando `hello`: nada mudou). Editar
+  `.replit`/`replit.nix` direto é bloqueado pela plataforma. Logo, remover o `lacus`
+  programaticamente é IMPOSSÍVEL a partir do Replit; só dá pela UI de Dependencies
+  (painel System Dependencies) ou por correção da plataforma no tool.
+- Shells em modo agent/workflow e scripts não-interativos NÃO herdam o fix do
+  `.config/bashrc`; nesses casos use `.pythonlibs/bin/python3.11`.
+- O `PYTHONPATH` herdado do ambiente injeta os site-packages do python3.12 e quebra
+  imports do 3.11 (ex.: `pydantic_core._pydantic_core`). Para rodar scripts ad-hoc:
+  prefixe `PYTHONPATH=`. O workflow do Streamlit precisa iniciar com `PYTHONPATH=""`
+  pelo mesmo motivo — se reconfigurar o workflow, MANTENHA esse prefixo.
 
 Importar `database.py` exige `.streamlit/secrets.toml` (lido por `init_connection`
 via `st.secrets`) — só é encontrado quando o cwd é a raiz do projeto. Rodar de

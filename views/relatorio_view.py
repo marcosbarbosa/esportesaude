@@ -1319,6 +1319,50 @@ def _bloco_preview_dia(data_fmt, nomes, img_s, img_p, nome_org, titulo_proj, hoj
 </div>"""
 
 
+def _render_pdf_options_prestacao(
+    por_dia: dict, resumo_capa: dict, sufixo: str,
+    total_dias: int, total_alunos: int, periodo_unico_dia: bool,
+) -> None:
+    """Checkboxes de capa vinculados + botão de download do PDF da Prestação Diária."""
+    # "Imprimir somente a capa" marca "Incluir Folha de Rosto" automaticamente
+    somente_capa = st.checkbox(
+        "📄 Imprimir somente a capa (folha de rosto)",
+        value=False,
+        key="pd_somente_capa",
+        help="Gera um PDF contendo apenas a folha de rosto, sem as páginas diárias.",
+    )
+    # Quando "somente_capa" está marcado, força "incluir_capa" = True no session_state
+    if somente_capa:
+        st.session_state["pd_incluir_capa"] = True
+    incluir_capa = st.checkbox(
+        "📑 Incluir Folha de Rosto",
+        value=not periodo_unico_dia,
+        disabled=somente_capa,
+        key="pd_incluir_capa",
+        help="A capa traz os totais do período, o gráfico diário e os dias sem aula. "
+             "Para períodos de um único dia é desmarcada automaticamente.",
+    )
+
+    if somente_capa:
+        _dias_pdf, _resumo_pdf = {}, resumo_capa
+        _label = "📄 Baixar PDF — somente a capa"
+        _arq   = f"Prestacao_Capa_{sufixo}.pdf"
+    else:
+        _dias_pdf  = por_dia
+        _resumo_pdf = resumo_capa if incluir_capa else None
+        _label = f"📄 Baixar PDF — {total_dias} dia(s) / {total_alunos} presenças"
+        _arq   = f"Presenca_Periodo_{sufixo}.pdf"
+
+    with st.spinner("Gerando PDF…"):
+        pdf_bytes = criar_prestacao_periodo_pdf(_dias_pdf, resumo=_resumo_pdf)
+
+    st.download_button(
+        label=_label, data=pdf_bytes, file_name=_arq,
+        mime="application/pdf", type="primary",
+        use_container_width=True, key="pd_download",
+    )
+
+
 def _renderizar_aba_prestacao_diaria():
     from utils.identidade import get_config as _gcfg
     from utils.imagem import get_base64_image
@@ -1433,8 +1477,26 @@ CREATE POLICY "allow_all" ON dias_sem_aula
     gerar = c_btn.button("🔍 Buscar Presenças", type="primary",
                          use_container_width=True, key="pd_buscar")
 
+    # Invalida cache se as datas mudaram desde a última busca
+    _pd_cache = st.session_state.get("pd_dados_pdf")
+    if _pd_cache and (
+        _pd_cache.get("data_ini") != str(data_ini) or
+        _pd_cache.get("data_fim") != str(data_fim)
+    ):
+        st.session_state.pop("pd_dados_pdf", None)
+        _pd_cache = None
+
     if not gerar:
-        st.caption("Selecione o período e clique em **Buscar Presenças**.")
+        if not _pd_cache:
+            st.caption("Selecione o período e clique em **Buscar Presenças**.")
+            return
+        # Dados já carregados — mostra só as opções de PDF sem rebuscar
+        st.markdown("<hr style='margin:12px 0;border-color:#E2E8F0;'>", unsafe_allow_html=True)
+        _render_pdf_options_prestacao(
+            _pd_cache["por_dia"], _pd_cache["resumo_capa"],
+            _pd_cache["sufixo"], _pd_cache["total_dias"],
+            _pd_cache["total_alunos"], _pd_cache["periodo_unico_dia"],
+        )
         return
 
     if data_fim < data_ini:
@@ -1685,17 +1747,22 @@ CREATE POLICY "allow_all" ON dias_sem_aula
         "totais_mes": totais_mes,
     }
 
-    with st.spinner("Gerando PDF…"):
-        pdf_bytes = criar_prestacao_periodo_pdf(por_dia, resumo=resumo_capa)
+    # ── Salva dados no session_state para sobreviver ao rerun dos checkboxes ──
+    st.session_state["pd_dados_pdf"] = {
+        "por_dia": por_dia,
+        "resumo_capa": resumo_capa,
+        "data_ini": str(data_ini),
+        "data_fim": str(data_fim),
+        "sufixo": sufixo,
+        "total_dias": total_dias,
+        "total_alunos": total_alunos,
+        "periodo_unico_dia": (data_ini == data_fim),
+    }
 
-    st.download_button(
-        label=f"📄 Baixar PDF — {total_dias} dia(s) / {total_alunos} presenças",
-        data=pdf_bytes,
-        file_name=f"Presenca_Periodo_{sufixo}.pdf",
-        mime="application/pdf",
-        type="primary",
-        use_container_width=True,
-        key="pd_download",
+    # ── Opções de capa (folha de rosto) ─────────────────────────────────────
+    st.markdown("<hr style='margin:12px 0;border-color:#E2E8F0;'>", unsafe_allow_html=True)
+    _render_pdf_options_prestacao(
+        por_dia, resumo_capa, sufixo, total_dias, total_alunos, (data_ini == data_fim)
     )
 
     st.markdown("<hr style='margin:14px 0 10px 0;border-color:#E2E8F0;'>", unsafe_allow_html=True)
@@ -2057,13 +2124,13 @@ def tela_relatorio():
         unsafe_allow_html=True,
     )
 
-    tab_f, tab_id, tab_a, tab_w, tab_diario, tab_sem_av, tab_clinico = st.tabs(
+    tab_diario, tab_f, tab_id, tab_a, tab_w, tab_sem_av, tab_clinico = st.tabs(
         [
+            "📋 Lista Frequência Oficial",
             "📊 Plan. Frequência",
             "🪪 Cara-Crachá",
             "🔎 Auditoria",
             "🏆 Prestação Pedagógica",
-            "📋 Prestação Diária",
             "🧪 Avaliações",
             "🏥 Monitoramento",
         ]
