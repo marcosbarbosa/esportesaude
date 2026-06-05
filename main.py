@@ -293,9 +293,9 @@ def _toggle_tema_ui(key_suffix=""):
 
 
 def renderizar_seletor_tema():
-    """Renderiza Drive + Seletor de Tema no topo do app (apenas logado)."""
-    col_vazia, col_drive, col_tema = st.columns(
-        [5.5, 2.5, 2], vertical_alignment="center"
+    """Renderiza Drive + Prestação de Contas + Seletor de Tema no topo do app."""
+    col_vazia, col_drive, col_prest, col_tema = st.columns(
+        [3.0, 2.5, 2.5, 2], vertical_alignment="center"
     )
     with col_drive:
         st.link_button(
@@ -303,6 +303,13 @@ def renderizar_seletor_tema():
             "https://drive.google.com/drive/u/7/my-drive",
             use_container_width=True,
             help="Acesse a pasta da nuvem para gerir as fotografias.",
+        )
+    with col_prest:
+        st.link_button(
+            "📁 Prestação de Contas",
+            "https://drive.google.com/drive/folders/1TWP0Q3nwKpsDKmjWUrFC6uKBuvfmGpFC",
+            use_container_width=True,
+            help="Abra a pasta de Prestação de Contas para salvar os PDFs gerados.",
         )
     with col_tema:
         _toggle_tema_ui(key_suffix="app")
