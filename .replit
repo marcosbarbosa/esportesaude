@@ -54,4 +54,4 @@ packages = ["glibcLocales", "lacus"]
 
 [userenv.shared]
 SMTP_EMAIL = "marcosbarbosa.am@gmail.com"
-SMTP_PASSWORD = "bmqzajtkikmuedpo"
+SMTP_PASSWORD = "nqufitmlgwjjwjcq"
