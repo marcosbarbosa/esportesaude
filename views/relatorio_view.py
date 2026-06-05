@@ -1363,6 +1363,14 @@ def _render_pdf_options_prestacao(
         use_container_width=True, key="pd_download",
     )
 
+    # ── Atalho para a pasta de Prestação de Contas no Google Drive ────────────
+    st.link_button(
+        "📁 Abrir pasta de Prestação de Contas no Google Drive",
+        "https://drive.google.com/drive/folders/1TWP0Q3nwKpsDKmjWUrFC6uKBuvfmGpFC",
+        use_container_width=True,
+        help="Abre a pasta no Drive para salvar os PDFs gerados acima.",
+    )
+
     # ── Preview visual (opcional) — pode ser desligado para poupar processamento ─
     gerar_preview = st.checkbox(
         "🖥️ Gerar preview visual na tela",
