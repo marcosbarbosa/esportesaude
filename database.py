@@ -2558,3 +2558,43 @@ def get_emails_sistema() -> list:
         return [r for r in (res.data or []) if r.get("email", "").strip()]
     except Exception:
         return []
+
+
+def listar_usuarios_sistema() -> list:
+    """Retorna todos os usuários do sistema com id, nome, email, perfil, ativo, criado_em."""
+    try:
+        res = supabase.table("usuarios").select("id,nome,email,perfil,ativo,criado_em").order("nome").execute()
+        return res.data or []
+    except Exception as e:
+        return []
+
+
+def atualizar_usuario_sistema(uid: str, payload: dict):
+    """Atualiza campos de um usuário (nome, email, senha, ativo). Retorna (bool, msg)."""
+    try:
+        if "email" in payload:
+            email_novo = payload["email"].strip().lower()
+            dup = supabase.table("usuarios").select("id").eq("email", email_novo).neq("id", uid).execute()
+            if dup.data:
+                return False, "Este e-mail já está em uso por outro usuário."
+            payload["email"] = email_novo
+        if "nome" in payload:
+            payload["nome"] = payload["nome"].strip()
+        supabase.table("usuarios").update(payload).eq("id", uid).execute()
+        return True, "✅ Usuário atualizado com sucesso."
+    except Exception as e:
+        return False, str(e)
+
+
+def excluir_usuario_sistema(uid: str, email_session: str):
+    """Exclui permanentemente um usuário. Impede auto-exclusão. Retorna (bool, msg)."""
+    try:
+        res = supabase.table("usuarios").select("email").eq("id", uid).execute()
+        if not res.data:
+            return False, "Usuário não encontrado."
+        if res.data[0].get("email", "").strip().lower() == email_session.strip().lower():
+            return False, "Você não pode excluir sua própria conta."
+        supabase.table("usuarios").delete().eq("id", uid).execute()
+        return True, "✅ Usuário excluído permanentemente."
+    except Exception as e:
+        return False, str(e)

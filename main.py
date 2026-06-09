@@ -2207,7 +2207,7 @@ elif st.session_state.menu_atual in (
         tela_conferencia_facial()
     else:
         _aba_cfg = st.tabs(
-            ["🏫 Turmas", "💬 Mensagens", "🎂 Aniversários", "🎨 Identidade Visual", "🛠️ Admin", "🔀 Mesclar Fichas", "📅 Calendário", "📧 Email BI", "🔒 LGPD"]
+            ["🏫 Turmas", "💬 Mensagens", "🎂 Aniversários", "🎨 Identidade Visual", "🛠️ Admin", "🔀 Mesclar Fichas", "📅 Calendário", "📧 Email BI", "👥 Usuários", "🔒 LGPD"]
         )
         with _aba_cfg[0]:
             from views.turmas_view import tela_gestao_turmas
@@ -2235,6 +2235,9 @@ elif st.session_state.menu_atual in (
         with _aba_cfg[7]:
             _tela_email_bi()
         with _aba_cfg[8]:
+            from views.gestao_usuarios_view import tela_gestao_usuarios
+            tela_gestao_usuarios()
+        with _aba_cfg[9]:
             from database import get_logs_lgpd
             st.markdown(
                 "<p style='font-weight:800;color:#0A2540;font-size:1rem;margin-bottom:4px;'>"
