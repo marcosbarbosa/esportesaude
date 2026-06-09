@@ -476,27 +476,47 @@ if st.session_state.usuario_logado:
         st.session_state["_ebi_checado"] = True
         try:
             from utils.email_relatorio_config import (
+                get_schedules, schedule_to_cfg, marcar_envio_realizado_schedule,
                 get_config_ebi, verificar_e_marcar_envio_realizado,
             )
             from utils.email_relatorio import enviar_relatorio_bi
-            _ebi_cfg = get_config_ebi()
+            from utils.identidade import get_config as _gid_ebi
+            _nome_org_ebi = _gid_ebi().get("nome_organizacao", "Instituto Muda Brasil")
             _hoje_ebi = datetime.date.today()
-            _prox = _ebi_cfg.get("proximo_envio", "")
-            _devido = False
-            if _ebi_cfg.get("habilitado") and _ebi_cfg.get("emails_destino"):
-                if not _prox:
-                    _devido = True
-                else:
+            _schedules = get_schedules()
+            if _schedules:
+                # Multi-schedule: itera por todos os pacotes habilitados
+                for _sched in _schedules:
+                    if not _sched.get("habilitado"):
+                        continue
+                    if not _sched.get("emails_destino"):
+                        continue
+                    _prox_s = _sched.get("proximo_envio", "")
+                    _devido_s = not _prox_s
+                    if not _devido_s:
+                        try:
+                            _devido_s = datetime.date.fromisoformat(str(_prox_s)[:10]) <= _hoje_ebi
+                        except Exception:
+                            _devido_s = True
+                    if _devido_s:
+                        _cfg_s = schedule_to_cfg(_sched)
+                        _ok_s, _ = enviar_relatorio_bi(_cfg_s, _nome_org_ebi, _ebi_base_url())
+                        if _ok_s:
+                            marcar_envio_realizado_schedule(_sched["id"], _cfg_s)
+            else:
+                # Fallback legado (configuracoes_sistema) enquanto não há schedules
+                _ebi_cfg = get_config_ebi()
+                _prox = _ebi_cfg.get("proximo_envio", "")
+                _devido = not _prox
+                if not _devido:
                     try:
                         _devido = datetime.date.fromisoformat(str(_prox)[:10]) <= _hoje_ebi
                     except Exception:
                         _devido = True
-            if _devido:
-                from utils.identidade import get_config as _gid_ebi
-                _nome_org_ebi = _gid_ebi().get("nome_organizacao", "Instituto Muda Brasil")
-                _ok_ebi, _ = enviar_relatorio_bi(_ebi_cfg, _nome_org_ebi, _ebi_base_url())
-                if _ok_ebi:
-                    verificar_e_marcar_envio_realizado(_ebi_cfg)
+                if _devido and _ebi_cfg.get("habilitado") and _ebi_cfg.get("emails_destino"):
+                    _ok_ebi, _ = enviar_relatorio_bi(_ebi_cfg, _nome_org_ebi, _ebi_base_url())
+                    if _ok_ebi:
+                        verificar_e_marcar_envio_realizado(_ebi_cfg)
         except Exception:
             pass
 
@@ -882,192 +902,387 @@ if not st.session_state.usuario_logado:
 # 📅 CALENDÁRIO INSTITUCIONAL — Tela de gestão de Dias Sem Aula
 # ==============================================================================
 
+_SQL_MIGRACAO_EBI = """
+CREATE TABLE IF NOT EXISTS email_bi_schedules (
+  id               uuid         DEFAULT gen_random_uuid() PRIMARY KEY,
+  nome             text         NOT NULL DEFAULT 'Pacote Principal',
+  habilitado       boolean      NOT NULL DEFAULT false,
+  frequencia       text         NOT NULL DEFAULT 'semanal',
+  dia_semana       integer      NOT NULL DEFAULT 4,
+  dia_mes          integer      NOT NULL DEFAULT 1,
+  emails_destino   jsonb        NOT NULL DEFAULT '[]'::jsonb,
+  modulos          jsonb        NOT NULL DEFAULT '{}'::jsonb,
+  assunto_extra    text                  DEFAULT '',
+  email_remetente  text                  DEFAULT '',
+  email_senha_app  text                  DEFAULT '',
+  base_url         text                  DEFAULT '',
+  proximo_envio    date,
+  ultimo_envio     timestamptz,
+  total_envios     integer      NOT NULL DEFAULT 0,
+  historico_envios jsonb        NOT NULL DEFAULT '[]'::jsonb,
+  criado_em        timestamptz  NOT NULL DEFAULT now(),
+  atualizado_em    timestamptz  NOT NULL DEFAULT now()
+);
+""".strip()
+
+
 def _tela_email_bi():
-    import json as _json
+    import pandas as _pd_ebi
     from utils.email_relatorio_config import (
-        get_config_ebi, salvar_config_ebi, calcular_proximo_envio,
+        calcular_proximo_envio,
+        get_schedules, salvar_schedule, excluir_schedule,
+        migrar_legado_para_schedule, schedule_to_cfg,
+        marcar_envio_realizado_schedule, _ler_schedules,
     )
     from utils.email_relatorio import enviar_relatorio_bi
+    from database import get_emails_sistema
 
-    cfg = get_config_ebi()
-
+    # ── Cabeçalho ─────────────────────────────────────────────────────────
     st.markdown("""
         <div style='background:#EFF6FF;border-left:4px solid #1D4ED8;
                     padding:12px 16px;border-radius:6px;margin-bottom:18px;'>
             <strong style='color:#1E3A8A;'>📧 Email BI — Relatório Gerencial Automático</strong><br>
             <span style='color:#1D4ED8;font-size:13px;'>
-                Envia automaticamente um relatório gerencial por e-mail para diretores
-                e equipe operacional, na frequência escolhida (ex.: toda sexta-feira).<br>
-                Escolha quais módulos incluir e os destinatários.
+                Configure <strong>pacotes independentes</strong> de envio por e-mail.
+                Cada pacote tem seus próprios destinatários, módulos e agendamento —
+                com histórico completo de envios.
             </span>
         </div>
     """, unsafe_allow_html=True)
 
-    # ── Status atual ───────────────────────────────────────────────────────
-    cstat1, cstat2, cstat3 = st.columns(3)
-    cstat1.metric("Status", "🟢 Ativo" if cfg["habilitado"] else "⚪ Inativo")
-    cstat2.metric("Próximo envio", cfg["proximo_envio"] or "—")
-    cstat3.metric("Último envio", (cfg["ultimo_envio"] or "—")[:16].replace("T", " "))
-
-    st.markdown("---")
-
-    # ── Configuração de envio ──────────────────────────────────────────────
-    st.markdown("### ⚙️ Configuração de Envio")
-
-    habilitado = st.toggle(
-        "Ativar envio automático",
-        value=cfg["habilitado"],
-        key="ebi_hab",
-        help="Quando ativo, o relatório é enviado automaticamente ao abrir o sistema na data agendada.",
-    )
-
-    cfreq1, cfreq2 = st.columns(2)
-    freq_opts = {"semanal": "Semanal", "quinzenal": "Quinzenal", "mensal": "Mensal"}
-    freq_keys = list(freq_opts.keys())
-    frequencia = cfreq1.selectbox(
-        "Frequência",
-        options=freq_keys,
-        index=freq_keys.index(cfg["frequencia"]) if cfg["frequencia"] in freq_keys else 0,
-        format_func=lambda k: freq_opts[k],
-        key="ebi_freq",
-    )
-
-    dias_semana = ["Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado", "Domingo"]
-    dia_semana_sel = cfg["dia_semana"]
-    dia_mes_sel = cfg["dia_mes"]
-    if frequencia in ("semanal", "quinzenal"):
-        dia_semana_sel = cfreq2.selectbox(
-            "Dia da semana",
-            options=list(range(7)),
-            index=cfg["dia_semana"] if 0 <= cfg["dia_semana"] <= 6 else 4,
-            format_func=lambda i: dias_semana[i],
-            key="ebi_dia_sem",
+    # ── Verificar tabela ───────────────────────────────────────────────────
+    schedules = get_schedules()
+    if schedules is None:
+        st.error("⚠️ Tabela `email_bi_schedules` não encontrada no banco de dados.")
+        st.markdown(
+            "Execute o SQL abaixo no **Supabase Dashboard → SQL Editor** "
+            "e depois clique em **Confirmar**:"
         )
-    else:
-        dia_mes_sel = cfreq2.number_input(
-            "Dia do mês (1–28)", min_value=1, max_value=28,
-            value=cfg["dia_mes"], step=1, key="ebi_dia_mes",
+        st.code(_SQL_MIGRACAO_EBI, language="sql")
+        if st.button("✅ Já executei — recarregar", key="ebi_migr_ok", type="primary"):
+            _ler_schedules.clear()
+            st.rerun()
+        return
+
+    # ── Auto-migração legada (1x por sessão) ──────────────────────────────
+    if not schedules and not st.session_state.get("_ebi_migr_done"):
+        if migrar_legado_para_schedule():
+            _ler_schedules.clear()
+            schedules = get_schedules() or []
+        st.session_state["_ebi_migr_done"] = True
+
+    emails_sistema = get_emails_sistema()
+
+    # ── STATE MACHINE: lista ↔ editor ─────────────────────────────────────
+    edit_id = st.session_state.get("ebi_edit_id")  # None | "new" | uuid
+
+    # ══════════════════════════════════════════════════════════════════════
+    # EDITOR
+    # ══════════════════════════════════════════════════════════════════════
+    if edit_id is not None:
+        dados = {}
+        if edit_id != "new":
+            dados = next((s for s in schedules if s["id"] == edit_id), {})
+
+        mod_def = dados.get("modulos") or {}
+        if isinstance(mod_def, str):
+            import json as _jj
+            try:
+                mod_def = _jj.loads(mod_def)
+            except Exception:
+                mod_def = {}
+
+        emails_ja = dados.get("emails_destino") or []
+        emails_sis_set = {u["email"] for u in emails_sistema}
+        emails_externos_ja = [e for e in emails_ja if e not in emails_sis_set]
+
+        titulo_ed = (
+            f"📝 Editando: **{dados.get('nome', '—')}**"
+            if edit_id != "new" else "📝 Novo Pacote de Envio"
         )
+        st.markdown(f"### {titulo_ed}")
 
-    # ── Destinatários e remetente ──────────────────────────────────────────
-    st.markdown("### 📬 Destinatários e Remetente")
-    emails_txt = st.text_area(
-        "E-mails de destino (um por linha ou separados por vírgula)",
-        value="\n".join(cfg["emails_destino"]),
-        placeholder="diretoria@exemplo.com\noperacional@exemplo.com",
-        key="ebi_emails",
-        height=90,
-    )
-    cre1, cre2 = st.columns(2)
-    remetente = cre1.text_input(
-        "Gmail remetente", value=cfg["email_remetente"],
-        placeholder="seuemail@gmail.com", key="ebi_remetente",
-    )
-    senha_app = cre2.text_input(
-        "Senha de app do Gmail", value=cfg["email_senha_app"],
-        type="password", key="ebi_senha",
-        help="Gere em myaccount.google.com → Segurança → Senhas de app.",
-    )
-    base_url_cfg = st.text_input(
-        "🔗 URL pública do sistema (para os botões de ação do e-mail)",
-        value=cfg.get("base_url", ""),
-        placeholder="https://seusistema.onrender.com",
-        key="ebi_base_url_in",
-        help="Endereço público onde os diretores acessam o sistema. Usado para montar os links 'Lançar frequência' e 'Abrir ficha' no e-mail. Se vazio, o sistema tenta detectar automaticamente.",
-    )
+        with st.form(key=f"ebi_form_{edit_id}"):
+            cn, ctog = st.columns([3, 2])
+            nome_pct = cn.text_input(
+                "Nome do pacote",
+                value=dados.get("nome", "Pacote de Envio"),
+                key=f"ebi_fn_{edit_id}",
+            )
+            habilitado = ctog.toggle(
+                "Ativar envio automático",
+                value=bool(dados.get("habilitado", False)),
+                key=f"ebi_fh_{edit_id}",
+                help="Quando ativo, o envio dispara automaticamente ao abrir o sistema na data agendada.",
+            )
 
-    # ── Módulos do relatório ───────────────────────────────────────────────
-    st.markdown("### 🧩 Módulos do Relatório")
-    cm1, cm2 = st.columns(2)
-    mod_executivo = cm1.checkbox("📊 Painel Executivo (KPIs)", value=cfg["mod_executivo"], key="ebi_m_exec")
-    mod_evasao = cm1.checkbox("⚠️ Risco de Evasão", value=cfg["mod_evasao"], key="ebi_m_evasao")
-    mod_auditoria = cm1.checkbox("📋 Auditoria de Cadastros", value=cfg["mod_auditoria"], key="ebi_m_audit")
-    mod_novos_cad = cm1.checkbox("📥 Novos Cadastros (Aprovação)", value=cfg["mod_novos_cadastros"], key="ebi_m_novos")
-    mod_freq_turma = cm2.checkbox("🏆 Frequência por Turma", value=cfg["mod_frequencia_turma"], key="ebi_m_freq")
-    mod_dias_sem = cm2.checkbox("📅 Dias sem Registro", value=cfg["mod_dias_sem_registro"], key="ebi_m_dias")
-    mod_aniver = cm2.checkbox("🎂 Aniversariantes da Semana", value=cfg["mod_aniversariantes"], key="ebi_m_aniver")
-    mod_presencas_mes = cm2.checkbox("📈 Presenças no Ano (por mês)", value=cfg["mod_presencas_mes"], key="ebi_m_presmes")
+            # ── Agendamento ──────────────────────────────────────────────
+            st.markdown("#### ⚙️ Agendamento")
+            cfreq1, cfreq2 = st.columns(2)
+            freq_opts = {"semanal": "Semanal", "quinzenal": "Quinzenal", "mensal": "Mensal"}
+            freq_keys = list(freq_opts.keys())
+            freq_atual = dados.get("frequencia", "semanal")
+            frequencia = cfreq1.selectbox(
+                "Frequência",
+                options=freq_keys,
+                index=freq_keys.index(freq_atual) if freq_atual in freq_keys else 0,
+                format_func=lambda k: freq_opts[k],
+                key=f"ebi_ff_{edit_id}",
+            )
+            dias_sem_nms = ["Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado", "Domingo"]
+            dsv = int(dados.get("dia_semana") or 4)
+            dmv = int(dados.get("dia_mes") or 1)
+            if frequencia in ("semanal", "quinzenal"):
+                dia_semana_sel = cfreq2.selectbox(
+                    "Dia da semana",
+                    options=list(range(7)),
+                    index=dsv if 0 <= dsv <= 6 else 4,
+                    format_func=lambda i: dias_sem_nms[i],
+                    key=f"ebi_fds_{edit_id}",
+                )
+                dia_mes_sel = dmv
+            else:
+                dia_semana_sel = dsv
+                dia_mes_sel = cfreq2.number_input(
+                    "Dia do mês (1–28)", min_value=1, max_value=28,
+                    value=dmv, step=1, key=f"ebi_fdm_{edit_id}",
+                )
 
-    assunto_extra = st.text_input(
-        "Texto extra no assunto (opcional)",
-        value=cfg["assunto_extra"], placeholder="Ex.: Unidade Centro",
-        key="ebi_assunto",
-    )
+            # ── Destinatários ────────────────────────────────────────────
+            st.markdown("#### 📬 Destinatários e Remetente")
+            if emails_sistema:
+                st.markdown("**E-mails cadastrados no sistema** *(marque os que devem receber este pacote):*")
+                cols_em = st.columns(2)
+                emails_sis_sel = []
+                for idx_u, u in enumerate(emails_sistema):
+                    col_u = cols_em[idx_u % 2]
+                    lbl_u = f"{u['nome']} — {u['email']}"
+                    chk_key = f"ebi_u_{edit_id}_{u['email'].replace('@','_at_').replace('.','_')}"
+                    if col_u.checkbox(lbl_u, value=(u["email"] in emails_ja), key=chk_key):
+                        emails_sis_sel.append(u["email"])
+            else:
+                emails_sis_sel = []
+                st.caption("Nenhum usuário cadastrado no sistema ainda.")
 
-    # ── Salvar ─────────────────────────────────────────────────────────────
-    st.markdown("---")
-    csave1, csave2 = st.columns([1, 1])
+            st.markdown("**E-mails adicionais** *(externos, um por linha):*")
+            externos_txt = st.text_area(
+                "",
+                value="\n".join(emails_externos_ja),
+                placeholder="emailexterno@exemplo.com\noutro@exemplo.com",
+                height=75,
+                label_visibility="collapsed",
+                key=f"ebi_fext_{edit_id}",
+            )
 
-    if csave1.button("💾 Salvar configuração", type="primary", use_container_width=True, key="ebi_save"):
-        emails_lista = [
-            e.strip()
-            for linha in emails_txt.replace(",", "\n").splitlines()
-            for e in [linha]
-            if e.strip()
-        ]
-        cfg_nova = {
-            "habilitado": habilitado,
-            "frequencia": frequencia,
-            "dia_semana": dia_semana_sel,
-            "dia_mes": dia_mes_sel,
-            "emails_destino": emails_lista,
-        }
-        proximo = calcular_proximo_envio(cfg_nova)
-        salvar_config_ebi({
-            "ebi_habilitado": "1" if habilitado else "0",
-            "ebi_frequencia": frequencia,
-            "ebi_dia_semana": str(dia_semana_sel),
-            "ebi_dia_mes": str(dia_mes_sel),
-            "ebi_emails_destino": _json.dumps(emails_lista),
-            "ebi_email_remetente": remetente.strip(),
-            "ebi_email_senha_app": senha_app.strip(),
-            "ebi_mod_executivo": "1" if mod_executivo else "0",
-            "ebi_mod_evasao": "1" if mod_evasao else "0",
-            "ebi_mod_auditoria": "1" if mod_auditoria else "0",
-            "ebi_mod_novos_cadastros": "1" if mod_novos_cad else "0",
-            "ebi_mod_frequencia_turma": "1" if mod_freq_turma else "0",
-            "ebi_mod_dias_sem_registro": "1" if mod_dias_sem else "0",
-            "ebi_mod_aniversariantes": "1" if mod_aniver else "0",
-            "ebi_mod_presencas_mes": "1" if mod_presencas_mes else "0",
-            "ebi_assunto_extra": assunto_extra.strip(),
-            "ebi_base_url": base_url_cfg.strip().rstrip("/"),
-            "ebi_proximo_envio": str(proximo),
-        })
-        st.success(f"✅ Configuração salva. Próximo envio agendado para {proximo.strftime('%d/%m/%Y')}.")
+            # ── Remetente ────────────────────────────────────────────────
+            cre1, cre2 = st.columns(2)
+            remetente = cre1.text_input(
+                "Gmail remetente",
+                value=dados.get("email_remetente", ""),
+                placeholder="seuemail@gmail.com",
+                key=f"ebi_frem_{edit_id}",
+            )
+            senha_app = cre2.text_input(
+                "Senha de app do Gmail",
+                value=dados.get("email_senha_app", ""),
+                type="password",
+                key=f"ebi_fsen_{edit_id}",
+                help="Gere em myaccount.google.com → Segurança → Senhas de app.",
+            )
+            base_url_cfg = st.text_input(
+                "🔗 URL pública do sistema",
+                value=dados.get("base_url", ""),
+                placeholder="https://seusistema.onrender.com",
+                key=f"ebi_furl_{edit_id}",
+                help="Endereço público — usado nos botões de ação dentro do e-mail.",
+            )
+
+            # ── Módulos ──────────────────────────────────────────────────
+            st.markdown("#### 🧩 Módulos do Relatório")
+            cm1, cm2 = st.columns(2)
+            mod_exec   = cm1.checkbox("📊 Painel Executivo (KPIs)",       value=bool(mod_def.get("executivo", True)),         key=f"ebi_me_{edit_id}")
+            mod_ev     = cm1.checkbox("⚠️ Risco de Evasão",               value=bool(mod_def.get("evasao", True)),            key=f"ebi_mev_{edit_id}")
+            mod_aud    = cm1.checkbox("📋 Auditoria de Cadastros",         value=bool(mod_def.get("auditoria", True)),         key=f"ebi_ma_{edit_id}")
+            mod_nov    = cm1.checkbox("📥 Novos Cadastros (Aprovação)",    value=bool(mod_def.get("novos_cadastros", True)),   key=f"ebi_mn_{edit_id}")
+            mod_freq   = cm2.checkbox("🏆 Frequência por Turma",           value=bool(mod_def.get("frequencia_turma", True)),  key=f"ebi_mft_{edit_id}")
+            mod_dias   = cm2.checkbox("📅 Dias sem Registro",              value=bool(mod_def.get("dias_sem_registro", True)), key=f"ebi_mds_{edit_id}")
+            mod_aniv   = cm2.checkbox("🎂 Aniversariantes da Semana",      value=bool(mod_def.get("aniversariantes", True)),   key=f"ebi_man_{edit_id}")
+            mod_pres   = cm2.checkbox("📈 Presenças no Ano (por mês)",     value=bool(mod_def.get("presencas_mes", True)),     key=f"ebi_mpm_{edit_id}")
+
+            assunto_extra = st.text_input(
+                "Texto extra no assunto (opcional)",
+                value=dados.get("assunto_extra", ""),
+                placeholder="Ex.: Unidade Centro",
+                key=f"ebi_fass_{edit_id}",
+            )
+
+            st.markdown("---")
+            cs1, cs2, cs3 = st.columns(3)
+            btn_salvar   = cs1.form_submit_button("💾 Salvar Pacote",           type="primary", use_container_width=True)
+            btn_teste    = cs2.form_submit_button("📨 Enviar Agora (Teste)",    use_container_width=True)
+            btn_cancelar = cs3.form_submit_button("❌ Cancelar",                use_container_width=True)
+
+        # ── Ações ────────────────────────────────────────────────────────
+        if btn_cancelar:
+            st.session_state.pop("ebi_edit_id", None)
+            st.rerun()
+
+        if btn_salvar or btn_teste:
+            externos_lista = [
+                e.strip()
+                for linha in externos_txt.replace(",", "\n").splitlines()
+                for e in [linha] if e.strip()
+            ]
+            todos_emails = list(dict.fromkeys(emails_sis_sel + externos_lista))
+            cfg_calc = {"habilitado": habilitado, "frequencia": frequencia,
+                        "dia_semana": int(dia_semana_sel), "dia_mes": int(dia_mes_sel)}
+            proximo = calcular_proximo_envio(cfg_calc)
+            payload = {
+                "nome":            nome_pct.strip() or "Pacote de Envio",
+                "habilitado":      habilitado,
+                "frequencia":      frequencia,
+                "dia_semana":      int(dia_semana_sel),
+                "dia_mes":         int(dia_mes_sel),
+                "emails_destino":  todos_emails,
+                "modulos": {
+                    "executivo":         mod_exec,
+                    "evasao":            mod_ev,
+                    "auditoria":         mod_aud,
+                    "novos_cadastros":   mod_nov,
+                    "frequencia_turma":  mod_freq,
+                    "dias_sem_registro": mod_dias,
+                    "aniversariantes":   mod_aniv,
+                    "presencas_mes":     mod_pres,
+                },
+                "assunto_extra":   assunto_extra.strip(),
+                "email_remetente": remetente.strip(),
+                "email_senha_app": senha_app.strip(),
+                "base_url":        base_url_cfg.strip().rstrip("/"),
+                "proximo_envio":   str(proximo),
+            }
+            if btn_salvar:
+                sid = salvar_schedule(payload, edit_id if edit_id != "new" else None)
+                if sid:
+                    st.success(f"✅ Pacote **{payload['nome']}** salvo. Próximo envio: {proximo.strftime('%d/%m/%Y')}.")
+                    st.session_state.pop("ebi_edit_id", None)
+                    st.rerun()
+
+            if btn_teste:
+                if not todos_emails:
+                    st.error("❌ Selecione ao menos um destinatário antes de testar.")
+                else:
+                    from utils.identidade import get_config as _gid_t
+                    nome_org_t = _gid_t().get("nome_organizacao", "Instituto Muda Brasil")
+                    cfg_t = schedule_to_cfg({**payload, "emails_destino": todos_emails})
+                    with st.spinner("Gerando e enviando relatório de teste…"):
+                        ok_t, msg_t = enviar_relatorio_bi(cfg_t, nome_org_t, _ebi_base_url())
+                    if ok_t:
+                        st.success(f"✅ {msg_t}")
+                    else:
+                        st.error(f"❌ {msg_t}")
+        return
+
+    # ══════════════════════════════════════════════════════════════════════
+    # LISTAGEM DE PACOTES
+    # ══════════════════════════════════════════════════════════════════════
+    col_novo, _ = st.columns([2, 5])
+    if col_novo.button("➕ Novo Pacote de Envio", type="primary", use_container_width=True, key="ebi_novo"):
+        st.session_state["ebi_edit_id"] = "new"
         st.rerun()
 
-    if csave2.button("📨 Enviar agora (teste)", use_container_width=True, key="ebi_test"):
-        from utils.identidade import get_config as _gid
-        nome_org = _gid().get("nome_organizacao", "Instituto Muda Brasil")
-        cfg_envio = get_config_ebi()
-        with st.spinner("Gerando e enviando relatório…"):
-            ok, msg = enviar_relatorio_bi(cfg_envio, nome_org, _ebi_base_url())
-        if ok:
-            st.success(f"✅ {msg}")
-        else:
-            st.error(f"❌ {msg}")
+    if not schedules:
+        st.info("Nenhum pacote configurado ainda. Clique em **'➕ Novo Pacote'** para começar.")
+        return
 
-    # ── Pré-visualização ───────────────────────────────────────────────────
-    with st.expander("👁️ Pré-visualizar relatório (HTML)", expanded=False):
-        from utils.email_relatorio import gerar_html_relatorio
-        from utils.identidade import get_config as _gid2
-        nome_org_prev = _gid2().get("nome_organizacao", "Instituto Muda Brasil")
-        cfg_prev = {
-            "frequencia": frequencia,
-            "mod_executivo": mod_executivo,
-            "mod_evasao": mod_evasao,
-            "mod_auditoria": mod_auditoria,
-            "mod_novos_cadastros": mod_novos_cad,
-            "mod_frequencia_turma": mod_freq_turma,
-            "mod_dias_sem_registro": mod_dias_sem,
-            "mod_aniversariantes": mod_aniver,
-            "mod_presencas_mes": mod_presencas_mes,
-            "base_url": base_url_cfg.strip().rstrip("/"),
-        }
-        if st.button("🔄 Gerar pré-visualização", key="ebi_preview_btn"):
-            import streamlit.components.v1 as _stc_prev
-            html_prev = gerar_html_relatorio(cfg_prev, nome_org_prev, _ebi_base_url())
-            _stc_prev.html(html_prev, height=700, scrolling=True)
+    st.markdown("---")
+    _DIAS_NMS = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"]
+    _FREQ_LBL = {"semanal": "Semanal", "quinzenal": "Quinzenal", "mensal": "Mensal"}
+
+    for _s in schedules:
+        _ativo   = bool(_s.get("habilitado", False))
+        _icon    = "🟢" if _ativo else "⚪"
+        _freq_l  = _FREQ_LBL.get(_s.get("frequencia", "semanal"), "—")
+        _ds      = _s.get("dia_semana")
+        _dm      = _s.get("dia_mes")
+        if _s.get("frequencia", "semanal") in ("semanal", "quinzenal") and _ds is not None:
+            _dia_l = _DIAS_NMS[int(_ds)] if 0 <= int(_ds) <= 6 else "—"
+        else:
+            _dia_l = f"dia {_dm}"
+        _prox_l  = _s.get("proximo_envio") or "—"
+        _total_l = _s.get("total_envios") or 0
+        _ult_l   = (_s.get("ultimo_envio") or "")[:16].replace("T", " ") or "—"
+        _n_em    = len(_s.get("emails_destino") or [])
+        _sid     = _s["id"]
+
+        with st.container(border=True):
+            cL, cM1, cM2, cM3, cR = st.columns([3.5, 1.5, 1.5, 1.5, 2.5])
+            cL.markdown(f"**{_s['nome']}** &nbsp; {_icon} {'Ativo' if _ativo else 'Inativo'}")
+            cL.caption(f"✉️ {_n_em} destinatário(s) · {_freq_l} ({_dia_l})")
+            cM1.metric("Próximo envio", _prox_l if _prox_l != "—" else "—")
+            cM2.metric("Enviados", f"{_total_l}×")
+            cM3.metric("Último", _ult_l[:10] if _ult_l != "—" else "—")
+
+            ba, bt, bh, be = cR.columns(4)
+            if ba.button("✏️", key=f"ebi_ed_{_sid}", help="Editar pacote"):
+                st.session_state["ebi_edit_id"] = _sid
+                st.rerun()
+            if bt.button("📨", key=f"ebi_tst_{_sid}", help="Enviar agora (teste)"):
+                st.session_state[f"ebi_test_{_sid}"] = True
+                st.rerun()
+            if bh.button("📋", key=f"ebi_hist_{_sid}", help="Ver histórico de envios"):
+                _hk = f"ebi_show_hist_{_sid}"
+                st.session_state[_hk] = not st.session_state.get(_hk, False)
+                st.rerun()
+            if be.button("🗑️", key=f"ebi_del_{_sid}", help="Excluir pacote"):
+                st.session_state[f"ebi_conf_del_{_sid}"] = True
+                st.rerun()
+
+            # ── Confirmar exclusão ────────────────────────────────────────
+            if st.session_state.get(f"ebi_conf_del_{_sid}"):
+                st.warning(f"⚠️ Excluir **'{_s['nome']}'**? Esta ação não pode ser desfeita.")
+                cd1, cd2 = st.columns(2)
+                if cd1.button("✅ Confirmar exclusão", key=f"ebi_del_ok_{_sid}", type="primary"):
+                    excluir_schedule(_sid)
+                    st.session_state.pop(f"ebi_conf_del_{_sid}", None)
+                    st.rerun()
+                if cd2.button("Cancelar", key=f"ebi_del_cancel_{_sid}"):
+                    st.session_state.pop(f"ebi_conf_del_{_sid}", None)
+                    st.rerun()
+
+            # ── Histórico ────────────────────────────────────────────────
+            if st.session_state.get(f"ebi_show_hist_{_sid}"):
+                _hist = _s.get("historico_envios") or []
+                if isinstance(_hist, str):
+                    import json as _jh
+                    try:
+                        _hist = _jh.loads(_hist)
+                    except Exception:
+                        _hist = []
+                if not _hist:
+                    st.caption("Nenhum envio registrado ainda.")
+                else:
+                    st.markdown(f"**📋 Histórico — {len(_hist)} envio(s) registrado(s):**")
+                    _linhas_h = [
+                        [str(i + 1), dt[:16].replace("T", " ")]
+                        for i, dt in enumerate(reversed(_hist[-20:]))
+                    ]
+                    st.dataframe(
+                        _pd_ebi.DataFrame(_linhas_h, columns=["#", "Data / Hora"]),
+                        use_container_width=True, hide_index=True,
+                    )
+
+            # ── Envio de teste inline ─────────────────────────────────────
+            if st.session_state.get(f"ebi_test_{_sid}"):
+                st.session_state.pop(f"ebi_test_{_sid}")
+                from utils.identidade import get_config as _gid_l
+                _nome_l = _gid_l().get("nome_organizacao", "Instituto Muda Brasil")
+                _cfg_l  = schedule_to_cfg(_s)
+                with st.spinner(f"Enviando teste '{_s['nome']}'…"):
+                    _ok_l, _msg_l = enviar_relatorio_bi(_cfg_l, _nome_l, _ebi_base_url())
+                if _ok_l:
+                    st.success(f"✅ {_msg_l}")
+                else:
+                    st.error(f"❌ {_msg_l}")
 
 
 def _tela_calendario_institucional():

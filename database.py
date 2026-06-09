@@ -2549,3 +2549,12 @@ def ferramenta_reparacao_turmas():
                     st.rerun()
     except Exception as e:
         st.error(str(e))
+
+
+def get_emails_sistema() -> list:
+    """Retorna [{nome, email}] dos usuários cadastrados, ordenados por nome."""
+    try:
+        res = supabase.from_("usuarios").select("nome,email").order("nome").execute()
+        return [r for r in (res.data or []) if r.get("email", "").strip()]
+    except Exception:
+        return []
