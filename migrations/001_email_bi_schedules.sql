@@ -22,3 +22,6 @@ CREATE TABLE IF NOT EXISTS email_bi_schedules (
   criado_em        timestamptz  NOT NULL DEFAULT now(),
   atualizado_em    timestamptz  NOT NULL DEFAULT now()
 );
+
+-- Desativa RLS (sistema interno — acesso via chave de serviço)
+ALTER TABLE email_bi_schedules DISABLE ROW LEVEL SECURITY;
