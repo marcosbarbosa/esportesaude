@@ -21,6 +21,7 @@ from database import (
     supabase,
     upload_midia,
     _com_fonetica,
+    _inv_alunos,
 )
 
 
@@ -175,6 +176,8 @@ def tela_triagem():
 
                         if res.data:
                             novo_aluno = res.data[0]
+                            _inv_alunos()
+                            st.session_state["_force_reload_crm"] = True
                             st.success(f"✅ {nome_exp} cadastrado com sucesso!")
 
                             # MÁGICA: Teletransporte para a ficha!
@@ -356,6 +359,7 @@ def tela_triagem():
                                 f"⚠️ {nome} foi matriculado(a) com exceções ({', '.join(motivos)}), "
                                 "mas o LOG DE AUDITORIA FALHOU. Registre manualmente e verifique a conexão."
                             )
+                    st.session_state["_force_reload_crm"] = True
                     st.toast(msg, icon="✅")
                     st.rerun()
                 else:

@@ -463,14 +463,9 @@ if st.session_state.usuario_logado:
                 st.session_state["_deeplink_erro"] = "⚠️ Aluno do link não encontrado."
             st.rerun()
         elif _dl.get("ir") == "triagem":
-            if st.session_state.get("perfil") == "SuperAdmin":
-                st.session_state.aluno_prontuario = None
-                st.session_state.menu_atual = "Portal do Aluno"
-                st.session_state["_abrir_triagem"] = True
-            else:
-                st.session_state["_deeplink_erro"] = (
-                    "⚠️ A aprovação de novos cadastros é restrita à coordenação (SuperAdmin)."
-                )
+            st.session_state.aluno_prontuario = None
+            st.session_state.menu_atual = "Portal do Aluno"
+            st.session_state["_abrir_triagem"] = True
             st.rerun()
 
     if st.session_state.get("_deeplink_erro"):

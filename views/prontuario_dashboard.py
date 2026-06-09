@@ -174,6 +174,11 @@ def renderizar_dashboard():
         unsafe_allow_html=True,
     )
 
+    # Limpa caches locais se uma matrícula acabou de ocorrer (sinalizado por triagem_view).
+    if st.session_state.pop("_force_reload_crm", False):
+        obter_todos_alunos_cache.clear()
+        carregar_dados_crm_avaliacoes_senior.clear()
+
     df_medidos, df_nao_medidos, df_todos_crm, df_inativos, df_freq_datado = carregar_dados_crm_avaliacoes_senior()
 
     if df_todos_crm.empty and df_inativos.empty:
@@ -533,11 +538,8 @@ def renderizar_dashboard():
         st.markdown("### 📥 Caixa de Entrada de Inscrições")
         st.caption("Aprove, edite ou rejeite os pré-cadastros vindos do formulário público.")
 
-        if st.session_state.get("perfil") == "SuperAdmin":
-            from views.triagem_view import tela_triagem
-            tela_triagem()
-        else:
-            st.error("⚠️ Acesso Restrito: Apenas a coordenação pode aprovar e matricular novos alunos.")
+        from views.triagem_view import tela_triagem
+        tela_triagem()
 
     st.divider()
 
@@ -758,13 +760,14 @@ def renderizar_dashboard():
                     st.markdown(f"<h4 style='color:#1E88E5; margin-bottom: 10px; margin-top: 0;'>✨ Criar Novo Cadastro Rápido</h4>", unsafe_allow_html=True)
                     st.caption("Preencha apenas a turma para matricular este aluno imediatamente.")
 
-                    with st.form(key=f"form_quick_cad_{busca}"):
+                    with st.form(key="form_quick_cad"):
                         turmas_df = get_todas_turmas(ativas_apenas=True)
                         lista_turmas = turmas_df["nome"].tolist() if not turmas_df.empty else ["Nenhuma turma disponível"]
 
                         c_n, c_t = st.columns([2, 1])
-                        novo_nome = c_n.text_input("Nome do Aluno:", value=busca.upper().strip())
-                        nova_turma = c_t.selectbox("Alocar na Turma:", lista_turmas)
+                        novo_nome = c_n.text_input("Nome do Aluno:", value=busca.upper().strip(), key="qs_nome")
+                        # key estável garante que a seleção persiste mesmo com reruns do st_keyup.
+                        nova_turma = c_t.selectbox("Alocar na Turma:", lista_turmas, key="qs_turma_sel")
 
                         if st.form_submit_button("✅ Cadastrar e Matricular", type="primary", use_container_width=True):
                             if nova_turma == "Nenhuma turma disponível":
@@ -774,6 +777,8 @@ def renderizar_dashboard():
                             else:
                                 sucesso = cadastrar_novo_aluno(nome=novo_nome, turma=nova_turma)
                                 if sucesso:
+                                    obter_todos_alunos_cache.clear()
+                                    carregar_dados_crm_avaliacoes_senior.clear()
                                     st.success(f"🎉 {novo_nome} foi matriculado com sucesso na turma {nova_turma}!")
                                     time.sleep(1.5)
                                     st.rerun()
