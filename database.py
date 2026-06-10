@@ -2451,28 +2451,53 @@ def atualizar_crm_template(gatilho, nova_mensagem):
 
 
 def salvar_atestado_temporario(aluno_id, data_registro, motivo, url_documento,
-                               data_vencimento=None):
+                               data_vencimento=None, tipo_atestado="outro"):
+    """Arquiva um atestado na tabela atestados_temporarios.
+    Se tipo_atestado='aptidao_fisica', atualiza também url_atestado_medico do aluno.
+    Fallback gracioso para colunas ainda não criadas via migration.
+    """
     payload = {
-        "aluno_id":      str(aluno_id),
-        "data_registro": str(data_registro),
-        "motivo":        str(motivo).strip(),
-        "url_documento": str(url_documento),
+        "aluno_id":       str(aluno_id),
+        "data_registro":  str(data_registro),
+        "motivo":         str(motivo).strip(),
+        "url_documento":  str(url_documento),
+        "tipo_atestado":  str(tipo_atestado),
     }
     if data_vencimento:
         payload["data_vencimento"] = str(data_vencimento)
+
+    def _insert(p):
+        supabase.table("atestados_temporarios").insert(p).execute()
+
     try:
-        supabase.table("atestados_temporarios").insert(payload).execute()
-        return True, "Sucesso"
+        _insert(payload)
     except Exception as e:
         err = str(e)
-        if "data_vencimento" in err or ("column" in err.lower() and "data_vencimento" in err.lower()):
-            payload.pop("data_vencimento", None)
+        fallback = dict(payload)
+        removable = []
+        if "tipo_atestado" in err:
+            removable.append("tipo_atestado")
+        if "data_vencimento" in err:
+            removable.append("data_vencimento")
+        if removable:
+            for k in removable:
+                fallback.pop(k, None)
             try:
-                supabase.table("atestados_temporarios").insert(payload).execute()
-                return True, "Sucesso (execute a migração SQL para habilitar data de vencimento)"
+                _insert(fallback)
             except Exception as e2:
                 return False, str(e2)
-        return False, err
+        else:
+            return False, err
+
+    if str(tipo_atestado) == "aptidao_fisica":
+        try:
+            supabase.table("alunos").update(
+                {"url_atestado_medico": str(url_documento)}
+            ).eq("id", str(aluno_id)).execute()
+        except Exception:
+            pass
+
+    return True, "Sucesso"
 
 
 def get_atestados_vencendo(dias: int = 30) -> list:

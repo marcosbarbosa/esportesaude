@@ -173,6 +173,7 @@ def rotacionar_imagem_supabase(aluno_id, url_atual, angulo):
 
 
 from views.utils_docs import url_eh_imagem, renderizar_documento_com_rotacao
+from utils.atestado_ui import TIPOS_ATESTADO, TIPOS_LABEL, tipo_badge_html, validade_badge_html
 
 
 def processar_documento_prontuario(file_bytes, file_name, file_type):
@@ -1457,7 +1458,7 @@ def render_aba_documentos(aluno):
 
         # --- 3. Atestado ---
         with c_ate:
-            st.markdown("**3. Atestado Físico**")
+            st.markdown("**3. Aptidão Física**")
             url_ate = aluno.get("url_atestado_medico")
             if (
                 pd.notna(url_ate)
@@ -1465,26 +1466,10 @@ def render_aba_documentos(aluno):
                 and str(url_ate).strip().lower() not in ["nan", "none", ""]
             ):
                 renderizar_documento_com_rotacao(url_ate, "ate")
-                if st.button(
-                    "🗑️ Remover Atestado",
-                    key="del_ate_btn",
-                    type="secondary",
-                    use_container_width=True,
-                ):
-                    ok, _ = atualizar_perfil_aluno_dict_seguro(
-                        aluno["id"], {"url_atestado_medico": None}
-                    )
-                    if ok:
-                        st.session_state.aluno_prontuario["url_atestado_medico"] = None
-                        st.rerun()
+                st.caption("↳ Para atualizar, use **Histórico de Atestados** abaixo.")
             else:
-                st.error("Atestado em falta!")
-            novo_ate = st.file_uploader(
-                "Atualizar Atestado",
-                type=["jpg", "png", "jpeg", "pdf"],
-                key="up_ate_p",
-                label_visibility="collapsed",
-            )
+                st.error("⚠️ Atestado em falta!")
+                st.caption("↳ Adicione no **Histórico de Atestados** abaixo.")
 
         st.markdown("---")
         btn_doc_bot = st.button(
@@ -1495,9 +1480,9 @@ def render_aba_documentos(aluno):
         )
 
         if btn_doc_top or btn_doc_bot:
-            if novo_rg or novo_rec or novo_ate:
+            if novo_rg or novo_rec:
                 with st.spinner("A guardar na nuvem..."):
-                    final_rg, final_rec, final_ate = url_rg, url_rec, url_ate
+                    final_rg, final_rec = url_rg, url_rec
                     upload_docs_ok = True
 
                     if novo_rg:
@@ -1522,25 +1507,12 @@ def render_aba_documentos(aluno):
                             upload_docs_ok = False
                             st.error(f"Erro Receita: {err_rec}")
 
-                    if novo_ate:
-                        b_ate, n_ate, t_ate = processar_documento_prontuario(
-                            novo_ate.getvalue(), novo_ate.name, novo_ate.type
-                        )
-                        u_ate, err_ate = upload_midia_diagnostico(b_ate, n_ate, t_ate)
-                        if u_ate:
-                            final_ate = u_ate
-                        else:
-                            upload_docs_ok = False
-                            st.error(f"Erro Atestado: {err_ate}")
-
                     if upload_docs_ok:
                         docs_salvar = {}
                         if final_rg != url_rg:
                             docs_salvar["url_rg"] = final_rg
                         if final_rec != url_rec:
                             docs_salvar["url_receituario"] = final_rec
-                        if final_ate != url_ate:
-                            docs_salvar["url_atestado_medico"] = final_ate
 
                         if docs_salvar:
                             sucesso, msg_bd = atualizar_perfil_aluno_dict_seguro(
@@ -1557,31 +1529,42 @@ def render_aba_documentos(aluno):
                 st.warning("Anexe pelo menos um documento novo para guardar.")
 
     st.markdown("<br>", unsafe_allow_html=True)
-    with st.expander(
-        "🟡 Histórico de Atestados Temporários (Faltas Justificadas)", expanded=False
-    ):
-        st.info("Use esta secção para arquivar atestados curtos (gripes, exames).")
+    with st.expander("📋 Histórico de Atestados", expanded=True):
         with st.form("form_novo_atestado_temp", clear_on_submit=True):
+            tipo_label_sel = st.selectbox(
+                "Tipo de Atestado:",
+                options=list(TIPOS_ATESTADO.keys()),
+                help=(
+                    "'Aptidão Física' atualiza o documento de referência do aluno e "
+                    "é monitorado nos alertas de vencimento do sistema."
+                ),
+            )
+            tipo_val = TIPOS_ATESTADO[tipo_label_sel]
             c_dt, c_vcto, c_motivo = st.columns([1, 1, 2])
             data_atestado = c_dt.date_input(
-                "Data:", datetime.date.today(), format="DD/MM/YYYY"
+                "Data do Atestado:", datetime.date.today(), format="DD/MM/YYYY"
             )
             data_vencimento = c_vcto.date_input(
-                "Validade:",
+                "Válido até:",
                 value=None,
                 format="DD/MM/YYYY",
-                help="Até quando o atestado é válido.",
+                help="Obrigatório para Aptidão Física. Para os demais, preencha se houver prazo.",
             )
-            motivo = c_motivo.text_input("Motivo:", placeholder="Ex: Gripe (3 dias)")
+            motivo = c_motivo.text_input(
+                "Motivo / Observação:",
+                placeholder="Ex: Gripe (3 dias), Cirurgia no joelho, Restrição cardíaca..."
+            )
             arq_atestado = st.file_uploader(
-                "Anexar Ficheiro:", type=["jpg", "png", "jpeg", "pdf"]
+                "Anexar Atestado (foto ou PDF):", type=["jpg", "png", "jpeg", "pdf"]
             )
 
             if st.form_submit_button(
-                "➕ Arquivar Temporário", type="primary", use_container_width=True
+                "➕ Arquivar Atestado", type="primary", use_container_width=True
             ):
                 if not arq_atestado:
-                    st.error("Anexe o ficheiro.")
+                    st.error("Anexe o arquivo do atestado.")
+                elif tipo_val == "aptidao_fisica" and not data_vencimento:
+                    st.warning("⚠️ Para Aptidão Física, informe a data de validade para ativar os alertas.")
                 else:
                     with st.spinner("A enviar..."):
                         b_arq, n_arq, t_arq = processar_documento_prontuario(
@@ -1592,41 +1575,70 @@ def render_aba_documentos(aluno):
                         url_arq, err_arq = upload_midia_diagnostico(b_arq, n_arq, t_arq)
                         if url_arq:
                             sucesso, msg = salvar_atestado_temporario(
-                                aluno["id"], data_atestado, motivo, url_arq, data_vencimento
+                                aluno["id"], data_atestado, motivo, url_arq,
+                                data_vencimento, tipo_val
                             )
                             if sucesso:
+                                if tipo_val == "aptidao_fisica":
+                                    st.session_state.aluno_prontuario["url_atestado_medico"] = url_arq
+                                st.success("✅ Atestado arquivado!")
+                                time.sleep(1)
                                 st.rerun()
                             else:
                                 st.error(f"Erro ao salvar: {msg}")
                         else:
                             st.error(f"Erro no envio: {err_arq}")
 
+        st.markdown("#### 📁 Arquivo")
         atestados_hist = get_atestados_temporarios(aluno["id"])
+        url_ate_leg = aluno.get("url_atestado_medico")
+        has_aptidao_db = False
         if atestados_hist is not None and not atestados_hist.empty:
-            st.markdown("#### 📁 Arquivo de Atestados")
+            has_aptidao_db = "aptidao_fisica" in atestados_hist.get(
+                "tipo_atestado", pd.Series(dtype=str)
+            ).values
+
+        if url_ate_leg and str(url_ate_leg).strip() not in ("", "nan", "None") and not has_aptidao_db:
+            with st.container(border=True):
+                c_hv1, c_hv2 = st.columns([4, 1], vertical_alignment="center")
+                c_hv1.markdown(
+                    tipo_badge_html("aptidao_fisica")
+                    + " &nbsp;<span style='color:#888;font-size:.8em'>registro anterior (sem data conhecida)</span>",
+                    unsafe_allow_html=True,
+                )
+                with c_hv2:
+                    if ".pdf" in str(url_ate_leg).lower():
+                        st.link_button("📄 PDF", url_ate_leg, use_container_width=True)
+                    else:
+                        with st.popover("🖼️ Ver"):
+                            st.image(url_ate_leg, use_container_width=True)
+
+        if atestados_hist is not None and not atestados_hist.empty:
             for _, at_temp in atestados_hist.iterrows():
                 with st.container(border=True):
                     c_ht1, c_ht2, c_ht3 = st.columns(
                         [3.5, 1, 0.5], vertical_alignment="center"
                     )
-                    dt_format = pd.to_datetime(at_temp["data_registro"]).strftime(
-                        "%d/%m/%Y"
-                    )
+                    dt_fmt   = pd.to_datetime(at_temp["data_registro"]).strftime("%d/%m/%Y")
+                    tipo_db  = str(at_temp.get("tipo_atestado") or "outro")
+                    dv       = at_temp.get("data_vencimento")
+                    motivo_d = str(at_temp.get("motivo") or "")
                     c_ht1.markdown(
-                        f"**Data:** {dt_format} <br> **Motivo:** {at_temp.get('motivo', '')}",
+                        tipo_badge_html(tipo_db)
+                        + f" &nbsp;<strong>{dt_fmt}</strong> &nbsp;"
+                        + validade_badge_html(dv)
+                        + f"<br><span style='color:#ccc;font-size:.85em'>{motivo_d}</span>",
                         unsafe_allow_html=True,
                     )
+                    url_t = at_temp["url_documento"]
                     with c_ht2:
-                        url_t = at_temp["url_documento"]
                         if isinstance(url_t, str) and url_eh_imagem(url_t):
-                            with st.popover("Ver / Girar Foto"):
+                            with st.popover("🖼️ Ver / Girar"):
                                 renderizar_documento_com_rotacao(
                                     url_t, f"at_tmp_{at_temp['id']}"
                                 )
                         elif isinstance(url_t, str):
-                            st.link_button(
-                                "📄 Abrir PDF", url_t, use_container_width=True
-                            )
+                            st.link_button("📄 PDF", url_t, use_container_width=True)
                     with c_ht3:
                         if st.button(
                             "🗑️",
@@ -1635,8 +1647,8 @@ def render_aba_documentos(aluno):
                         ):
                             excluir_atestado_temporario_local(at_temp["id"])
                             st.rerun()
-        else:
-            st.caption("Nenhum atestado temporário arquivado.")
+        elif not url_ate_leg:
+            st.caption("Nenhum atestado arquivado.")
 
 
 # ==============================================================================
