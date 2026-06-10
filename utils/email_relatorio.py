@@ -425,6 +425,66 @@ def _bloco_aniversariantes() -> str:
                         f"<p style='color:#94A3B8;font-size:12px;'>Dados indisponíveis: {e}</p>")
 
 
+def _bloco_atestados_vencendo(base_url: str = "", dias: int = 30) -> str:
+    try:
+        from database import get_atestados_vencendo
+        from utils.texto import formatar_whatsapp_numero
+        lista = get_atestados_vencendo(dias=dias)
+        if not lista:
+            return _section("🏥 Atestados a Vencer", "#0891B2",
+                            "<p style='color:#16A34A;font-size:12px;'>"
+                            "✅ Nenhum atestado vencendo nos próximos 30 dias.</p>")
+        vencidos = [r for r in lista if (r.get("dias_restantes") or 0) < 0]
+        alertas  = [r for r in lista if (r.get("dias_restantes") or 0) >= 0]
+        linhas = []
+        for r in lista:
+            nome   = str(r.get("nome", "—")).upper()
+            turma  = str(r.get("turma") or "—")
+            dv_str = str(r.get("data_vencimento", ""))[:10]
+            try:
+                import datetime as _dtv
+                dv_fmt = _dtv.date.fromisoformat(dv_str).strftime("%d/%m/%Y")
+            except Exception:
+                dv_fmt = dv_str
+            dias_r = r.get("dias_restantes")
+            if dias_r is None:
+                status_html = '<span style="color:#94A3B8;font-size:11px;">—</span>'
+            elif dias_r < 0:
+                status_html = (f'<span style="color:{_COR_VERMELHO};font-weight:700;font-size:11px;">'
+                               f'⛔ Vencido há {abs(dias_r)}d</span>')
+            elif dias_r == 0:
+                status_html = (f'<span style="color:{_COR_VERMELHO};font-weight:700;font-size:11px;">'
+                               f'⚠️ Vence hoje</span>')
+            elif dias_r <= 7:
+                status_html = (f'<span style="color:{_COR_VERMELHO};font-weight:700;font-size:11px;">'
+                               f'⚠️ {dias_r}d restante(s)</span>')
+            else:
+                status_html = (f'<span style="color:{_COR_AMARELO};font-weight:700;font-size:11px;">'
+                               f'⏳ {dias_r}d restante(s)</span>')
+            wap = str(r.get("whatsapp", "") or "")
+            num = formatar_whatsapp_numero(wap) if wap else None
+            contato = (
+                f'<a href="https://wa.me/{num}" style="color:#16A34A;font-size:11px;font-weight:700;">📲 WhatsApp</a>'
+                if num else '<span style="color:#94A3B8;font-size:11px;">—</span>'
+            )
+            ficha = _btn(_link_ficha(base_url, str(r.get("aluno_id", ""))), "📋 Renovar", _COR_AZUL)
+            linhas.append([nome, turma, dv_fmt, status_html, contato, ficha])
+        tabela = _tabela(["Aluno", "Turma", "Vencimento", "Status", "Contato", "Ação"], linhas)
+        n_venc = len(vencidos)
+        n_alert = len(alertas)
+        aviso = ""
+        if n_venc:
+            aviso += (f"<p style='color:{_COR_VERMELHO};font-size:12px;font-weight:700;margin-bottom:6px;'>"
+                      f"⛔ {n_venc} atestado(s) VENCIDO(S) — renovação urgente</p>")
+        if n_alert:
+            aviso += (f"<p style='color:{_COR_AMARELO};font-size:12px;font-weight:700;margin-bottom:10px;'>"
+                      f"⏳ {n_alert} atestado(s) vencem nos próximos {dias} dias</p>")
+        return _section("🏥 Atestados a Vencer", "#0891B2", aviso + tabela)
+    except Exception as e:
+        return _section("🏥 Atestados a Vencer", "#0891B2",
+                        f"<p style='color:#94A3B8;font-size:12px;'>Dados indisponíveis: {e}</p>")
+
+
 # ──────────────────────────────────────────────────────────────────────────────
 # GERADOR DO HTML COMPLETO
 # ──────────────────────────────────────────────────────────────────────────────
@@ -454,6 +514,8 @@ def gerar_html_relatorio(cfg: dict, nome_org: str = "Instituto Muda Brasil",
         blocos += _bloco_dias_sem_registro(base_url)
     if cfg.get("mod_aniversariantes"):
         blocos += _bloco_aniversariantes()
+    if cfg.get("mod_atestados_vencendo"):
+        blocos += _bloco_atestados_vencendo(base_url)
 
     if not blocos:
         blocos = "<p style='color:#94A3B8;'>Nenhum módulo habilitado para este relatório.</p>"

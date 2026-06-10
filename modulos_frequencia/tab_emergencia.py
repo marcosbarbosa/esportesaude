@@ -9,7 +9,7 @@ import pandas as pd
 import datetime
 import re
 import io
-from utils.texto import formatar_whatsapp_link as limpar_whatsapp_emergencia
+from utils.texto import formatar_whatsapp_link as limpar_whatsapp_emergencia, formatar_whatsapp_numero as _wa_num_em
 from utils.busca_aluno import busca_aluno_widget, filtrar_alunos_df
 
 try:
@@ -282,8 +282,15 @@ def renderizar_aba_emergencia(df_alunos_tab, turma_selecionada):
                 if pd.isna(contato_str) or contato_str in ["", "nan", "não informado", "none"]:
                     st.button("🚨 Acionar", disabled=True, key=f"em_dis_{row['id']}", use_container_width=True)
                 else:
-                    link_w = limpar_whatsapp_emergencia(contato_str)
-                    if link_w:
+                    num_wa = _wa_num_em(contato_str)
+                    if num_wa:
+                        import urllib.parse as _up
+                        _msg_wa = (
+                            f"Olá, somos do Muda Brasil. Estamos em atendimento e precisamos "
+                            f"confirmar uma informação sobre {nome}. "
+                            f"Pode nos responder assim que visualizar?"
+                        )
+                        link_w = f"https://wa.me/{num_wa}?text={_up.quote(_msg_wa)}"
                         st.link_button("🚨 WhatsApp", link_w, use_container_width=True)
                     else:
                         numero_limpo = re.sub(r"\D", "", contato_str)

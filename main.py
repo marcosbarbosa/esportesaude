@@ -1111,6 +1111,7 @@ def _tela_email_bi():
             mod_dias   = cm2.checkbox("📅 Dias sem Registro",              value=bool(mod_def.get("dias_sem_registro", True)), key=f"ebi_mds_{edit_id}")
             mod_aniv   = cm2.checkbox("🎂 Aniversariantes da Semana",      value=bool(mod_def.get("aniversariantes", True)),   key=f"ebi_man_{edit_id}")
             mod_pres   = cm2.checkbox("📈 Presenças no Ano (por mês)",     value=bool(mod_def.get("presencas_mes", True)),     key=f"ebi_mpm_{edit_id}")
+            mod_ates   = cm2.checkbox("🏥 Atestados a Vencer (30 dias)",  value=bool(mod_def.get("atestados_vencendo", False)), key=f"ebi_mat_{edit_id}")
 
             assunto_extra = st.text_input(
                 "Texto extra no assunto (opcional)",
@@ -1154,8 +1155,9 @@ def _tela_email_bi():
                     "novos_cadastros":   mod_nov,
                     "frequencia_turma":  mod_freq,
                     "dias_sem_registro": mod_dias,
-                    "aniversariantes":   mod_aniv,
-                    "presencas_mes":     mod_pres,
+                    "aniversariantes":    mod_aniv,
+                    "presencas_mes":      mod_pres,
+                    "atestados_vencendo": mod_ates,
                 },
                 "assunto_extra":   assunto_extra.strip(),
                 "email_remetente": remetente.strip(),

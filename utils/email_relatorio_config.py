@@ -275,8 +275,9 @@ def schedule_to_cfg(s: dict) -> dict:
         "mod_novos_cadastros":   bool(modulos.get("novos_cadastros", True)),
         "mod_frequencia_turma":  bool(modulos.get("frequencia_turma", True)),
         "mod_dias_sem_registro": bool(modulos.get("dias_sem_registro", True)),
-        "mod_aniversariantes":   bool(modulos.get("aniversariantes", True)),
-        "mod_presencas_mes":     bool(modulos.get("presencas_mes", True)),
+        "mod_aniversariantes":       bool(modulos.get("aniversariantes", True)),
+        "mod_presencas_mes":         bool(modulos.get("presencas_mes", True)),
+        "mod_atestados_vencendo":    bool(modulos.get("atestados_vencendo", False)),
     }
 
 

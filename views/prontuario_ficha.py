@@ -1562,9 +1562,15 @@ def render_aba_documentos(aluno):
     ):
         st.info("Use esta secção para arquivar atestados curtos (gripes, exames).")
         with st.form("form_novo_atestado_temp", clear_on_submit=True):
-            c_dt, c_motivo = st.columns([1, 2])
+            c_dt, c_vcto, c_motivo = st.columns([1, 1, 2])
             data_atestado = c_dt.date_input(
                 "Data:", datetime.date.today(), format="DD/MM/YYYY"
+            )
+            data_vencimento = c_vcto.date_input(
+                "Validade:",
+                value=None,
+                format="DD/MM/YYYY",
+                help="Até quando o atestado é válido.",
             )
             motivo = c_motivo.text_input("Motivo:", placeholder="Ex: Gripe (3 dias)")
             arq_atestado = st.file_uploader(
@@ -1586,7 +1592,7 @@ def render_aba_documentos(aluno):
                         url_arq, err_arq = upload_midia_diagnostico(b_arq, n_arq, t_arq)
                         if url_arq:
                             sucesso, msg = salvar_atestado_temporario(
-                                aluno["id"], data_atestado, motivo, url_arq
+                                aluno["id"], data_atestado, motivo, url_arq, data_vencimento
                             )
                             if sucesso:
                                 st.rerun()

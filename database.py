@@ -2450,17 +2450,83 @@ def atualizar_crm_template(gatilho, nova_mensagem):
         return False, str(e)
 
 
-def salvar_atestado_temporario(aluno_id, data_registro, motivo, url_documento):
+def salvar_atestado_temporario(aluno_id, data_registro, motivo, url_documento,
+                               data_vencimento=None):
+    payload = {
+        "aluno_id":      str(aluno_id),
+        "data_registro": str(data_registro),
+        "motivo":        str(motivo).strip(),
+        "url_documento": str(url_documento),
+    }
+    if data_vencimento:
+        payload["data_vencimento"] = str(data_vencimento)
     try:
-        supabase.table("atestados_temporarios").insert({
-            "aluno_id": str(aluno_id),
-            "data_registro": str(data_registro),
-            "motivo": str(motivo).strip(),
-            "url_documento": str(url_documento),
-        }).execute()
+        supabase.table("atestados_temporarios").insert(payload).execute()
         return True, "Sucesso"
     except Exception as e:
-        return False, str(e)
+        err = str(e)
+        if "data_vencimento" in err or ("column" in err.lower() and "data_vencimento" in err.lower()):
+            payload.pop("data_vencimento", None)
+            try:
+                supabase.table("atestados_temporarios").insert(payload).execute()
+                return True, "Sucesso (execute a migração SQL para habilitar data de vencimento)"
+            except Exception as e2:
+                return False, str(e2)
+        return False, err
+
+
+def get_atestados_vencendo(dias: int = 30) -> list:
+    """Retorna atestados a vencer em até N dias (inclui já vencidos).
+    Cada item tem: aluno_id, nome, turma, whatsapp, data_vencimento, motivo, dias_restantes.
+    Retorna [] se a coluna data_vencimento não existe ou nenhum resultado."""
+    import datetime as _dv
+    try:
+        hoje   = _dv.date.today()
+        limite = hoje + _dv.timedelta(days=dias)
+        res = (
+            supabase.table("atestados_temporarios")
+            .select("aluno_id,data_vencimento,motivo")
+            .lte("data_vencimento", str(limite))
+            .not_.is_("data_vencimento", "null")
+            .order("data_vencimento")
+            .execute()
+        )
+        if not res.data:
+            return []
+        aluno_ids = list({r["aluno_id"] for r in res.data})
+        res2 = (
+            supabase.table("alunos")
+            .select("id,nome,turma,whatsapp")
+            .in_("id", aluno_ids)
+            .eq("status", "Ativo")
+            .execute()
+        )
+        aluno_map = {str(a["id"]): a for a in (res2.data or [])}
+        resultado = []
+        visto = set()
+        for r in res.data:
+            a = aluno_map.get(str(r["aluno_id"]))
+            if not a:
+                continue
+            chave = str(r["aluno_id"])
+            if chave in visto:
+                continue
+            visto.add(chave)
+            try:
+                dv = _dv.date.fromisoformat(str(r["data_vencimento"])[:10])
+                dias_rest = (dv - hoje).days
+            except Exception:
+                dias_rest = None
+            resultado.append({
+                **r,
+                "nome":          a["nome"],
+                "turma":         a.get("turma"),
+                "whatsapp":      a.get("whatsapp"),
+                "dias_restantes": dias_rest,
+            })
+        return resultado
+    except Exception:
+        return []
 
 
 @st.cache_data(ttl=120, show_spinner=False)
