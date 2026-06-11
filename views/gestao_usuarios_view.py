@@ -1,6 +1,8 @@
 import streamlit as st
 from database import listar_usuarios_sistema, atualizar_usuario_sistema, excluir_usuario_sistema
 
+ADMIN_RESTRITO = "marcosbarbosa.am@gmail.com"
+
 
 def _badge_ativo(ativo):
     if ativo is False:
@@ -8,24 +10,54 @@ def _badge_ativo(ativo):
     return "<span style='background:#D1FAE5;color:#065F46;padding:2px 8px;border-radius:10px;font-size:12px;font-weight:700;'>✅ Ativo</span>"
 
 
+def _badge_perfil(perfil):
+    cores = {
+        "SuperAdmin": ("#1D4ED8", "#DBEAFE"),
+        "Admin":      ("#6D28D9", "#EDE9FE"),
+        "Operador":   ("#0F766E", "#CCFBF1"),
+    }
+    c_txt, c_bg = cores.get(str(perfil), ("#374151", "#F3F4F6"))
+    label = str(perfil or "—")
+    return (
+        f"<span style='background:{c_bg};color:{c_txt};"
+        f"padding:2px 8px;border-radius:10px;font-size:12px;font-weight:700;'>"
+        f"{label}</span>"
+    )
+
+
 def tela_gestao_usuarios():
+    email_session = st.session_state.get("email", "").strip().lower()
+
+    if email_session != ADMIN_RESTRITO.lower():
+        st.warning(
+            "🔒 Esta área é restrita ao administrador principal do sistema. "
+            f"Somente **{ADMIN_RESTRITO}** tem acesso."
+        )
+        return
+
     st.markdown("""
         <div style='background:#F0FDF4;border-left:4px solid #16A34A;
                     padding:12px 16px;border-radius:6px;margin-bottom:18px;'>
-            <strong style='color:#14532D;'>👥 Gestão de Logins</strong><br>
+            <strong style='color:#14532D;'>👥 Gestão de Operadores</strong><br>
             <span style='color:#15803D;font-size:13px;'>
-                Edite nome, e-mail ou senha de qualquer conta, inative acessos temporariamente
-                ou exclua permanentemente. Apenas o SuperAdmin tem acesso a esta tela.
+                Edite nome, e-mail ou senha dos operadores que fazem login no sistema.
+                Inative acessos temporariamente ou exclua permanentemente.
+                Apenas o administrador principal tem acesso a esta tela.
             </span>
         </div>
     """, unsafe_allow_html=True)
 
-    email_session = st.session_state.get("email", "")
     edit_id = st.session_state.get("_usr_edit_id")
 
-    usuarios = listar_usuarios_sistema()
+    usuarios, erro_bd = listar_usuarios_sistema()
 
-    # ── Aviso: coluna "ativo" pode não existir ainda ──────────────────────
+    if erro_bd:
+        st.error(
+            f"❌ Erro ao acessar a tabela `usuarios` no banco de dados:\n\n`{erro_bd}`\n\n"
+            "Verifique se a tabela existe e se as colunas estão criadas."
+        )
+        return
+
     if usuarios and "ativo" not in usuarios[0]:
         st.warning(
             "⚠️ A coluna `ativo` ainda não existe na tabela `usuarios`. "
@@ -37,17 +69,24 @@ def tela_gestao_usuarios():
         )
         st.markdown("---")
 
+    if usuarios and "perfil" not in usuarios[0]:
+        st.info(
+            "ℹ️ A coluna `perfil` não existe ainda. Execute no **Supabase → SQL Editor**:\n\n"
+            "`ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS perfil TEXT DEFAULT 'Operador';`"
+        )
+        st.markdown("---")
+
     # ══════════════════════════════════════════════════════════════════════
     # EDITOR
     # ══════════════════════════════════════════════════════════════════════
     if edit_id:
         u = next((x for x in usuarios if x["id"] == edit_id), None)
         if u is None:
-            st.error("Usuário não encontrado.")
+            st.error("Operador não encontrado.")
             st.session_state.pop("_usr_edit_id", None)
             st.rerun()
 
-        st.markdown(f"### ✏️ Editando: **{u['nome']}**")
+        st.markdown(f"### ✏️ Editando operador: **{u.get('nome', '—')}**")
 
         with st.form("form_editar_usuario"):
             c1, c2 = st.columns(2)
@@ -58,11 +97,24 @@ def tela_gestao_usuarios():
                 value="", type="password",
                 help="Mínimo 6 caracteres.",
             )
+
             ativo_atual = u.get("ativo", True)
             if ativo_atual is None:
                 ativo_atual = True
-            novo_ativo = st.toggle("Conta ativa", value=bool(ativo_atual),
-                                   help="Desative para bloquear o acesso sem excluir o cadastro.")
+            novo_ativo = st.toggle(
+                "Conta ativa", value=bool(ativo_atual),
+                help="Desative para bloquear o acesso sem excluir o cadastro.",
+            )
+
+            perfil_opcoes = ["Operador", "Admin", "SuperAdmin"]
+            perfil_atual = u.get("perfil") or "Operador"
+            if perfil_atual not in perfil_opcoes:
+                perfil_opcoes.append(perfil_atual)
+            novo_perfil = st.selectbox(
+                "Perfil de acesso",
+                options=perfil_opcoes,
+                index=perfil_opcoes.index(perfil_atual),
+            )
 
             st.markdown("---")
             cs1, cs2 = st.columns(2)
@@ -80,9 +132,10 @@ def tela_gestao_usuarios():
                 st.error("O e-mail não pode ficar em branco.")
             else:
                 payload = {
-                    "nome":  novo_nome.strip(),
-                    "email": novo_email.strip().lower(),
-                    "ativo": novo_ativo,
+                    "nome":   novo_nome.strip(),
+                    "email":  novo_email.strip().lower(),
+                    "ativo":  novo_ativo,
+                    "perfil": novo_perfil,
                 }
                 if nova_senha.strip():
                     if len(nova_senha.strip()) < 6:
@@ -99,17 +152,23 @@ def tela_gestao_usuarios():
         return
 
     # ══════════════════════════════════════════════════════════════════════
-    # LISTAGEM
+    # LISTAGEM EM GRID
     # ══════════════════════════════════════════════════════════════════════
     if not usuarios:
-        st.info("Nenhum usuário cadastrado.")
+        st.info(
+            "Nenhum operador cadastrado ainda. "
+            "Crie o primeiro operador pelo formulário de cadastro do sistema."
+        )
         return
 
-    col_h1, col_h2, col_h3, col_h4 = st.columns([3, 2, 1.5, 2])
+    st.caption(f"{len(usuarios)} operador(es) cadastrado(s)")
+
+    col_h1, col_h2, col_h3, col_h4, col_h5 = st.columns([2.5, 2.5, 1.2, 1.2, 1.8])
     col_h1.markdown("**Nome**")
     col_h2.markdown("**E-mail**")
-    col_h3.markdown("**Status**")
-    col_h4.markdown("**Ações**")
+    col_h3.markdown("**Perfil**")
+    col_h4.markdown("**Status**")
+    col_h5.markdown("**Ações**")
     st.markdown("<hr style='margin:4px 0 8px 0;'>", unsafe_allow_html=True)
 
     for u in usuarios:
@@ -117,17 +176,18 @@ def tela_gestao_usuarios():
         ativo = u.get("ativo", True)
         if ativo is None:
             ativo = True
-        is_me = u.get("email", "").strip().lower() == email_session.strip().lower()
+        is_me = u.get("email", "").strip().lower() == email_session
 
-        c1, c2, c3, c4 = st.columns([3, 2, 1.5, 2])
-        c1.markdown(f"{'**[Você]** ' if is_me else ''}{u.get('nome','—')}")
-        c2.markdown(f"<small>{u.get('email','—')}</small>", unsafe_allow_html=True)
-        c3.markdown(_badge_ativo(ativo), unsafe_allow_html=True)
+        c1, c2, c3, c4, c5 = st.columns([2.5, 2.5, 1.2, 1.2, 1.8])
+        c1.markdown(f"{'**[Você]** ' if is_me else ''}{u.get('nome', '—')}")
+        c2.markdown(f"<small>{u.get('email', '—')}</small>", unsafe_allow_html=True)
+        c3.markdown(_badge_perfil(u.get("perfil")), unsafe_allow_html=True)
+        c4.markdown(_badge_ativo(ativo), unsafe_allow_html=True)
 
-        with c4:
+        with c5:
             ba, bb, bc = st.columns(3)
 
-            if ba.button("✏️", key=f"usr_ed_{uid}", help="Editar nome / e-mail / senha"):
+            if ba.button("✏️", key=f"usr_ed_{uid}", help="Editar dados e senha"):
                 st.session_state["_usr_edit_id"] = uid
                 st.rerun()
 
@@ -144,10 +204,9 @@ def tela_gestao_usuarios():
                 st.session_state[f"_usr_conf_del_{uid}"] = True
                 st.rerun()
 
-        # ── Confirmar exclusão ────────────────────────────────────────────
         if st.session_state.get(f"_usr_conf_del_{uid}"):
             st.warning(
-                f"⚠️ Excluir **{u.get('nome','—')}** ({u.get('email','—')}) permanentemente? "
+                f"⚠️ Excluir **{u.get('nome', '—')}** ({u.get('email', '—')}) permanentemente? "
                 "Esta ação não pode ser desfeita."
             )
             cd1, cd2, _ = st.columns([1.5, 1.5, 4])

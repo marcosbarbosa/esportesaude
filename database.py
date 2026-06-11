@@ -2651,13 +2651,24 @@ def get_emails_sistema() -> list:
         return []
 
 
-def listar_usuarios_sistema() -> list:
-    """Retorna todos os usuários do sistema com id, nome, email, perfil, ativo, criado_em."""
-    try:
-        res = supabase.table("usuarios").select("id,nome,email,perfil,ativo,criado_em").order("nome").execute()
-        return res.data or []
-    except Exception as e:
-        return []
+def listar_usuarios_sistema() -> tuple:
+    """Retorna (lista, erro_str) dos operadores do sistema.
+    Tenta progressivamente remover colunas opcionais que ainda não existam
+    (ativo, perfil) para não retornar vazio por migration pendente."""
+    tentativas = [
+        "id,nome,email,perfil,ativo,criado_em",
+        "id,nome,email,ativo,criado_em",
+        "id,nome,email,criado_em",
+        "id,nome,email",
+    ]
+    for cols in tentativas:
+        try:
+            res = supabase.table("usuarios").select(cols).order("nome").execute()
+            return res.data or [], None
+        except Exception as e:
+            last_err = str(e)
+            continue
+    return [], last_err
 
 
 def atualizar_usuario_sistema(uid: str, payload: dict):
