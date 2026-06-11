@@ -2147,7 +2147,7 @@ elif st.session_state.menu_atual == "Nova Matrícula":
     st.info(
         "Preencha os dados da ficha com calma. Ao concluir, o aluno estará imediatamente disponível no sistema para marcação de presença."
     )
-    tela_inscricao_publica_move_right()
+    tela_inscricao_publica_move_right(modo_admin=True)
 
 elif st.session_state.menu_atual == "Portal do Aluno":
     _col_portal, _col_ficha_portal = st.columns([6, 1], vertical_alignment="center")

@@ -152,6 +152,13 @@ def carregar_css_global():
 
 
 def tela_frequencia():
+    if st.session_state.pop("_force_reload_freq", False):
+        for fn in (obter_todos_alunos_cache, obter_todos_alunos_com_inativos_cache):
+            try:
+                fn.clear()
+            except Exception:
+                pass
+
     carregar_css_global()
 
     hoje_check = datetime.date.today()

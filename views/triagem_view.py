@@ -360,6 +360,7 @@ def tela_triagem():
                                 "mas o LOG DE AUDITORIA FALHOU. Registre manualmente e verifique a conexão."
                             )
                     st.session_state["_force_reload_crm"] = True
+                    st.session_state["_force_reload_freq"] = True
                     st.toast(msg, icon="✅")
                     st.rerun()
                 else:
@@ -369,9 +370,18 @@ def tela_triagem():
 
             with c_turma:
                 # O Admin escolhe a turma real baseada no termômetro
+                # Pré-seleciona a turma salva no formulário de inscrição (se houver)
+                _turma_salva = aluno.get("turma") or ""
+                _idx_turma = 0
+                if _turma_salva:
+                    for _i, _disp in enumerate(lista_turmas_display):
+                        if mapa_turmas.get(_disp) == _turma_salva:
+                            _idx_turma = _i
+                            break
                 turma_escolhida_display = st.selectbox(
                     "Alocar na Turma:", 
-                    options=lista_turmas_display, 
+                    options=lista_turmas_display,
+                    index=_idx_turma,
                     key=f"turma_{aluno['id']}"
                 )
                 turma_real_salvar = mapa_turmas[turma_escolhida_display]

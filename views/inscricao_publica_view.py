@@ -10,7 +10,7 @@
 
 import streamlit as st
 import datetime
-from database import supabase, upload_midia
+from database import supabase, upload_midia, get_todas_turmas
 import io
 import smtplib
 from email.mime.text import MIMEText
@@ -81,7 +81,7 @@ def processar_documento(file_bytes, file_name, file_type):
 # ==============================================================================
 # 🖥️ RENDERIZAÇÃO DA INTERFACE PRINCIPAL (UI)
 # ==============================================================================
-def tela_inscricao_publica_move_right():
+def tela_inscricao_publica_move_right(modo_admin=False):
     st.markdown(
         """
         <style>
@@ -253,6 +253,23 @@ def tela_inscricao_publica_move_right():
                 "<div class='section-header'>🗓️ 5. Preferência de Turma</div>",
                 unsafe_allow_html=True,
             )
+
+            turma_admin = None
+            if modo_admin:
+                try:
+                    df_turmas = get_todas_turmas(ativas_apenas=True)
+                    nomes_turmas = df_turmas["nome"].tolist() if not df_turmas.empty else []
+                except Exception:
+                    nomes_turmas = []
+                if nomes_turmas:
+                    turma_admin = st.selectbox(
+                        "🎯 Alocar na Turma (obrigatório) *",
+                        options=nomes_turmas,
+                        help="Selecione a turma real onde o aluno será matriculado. Esta seleção ficará salva e pré-preenchida na triagem.",
+                    )
+                else:
+                    st.warning("⚠️ Nenhuma turma ativa encontrada. Crie turmas no módulo de Gestão de Turmas.")
+
             st.info(
                 "💡 As turmas têm limite de vagas. Escolha uma segunda opção para a Lista de Espera caso a primeira esteja lotada."
             )
@@ -284,7 +301,11 @@ def tela_inscricao_publica_move_right():
             )
             st.write("Anexe os documentos abaixo em formato Imagem ou PDF.")
 
-            c_up_rg, c_up_rec, c_up_atest = st.columns(3)
+            c_up_foto, c_up_rg, c_up_rec, c_up_atest = st.columns(4)
+            with c_up_foto:
+                foto_file = st.file_uploader(
+                    "📸 Foto do Aluno", type=["jpg", "jpeg", "png"]
+                )
             with c_up_rg:
                 rg_file = st.file_uploader(
                     "1. Cópia do RG/CPF", type=["jpg", "jpeg", "png", "pdf"]
@@ -341,8 +362,14 @@ def tela_inscricao_publica_move_right():
                     with st.spinner(
                         "A processar documentos e a registar assinatura digital..."
                     ):
-                        url_rg, url_receita, url_atestado = None, None, None
+                        url_rg, url_receita, url_atestado, url_foto = None, None, None, None
                         falhas_upload = []
+
+                        if foto_file:
+                            b_ft, n_ft, t_ft = processar_documento(
+                                foto_file.getvalue(), foto_file.name, foto_file.type
+                            )
+                            url_foto = upload_midia(b_ft, n_ft, t_ft)
 
                         if rg_file:
                             b_rg, n_rg, t_rg = processar_documento(
@@ -414,11 +441,14 @@ def tela_inscricao_publica_move_right():
                             "horario_preferencial": hora_pref,
                             "horario_preferencial_2": hora_pref_2,
                             "termo_imagem": termo,
+                            "url_foto": url_foto,
                             "url_rg": url_rg,
                             "url_receituario": url_receita,
                             "url_atestado_medico": url_atestado,
                             "status": "Pendente",
                         }
+                        if modo_admin and turma_admin:
+                            dados_inserir["turma"] = turma_admin
 
                         try:
                             supabase.table("pre_cadastros").insert(
