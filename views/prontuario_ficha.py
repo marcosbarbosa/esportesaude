@@ -1555,39 +1555,44 @@ def render_aba_documentos(aluno):
                 placeholder="Ex: Gripe (3 dias), Cirurgia no joelho, Restrição cardíaca..."
             )
             arq_atestado = st.file_uploader(
-                "Anexar Atestado (foto ou PDF):", type=["jpg", "png", "jpeg", "pdf"]
+                "📎 Documento (foto ou PDF) — opcional:", type=["jpg", "png", "jpeg", "pdf"],
+                help="Não é obrigatório. Você pode registrar o afastamento apenas com o motivo, sem anexar documento.",
             )
 
             if st.form_submit_button(
                 "➕ Arquivar Atestado", type="primary", use_container_width=True
             ):
-                if not arq_atestado:
-                    st.error("Anexe o arquivo do atestado.")
+                if not motivo.strip() and not arq_atestado:
+                    st.warning("⚠️ Informe pelo menos o motivo/observação ou anexe um documento.")
                 elif tipo_val == "aptidao_fisica" and not data_vencimento:
                     st.warning("⚠️ Para Aptidão Física, informe a data de validade para ativar os alertas.")
                 else:
-                    with st.spinner("A enviar..."):
-                        b_arq, n_arq, t_arq = processar_documento_prontuario(
-                            arq_atestado.getvalue(),
-                            arq_atestado.name,
-                            arq_atestado.type,
-                        )
-                        url_arq, err_arq = upload_midia_diagnostico(b_arq, n_arq, t_arq)
-                        if url_arq:
-                            sucesso, msg = salvar_atestado_temporario(
-                                aluno["id"], data_atestado, motivo, url_arq,
-                                data_vencimento, tipo_val
+                    url_arq = None
+                    err_arq = None
+                    if arq_atestado:
+                        with st.spinner("A enviar documento..."):
+                            b_arq, n_arq, t_arq = processar_documento_prontuario(
+                                arq_atestado.getvalue(),
+                                arq_atestado.name,
+                                arq_atestado.type,
                             )
-                            if sucesso:
-                                if tipo_val == "aptidao_fisica":
-                                    st.session_state.aluno_prontuario["url_atestado_medico"] = url_arq
-                                st.success("✅ Atestado arquivado!")
-                                time.sleep(1)
-                                st.rerun()
-                            else:
-                                st.error(f"Erro ao salvar: {msg}")
+                            url_arq, err_arq = upload_midia_diagnostico(b_arq, n_arq, t_arq)
+
+                    if arq_atestado and not url_arq:
+                        st.error(f"Erro no envio do documento: {err_arq}")
+                    else:
+                        sucesso, msg = salvar_atestado_temporario(
+                            aluno["id"], data_atestado, motivo, url_arq,
+                            data_vencimento, tipo_val
+                        )
+                        if sucesso:
+                            if tipo_val == "aptidao_fisica" and url_arq:
+                                st.session_state.aluno_prontuario["url_atestado_medico"] = url_arq
+                            st.success("✅ Registro arquivado!")
+                            time.sleep(1)
+                            st.rerun()
                         else:
-                            st.error(f"Erro no envio: {err_arq}")
+                            st.error(f"Erro ao salvar: {msg}")
 
         st.markdown("#### 📁 Arquivo")
         atestados_hist = get_atestados_temporarios(aluno["id"])

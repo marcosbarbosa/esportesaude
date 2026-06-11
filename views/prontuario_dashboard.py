@@ -202,13 +202,14 @@ def renderizar_dashboard():
             icon="👉",
         )
 
-    tab_ag, tab_med, tab_novos, tab_todos, tab_inativos, tab_triagem = st.tabs([
+    tab_ag, tab_med, tab_novos, tab_todos, tab_inativos, tab_triagem, tab_novo_cad = st.tabs([
         "🗓️ Agenda da Semana",
         f"📊 Já Medidos ({len(df_medidos)})",
         f"⚠️ Sem Medições ({len(df_nao_medidos)})",
         f"🌍 Visão Global ({len(df_todos_crm)})",
         f"🗄️ Arquivo Morto ({len(df_inativos)})",
-        "🆕 NOVOS ALUNOS (Triagem)"
+        "🆕 NOVOS ALUNOS (Triagem)",
+        "📝 Novo Cadastro",
     ])
 
     # --- ABA 1: AGENDA SEMANAL ---
@@ -540,6 +541,32 @@ def renderizar_dashboard():
 
         from views.triagem_view import tela_triagem
         tela_triagem()
+
+    # --- ABA 7: NOVO CADASTRO ---
+    with tab_novo_cad:
+        st.markdown("### 📝 Cadastro Oficial de Novo Aluno")
+
+        try:
+            _host_nm = st.context.headers.get("host", "")
+            _link_inscricao = f"https://{_host_nm}/?rota=inscricao"
+        except Exception:
+            _link_inscricao = "/?rota=inscricao"
+
+        with st.container(border=True):
+            _c_lnk, _c_info = st.columns([3, 2], vertical_alignment="center")
+            with _c_lnk:
+                st.markdown("**🔗 Link de Auto-Inscrição do Aluno**")
+                st.caption("Envie ao novo aluno para que ele preencha o formulário por conta própria.")
+            with _c_info:
+                st.code(_link_inscricao, language=None)
+
+        st.info(
+            "Preencha os dados da ficha com calma. Ao concluir, o aluno estará disponível "
+            "na aba **🆕 NOVOS ALUNOS (Triagem)** para aprovação e alocação de turma."
+        )
+
+        from views.inscricao_publica_view import tela_inscricao_publica_move_right
+        tela_inscricao_publica_move_right(modo_admin=True)
 
     st.divider()
 

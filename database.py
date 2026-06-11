@@ -2460,7 +2460,7 @@ def salvar_atestado_temporario(aluno_id, data_registro, motivo, url_documento,
         "aluno_id":       str(aluno_id),
         "data_registro":  str(data_registro),
         "motivo":         str(motivo).strip(),
-        "url_documento":  str(url_documento),
+        "url_documento":  url_documento,
         "tipo_atestado":  str(tipo_atestado),
     }
     if data_vencimento:

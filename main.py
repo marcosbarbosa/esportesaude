@@ -1403,7 +1403,6 @@ menu = [
     "Principal",
     "Frequência",
     "Portal do Aluno",
-    "Nova Matrícula",
     "Radar de Acolhimento",
     "Relatórios & BI",
     "Satisfação",
@@ -1418,7 +1417,6 @@ def format_nav(opt):
         "Principal": "🏠 Início",
         "Frequência": "✅ Frequência",
         "Portal do Aluno": "🩺 Portal do Aluno",
-        "Nova Matrícula": "📝 Nova Matrícula",
         "Radar de Acolhimento": "💙 Radar",
         "Relatórios & BI": "📊 Relatórios & BI",
         "Satisfação": "⭐ Satisfação",
@@ -2124,30 +2122,8 @@ elif st.session_state.menu_atual == "Radar de Acolhimento":
     tela_radar_acolhimento()
 
 elif st.session_state.menu_atual == "Nova Matrícula":
-    if "rota" in st.query_params:
-        st.query_params.clear()
-    from views.inscricao_publica_view import tela_inscricao_publica_move_right
-
-    st.markdown("### 📝 Cadastro Oficial de Novo Aluno")
-
-    try:
-        _host_nm = st.context.headers.get("host", "")
-        _link_inscricao = f"https://{_host_nm}/?rota=inscricao"
-    except Exception:
-        _link_inscricao = "/?rota=inscricao"
-
-    with st.container(border=True):
-        _c_lnk, _c_info = st.columns([3, 2], vertical_alignment="center")
-        with _c_lnk:
-            st.markdown("**🔗 Link de Auto-Inscrição do Aluno**")
-            st.caption("Envie ao novo aluno para que ele preencha o formulário por conta própria.")
-        with _c_info:
-            st.code(_link_inscricao, language=None)
-
-    st.info(
-        "Preencha os dados da ficha com calma. Ao concluir, o aluno estará imediatamente disponível no sistema para marcação de presença."
-    )
-    tela_inscricao_publica_move_right(modo_admin=True)
+    st.session_state.menu_atual = "Portal do Aluno"
+    st.rerun()
 
 elif st.session_state.menu_atual == "Portal do Aluno":
     _col_portal, _col_ficha_portal = st.columns([6, 1], vertical_alignment="center")
