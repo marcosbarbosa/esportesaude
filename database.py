@@ -338,7 +338,7 @@ def get_pre_cadastros_pendentes():
         res = (
             supabase.from_("pre_cadastros")
             .select("*")
-            .in_("status", ["Pendente", "Lista de Espera"])
+            .in_("status", ["Pendente", "Lista de Espera", "Duplicata"])
             .execute()
         )
         return res.data
@@ -394,7 +394,11 @@ def verificar_aluno_existente(nome="", data_nascimento=None, cpf=None):
         return None
 
 
-def aprovar_inscricao_aluno(pre_cadastro_id, turma_selecionada):
+def aprovar_inscricao_aluno(pre_cadastro_id, turma_selecionada, forcar=False):
+    """Aprova inscrição e insere na tabela alunos.
+    forcar=True: ignora verificação de duplicata (use quando o operador
+    confirmou que é uma pessoa diferente ou decidiu matricular mesmo assim).
+    """
     try:
         res_pre = (
             supabase.from_("pre_cadastros")
@@ -450,19 +454,23 @@ def aprovar_inscricao_aluno(pre_cadastro_id, turma_selecionada):
 
         # Proteção anti-duplicidade: se já existe aluno com este CPF (ou nome +
         # nascimento), NÃO cria outro. Arquiva a inscrição e avisa o operador.
-        existente = verificar_aluno_existente(
-            novo_aluno["nome"], novo_aluno.get("data_nascimento"), novo_aluno.get("cpf")
-        )
-        if existente:
-            supabase.from_("pre_cadastros").update({"status": "Aprovado"}).eq(
-                "id", pre_cadastro_id
-            ).execute()
-            _inv_alunos()
-            return False, (
-                f"⚠️ '{novo_aluno['nome']}' já está cadastrado(a) "
-                f"(turma {existente.get('turma') or '—'}, status {existente.get('status') or '—'}). "
-                "Inscrição arquivada sem criar duplicado."
+        if not forcar:
+            existente = verificar_aluno_existente(
+                novo_aluno["nome"], novo_aluno.get("data_nascimento"), novo_aluno.get("cpf")
             )
+            if existente:
+                # NÃO marca como "Aprovado" — usa "Duplicata" para que a inscrição
+                # permaneça VISÍVEL na triagem e o operador possa resolver.
+                # Bug anterior: marcava "Aprovado" e a ficha desaparecia sem criar aluno.
+                supabase.from_("pre_cadastros").update({"status": "Duplicata"}).eq(
+                    "id", pre_cadastro_id
+                ).execute()
+                _inv_alunos()
+                return False, (
+                    f"⚠️ '{novo_aluno['nome']}' já existe no sistema "
+                    f"(turma {existente.get('turma') or '—'}, status {existente.get('status') or '—'}). "
+                    "Inscrição marcada como **Duplicata** — revise na triagem e force a matrícula se for pessoa diferente."
+                )
 
         supabase.from_("alunos").insert(_com_fonetica(novo_aluno)).execute()
         supabase.from_("pre_cadastros").update({"status": "Aprovado"}).eq(

@@ -217,7 +217,12 @@ def tela_triagem():
         whats = aluno.get('whatsapp', 'Não informado')
         status_atual = aluno.get('status', 'Pendente')
 
-        icone_status = "⏳" if status_atual == "Lista de Espera" else "📝"
+        if status_atual == "Lista de Espera":
+            icone_status = "⏳"
+        elif status_atual == "Duplicata":
+            icone_status = "⚠️"
+        else:
+            icone_status = "📝"
 
         with st.expander(f"{icone_status} {nome.upper()} | 📅 Inscrição: {data_inscricao} | [{status_atual.upper()}]"):
 
@@ -335,9 +340,9 @@ def tela_triagem():
             if not url_ate:
                 docs_faltantes.append("Atestado de Aptidão")
 
-            def _fazer_matricula(faltantes, lotada=False):
+            def _fazer_matricula(faltantes, lotada=False, forcar=False):
                 with st.spinner("A processar matrícula..."):
-                    sucesso, msg = aprovar_inscricao_aluno(aluno['id'], turma_real_salvar)
+                    sucesso, msg = aprovar_inscricao_aluno(aluno['id'], turma_real_salvar, forcar=forcar)
                 if sucesso:
                     if faltantes or lotada:
                         motivos = list(faltantes)
@@ -365,6 +370,48 @@ def tela_triagem():
                     st.rerun()
                 else:
                     st.error(msg)
+
+            # ── Banner especial para inscrições bloqueadas por duplicata ─────
+            if status_atual == "Duplicata":
+                existente_dup = verificar_aluno_existente(
+                    nome,
+                    aluno.get("data_nascimento"),
+                    aluno.get("cpf"),
+                )
+                if existente_dup:
+                    st.error(
+                        f"🔴 **Possível duplicata detectada automaticamente.**\n\n"
+                        f"O sistema encontrou **{existente_dup.get('nome','—')}** "
+                        f"(turma **{existente_dup.get('turma') or '—'}**, "
+                        f"status **{existente_dup.get('status') or '—'}**) "
+                        f"já cadastrado(a) com o mesmo nome/CPF.\n\n"
+                        "Se esta é uma **pessoa diferente**, clique em "
+                        "**⚡ Forçar Matrícula** abaixo para matriculá-la mesmo assim."
+                    )
+                else:
+                    st.warning(
+                        "⚠️ Esta inscrição foi marcada como **Duplicata** em uma tentativa anterior, "
+                        "mas o registro suspeito não foi localizado agora. "
+                        "Você pode tentar matricular normalmente ou forçar a matrícula."
+                    )
+
+                cf1, cf2 = st.columns([2, 1])
+                if cf1.button(
+                    "⚡ Forçar Matrícula (pessoa diferente)",
+                    type="primary",
+                    use_container_width=True,
+                    key=f"force_dup_{aluno['id']}",
+                    help="Matricula mesmo com nome/CPF similar — registra log de exceção.",
+                ):
+                    _fazer_matricula(docs_faltantes, turma_lotada, forcar=True)
+                if cf2.button(
+                    "🔁 Tentar novamente",
+                    use_container_width=True,
+                    key=f"retry_dup_{aluno['id']}",
+                    help="Tenta a matrícula normal (verificação de duplicata ativa).",
+                ):
+                    _fazer_matricula(docs_faltantes, turma_lotada, forcar=False)
+                st.markdown("---")
 
             c_turma, c_aprovar, c_espera, c_rejeitar = st.columns([2.5, 1.5, 1.5, 1.5], vertical_alignment="bottom")
 
