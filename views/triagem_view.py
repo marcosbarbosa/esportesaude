@@ -11,18 +11,269 @@ import time
 from views.utils_docs import url_eh_imagem, renderizar_documento_com_rotacao
 
 from database import (
-    get_pre_cadastros_pendentes, 
-    aprovar_inscricao_aluno, 
+    get_pre_cadastros_pendentes,
+    aprovar_inscricao_aluno,
     rejeitar_inscricao_aluno,
     registrar_log_matricula_doc,
     get_todas_turmas,
     get_ocupacao_turmas,
     verificar_aluno_existente,
+    buscar_aluno_por_id,
+    atualizar_perfil_aluno_dict,
     supabase,
     upload_midia,
     _com_fonetica,
     _inv_alunos,
 )
+
+# ==============================================================================
+# APROVEITAMENTO DE DADOS: pre_cadastros → alunos (inscrição duplicata)
+# ==============================================================================
+_GRUPOS_APROVEITAMENTO = [
+    ("📱 Contato", [
+        ("whatsapp",   "whatsapp",   "WhatsApp"),
+        ("email",      "email",      "E-mail"),
+        ("contato_emergencia", "contato_emergencia", "Contato de Emergência"),
+    ]),
+    ("🪪 Documentos", [
+        ("cpf", "cpf", "CPF"),
+        ("rg",  "rg",  "RG"),
+    ]),
+    ("🏠 Endereço", [
+        ("endereco",    "endereco",    "Endereço"),
+        ("complemento", "complemento", "Complemento"),
+        ("bairro",      "bairro",      "Bairro"),
+        ("cep",         "cep",         "CEP"),
+    ]),
+    ("⚖️ Biometria", [
+        ("peso",   "peso",   "Peso (kg)"),
+        ("altura", "altura", "Altura (m)"),
+    ]),
+    ("🏥 Saúde", [
+        ("problemas_saude",         "problemas_saude",         "Problemas de Saúde"),
+        ("medicamentos",            "medicamentos",            "Medicamentos em Uso"),
+        ("alergia_medicamento",     "alergia_medicamento",     "Alergia a Medicamentos"),
+        ("restricoes_fisicas",      "restricoes_fisicas",      "Restrições Físicas"),
+        ("pratica_outras_atividades","pratica_outras_atividades","Pratica Outras Atividades"),
+        ("incomodo_atividades",     "incomodo_atividades",     "Incômodo nas Atividades"),
+    ]),
+    ("🏘️ Socioeconômico", [
+        ("naturalidade",          "naturalidade",          "Naturalidade"),
+        ("sexo",                  "sexo",                  "Sexo"),
+        ("estado_civil",          "estado_civil",          "Estado Civil"),
+        ("nome_conjuge",          "nome_conjuge",          "Nome do Cônjuge"),
+        ("grau_instrucao",        "grau_instrucao",        "Grau de Instrução"),
+        ("residentes_moradia",    "residentes_moradia",    "Moradores na Residência"),
+        ("aposentado",            "aposentado",            "Aposentado(a)?"),
+        ("fonte_renda",           "fonte_renda",           "Fonte de Renda"),
+        ("renda_familiar",        "renda_familiar",        "Renda Familiar"),
+        ("interesse_voluntariado","interesse_voluntariado","Interesse em Voluntariado"),
+        ("areas_voluntariado",    "areas_voluntariado",    "Áreas de Voluntariado"),
+    ]),
+    ("📎 Documentos Digitais", [
+        ("url_foto",           "url_foto",           "Foto de Perfil"),
+        ("url_rg",             "url_rg",             "Imagem do RG"),
+        ("url_receituario",    "url_receituario",    "Receituário Médico"),
+        ("url_atestado_medico","url_atestado_medico","Atestado Médico"),
+    ]),
+]
+
+
+def _lv(v):
+    """Limpa valor para comparação/exibição."""
+    if v is None:
+        return ""
+    s = str(v).strip()
+    return "" if s.lower() in ("nan", "none", "") else s
+
+
+def _cor_linha(val_pre, val_aluno):
+    if not _lv(val_pre):
+        return "#F8F8F8"
+    if not _lv(val_aluno):
+        return "#FFF8E1"
+    if _lv(val_pre) == _lv(val_aluno):
+        return "#F0FFF4"
+    return "#FFF3E0"
+
+
+def _tela_aproveitamento_duplicata(pre: dict, aluno_id: str, pre_id: str):
+    """Renderiza o painel de aproveitamento de dados campo-a-campo.
+    Fonte = pre_cadastros (ficha nova do aluno).
+    Receptor = registro em alunos (cadastro existente que ficará ativo).
+    """
+    aluno = buscar_aluno_por_id(aluno_id)
+    if not aluno:
+        st.error("Não foi possível carregar o cadastro existente.")
+        return
+
+    st.markdown(
+        f"""
+        <div style='background:#EFF6FF;border-left:4px solid #2563EB;
+                    padding:12px 16px;border-radius:6px;margin-bottom:12px;'>
+            <strong style='color:#1E40AF;'>📥 Aproveitamento de dados da nova ficha</strong><br>
+            <span style='color:#1D4ED8;font-size:13px;'>
+                <b>Fonte (nova ficha):</b> {_lv(pre.get('nome','—'))} &nbsp;|&nbsp;
+                <b>Receptor (cadastro ativo):</b> {_lv(aluno.get('nome','—'))}
+                (turma <b>{_lv(aluno.get('turma','—'))}</b>)<br>
+                Marque os campos que deseja copiar da nova ficha para o cadastro existente.
+                O registro antigo NÃO será excluído.
+            </span>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    # Legenda de cores
+    leg = st.columns(4)
+    leg[0].markdown(
+        "<span style='background:#FFF8E1;padding:2px 8px;border-radius:4px;font-size:12px'>"
+        "🟡 Receptor vazio</span>", unsafe_allow_html=True
+    )
+    leg[1].markdown(
+        "<span style='background:#FFF3E0;padding:2px 8px;border-radius:4px;font-size:12px'>"
+        "🟠 Valores diferentes</span>", unsafe_allow_html=True
+    )
+    leg[2].markdown(
+        "<span style='background:#F0FFF4;padding:2px 8px;border-radius:4px;font-size:12px'>"
+        "🟢 Iguais</span>", unsafe_allow_html=True
+    )
+    leg[3].markdown(
+        "<span style='background:#F8F8F8;padding:2px 8px;border-radius:4px;font-size:12px'>"
+        "⚪ Sem valor na ficha nova</span>", unsafe_allow_html=True
+    )
+
+    campos_selecionados = {}
+
+    for grupo_label, campos in _GRUPOS_APROVEITAMENTO:
+        with st.expander(grupo_label, expanded=True):
+            h_cb, h_campo, h_nova, h_atual = st.columns([0.5, 2, 3, 3])
+            h_cb.markdown("**✅**")
+            h_campo.markdown("**Campo**")
+            h_nova.markdown("**📤 Nova ficha** *(formulário público)*")
+            h_atual.markdown(f"**📥 Cadastro ativo** *({_lv(aluno.get('nome','—'))})*")
+            st.markdown("<hr style='margin:2px 0 6px 0;border-color:#e0e0e0'>",
+                        unsafe_allow_html=True)
+
+            for campo_pre, campo_aluno, label in campos:
+                # Para whatsapp, considera também o campo "celular"
+                if campo_pre == "whatsapp":
+                    val_pre = _lv(pre.get("whatsapp") or pre.get("celular"))
+                else:
+                    val_pre = _lv(pre.get(campo_pre))
+                val_aluno = _lv(aluno.get(campo_aluno))
+                cor = _cor_linha(val_pre, val_aluno)
+
+                desabilitado = not val_pre
+                pre_selecionar = bool(val_pre) and not val_aluno
+
+                c_cb, c_campo, c_nova, c_atual = st.columns([0.5, 2, 3, 3])
+
+                with c_cb:
+                    sel = st.checkbox(
+                        f"Copiar {label}",
+                        value=pre_selecionar,
+                        key=f"aprov_cb_{pre_id}_{campo_aluno}",
+                        disabled=desabilitado,
+                        label_visibility="collapsed",
+                    )
+                campos_selecionados[campo_aluno] = sel and not desabilitado
+
+                with c_campo:
+                    st.markdown(
+                        f"<div style='background:{cor};padding:4px 8px;"
+                        f"border-radius:4px;font-size:13px;font-weight:600'>{label}</div>",
+                        unsafe_allow_html=True,
+                    )
+                with c_nova:
+                    _exibir_campo_aproveitamento(val_pre, cor, campo_aluno, "nova")
+                with c_atual:
+                    _exibir_campo_aproveitamento(val_aluno, cor, campo_aluno, "atual")
+
+    # ── Botão de aplicar ──────────────────────────────────────────────────────
+    st.markdown("---")
+    a_copiar = {k: pre.get("whatsapp") or pre.get("celular")
+                if k == "whatsapp" else pre.get(
+                    [c[0] for c in sum([g[1] for g in _GRUPOS_APROVEITAMENTO], [])
+                     if c[1] == k][0]
+                )
+                for k, v in campos_selecionados.items() if v}
+    # forma mais limpa de montar o payload:
+    pre_campo_map = {}
+    for _, campos in _GRUPOS_APROVEITAMENTO:
+        for cp, ca, _ in campos:
+            pre_campo_map[ca] = cp
+    a_copiar = {}
+    for campo_aluno, selecionado in campos_selecionados.items():
+        if not selecionado:
+            continue
+        campo_pre_k = pre_campo_map.get(campo_aluno, campo_aluno)
+        if campo_pre_k == "whatsapp":
+            val = pre.get("whatsapp") or pre.get("celular")
+        else:
+            val = pre.get(campo_pre_k)
+        if val:
+            a_copiar[campo_aluno] = val
+
+    n = len(a_copiar)
+    if n:
+        st.success(f"**{n} campo(s)** marcado(s) para copiar: `{'`, `'.join(a_copiar.keys())}`")
+    else:
+        st.info("Nenhum campo marcado. Selecione os campos que deseja atualizar no cadastro existente.")
+
+    ca1, ca2 = st.columns([2, 1])
+    with ca1:
+        if st.button(
+            "✅ Aplicar campos selecionados no cadastro existente",
+            type="primary",
+            use_container_width=True,
+            disabled=n == 0,
+            key=f"btn_aprov_aplicar_{pre_id}",
+        ):
+            ok, msg = atualizar_perfil_aluno_dict(aluno_id, a_copiar)
+            if ok:
+                # Arquiva o pre_cadastro como aproveitado (não insere novo aluno)
+                supabase.table("pre_cadastros").update({"status": "Aprovado"}).eq(
+                    "id", str(pre_id)
+                ).execute()
+                get_pre_cadastros_pendentes.clear()
+                st.success(
+                    f"✅ {n} campo(s) copiados para **{_lv(aluno.get('nome','—'))}** com sucesso! "
+                    "A ficha da nova inscrição foi arquivada."
+                )
+                st.session_state.pop(f"_aprov_{pre_id}", None)
+                time.sleep(1)
+                st.rerun()
+            else:
+                st.error(f"Erro ao atualizar: {msg}")
+    with ca2:
+        if st.button(
+            "✖ Cancelar",
+            use_container_width=True,
+            key=f"btn_aprov_cancel_{pre_id}",
+        ):
+            st.session_state.pop(f"_aprov_{pre_id}", None)
+            st.rerun()
+
+
+def _exibir_campo_aproveitamento(valor, cor, campo, sufixo):
+    """Renderiza célula de valor na tabela de aproveitamento."""
+    if campo.startswith("url_") and valor:
+        try:
+            st.image(valor, width=60)
+        except Exception:
+            st.markdown(
+                f"<div style='background:{cor};padding:4px 8px;"
+                f"border-radius:4px;font-size:11px'>{valor[:40]}…</div>",
+                unsafe_allow_html=True,
+            )
+    else:
+        exibir = valor if valor else "—"
+        st.markdown(
+            f"<div style='background:{cor};padding:4px 8px;"
+            f"border-radius:4px;font-size:12px'>{exibir}</div>",
+            unsafe_allow_html=True,
+        )
 
 
 def _salvar_doc_pre_cadastro(pre_id: str, campo: str, arquivo) -> tuple[bool, str]:
@@ -373,6 +624,7 @@ def tela_triagem():
 
             # ── Banner especial para inscrições bloqueadas por duplicata ─────
             if status_atual == "Duplicata":
+                _aid = str(aluno["id"])
                 existente_dup = verificar_aluno_existente(
                     nome,
                     aluno.get("data_nascimento"),
@@ -380,37 +632,67 @@ def tela_triagem():
                 )
                 if existente_dup:
                     st.error(
-                        f"🔴 **Possível duplicata detectada automaticamente.**\n\n"
-                        f"O sistema encontrou **{existente_dup.get('nome','—')}** "
+                        f"🔴 **Duplicata detectada.** O sistema encontrou "
+                        f"**{existente_dup.get('nome','—')}** "
                         f"(turma **{existente_dup.get('turma') or '—'}**, "
                         f"status **{existente_dup.get('status') or '—'}**) "
                         f"já cadastrado(a) com o mesmo nome/CPF.\n\n"
-                        "Se esta é uma **pessoa diferente**, clique em "
-                        "**⚡ Forçar Matrícula** abaixo para matriculá-la mesmo assim."
+                        "Escolha uma das opções abaixo:"
                     )
+                    cf1, cf2, cf3 = st.columns(3)
+                    if cf1.button(
+                        "📥 Aproveitar dados",
+                        use_container_width=True,
+                        key=f"btn_aprov_{_aid}",
+                        help="Copia campos da nova ficha para o cadastro já existente.",
+                    ):
+                        atual = st.session_state.get(f"_aprov_{_aid}", False)
+                        st.session_state[f"_aprov_{_aid}"] = not atual
+                        st.rerun()
+                    if cf2.button(
+                        "⚡ Forçar Matrícula",
+                        type="primary",
+                        use_container_width=True,
+                        key=f"force_dup_{_aid}",
+                        help="Cria um NOVO cadastro mesmo com nome/CPF similar (pessoa diferente).",
+                    ):
+                        _fazer_matricula(docs_faltantes, turma_lotada, forcar=True)
+                    if cf3.button(
+                        "🔁 Tentar novamente",
+                        use_container_width=True,
+                        key=f"retry_dup_{_aid}",
+                        help="Roda a verificação de duplicata novamente.",
+                    ):
+                        _fazer_matricula(docs_faltantes, turma_lotada, forcar=False)
+
+                    # Painel de aproveitamento (toggle)
+                    if st.session_state.get(f"_aprov_{_aid}", False):
+                        st.markdown("---")
+                        _tela_aproveitamento_duplicata(
+                            pre=aluno,
+                            aluno_id=str(existente_dup["id"]),
+                            pre_id=_aid,
+                        )
                 else:
                     st.warning(
-                        "⚠️ Esta inscrição foi marcada como **Duplicata** em uma tentativa anterior, "
-                        "mas o registro suspeito não foi localizado agora. "
-                        "Você pode tentar matricular normalmente ou forçar a matrícula."
+                        "⚠️ Esta inscrição foi marcada como **Duplicata** anteriormente, "
+                        "mas o registro suspeito não está mais localizado. "
+                        "Você pode matricular normalmente ou forçar a matrícula."
                     )
-
-                cf1, cf2 = st.columns([2, 1])
-                if cf1.button(
-                    "⚡ Forçar Matrícula (pessoa diferente)",
-                    type="primary",
-                    use_container_width=True,
-                    key=f"force_dup_{aluno['id']}",
-                    help="Matricula mesmo com nome/CPF similar — registra log de exceção.",
-                ):
-                    _fazer_matricula(docs_faltantes, turma_lotada, forcar=True)
-                if cf2.button(
-                    "🔁 Tentar novamente",
-                    use_container_width=True,
-                    key=f"retry_dup_{aluno['id']}",
-                    help="Tenta a matrícula normal (verificação de duplicata ativa).",
-                ):
-                    _fazer_matricula(docs_faltantes, turma_lotada, forcar=False)
+                    cf1, cf2 = st.columns(2)
+                    if cf1.button(
+                        "⚡ Forçar Matrícula",
+                        type="primary",
+                        use_container_width=True,
+                        key=f"force_dup_{_aid}",
+                    ):
+                        _fazer_matricula(docs_faltantes, turma_lotada, forcar=True)
+                    if cf2.button(
+                        "🔁 Tentar novamente",
+                        use_container_width=True,
+                        key=f"retry_dup_{_aid}",
+                    ):
+                        _fazer_matricula(docs_faltantes, turma_lotada, forcar=False)
                 st.markdown("---")
 
             c_turma, c_aprovar, c_espera, c_rejeitar = st.columns([2.5, 1.5, 1.5, 1.5], vertical_alignment="bottom")
