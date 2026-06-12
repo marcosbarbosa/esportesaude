@@ -1,2 +1,1 @@
-- [Mensagens de aniversário](niver-mensagens.md) — texto vem sempre do painel admin (crm_templates) por status; futuros nunca recebem parabéns.
-- [Deploy prod stale](deploy-prod.md) — esportesaude.onrender.com só reflete mudanças após republicar manualmente.
+- [Aproveitamento cache bug](aproveitamento-cache.md) — após merge de duplicata, limpar CRM caches no prontuário ou dados velhos aparecem na ficha.

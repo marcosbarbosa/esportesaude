@@ -237,12 +237,42 @@ def _tela_aproveitamento_duplicata(pre: dict, aluno_id: str, pre_id: str):
                     "id", str(pre_id)
                 ).execute()
                 get_pre_cadastros_pendentes.clear()
+
+                # Limpa TODAS as caches do Portal do Aluno (CRM + lista geral)
+                # para que a ficha aberta depois mostre os dados atualizados.
+                try:
+                    from views.prontuario_dashboard import (
+                        carregar_dados_crm_avaliacoes_senior,
+                        obter_todos_alunos_cache,
+                    )
+                    carregar_dados_crm_avaliacoes_senior.clear()
+                    obter_todos_alunos_cache.clear()
+                except Exception:
+                    pass
+                st.session_state["_force_reload_crm"] = True
+
+                # Busca o cadastro já atualizado para mostrar ao operador
+                aluno_novo = buscar_aluno_por_id(aluno_id)
+                campos_verificados = []
+                if aluno_novo:
+                    for campo, valor_enviado in a_copiar.items():
+                        valor_atual = _lv(aluno_novo.get(campo, ""))
+                        campos_verificados.append(
+                            f"**{campo}**: {valor_atual or '—'}"
+                        )
+
                 st.success(
-                    f"✅ {n} campo(s) copiados para **{_lv(aluno.get('nome','—'))}** com sucesso! "
+                    f"✅ **{n} campo(s)** gravados no cadastro de "
+                    f"**{_lv(aluno.get('nome','—'))}**. "
                     "A ficha da nova inscrição foi arquivada."
                 )
+                if campos_verificados:
+                    st.markdown(
+                        "📋 **Dados confirmados no banco:**  \n"
+                        + "  \n".join(campos_verificados)
+                    )
                 st.session_state.pop(f"_aprov_{pre_id}", None)
-                time.sleep(1)
+                time.sleep(2)
                 st.rerun()
             else:
                 st.error(f"Erro ao atualizar: {msg}")
