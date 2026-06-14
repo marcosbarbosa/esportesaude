@@ -529,14 +529,17 @@ st.markdown(
 <style>
 /* ── BASE ──────────────────────────────────────────────────────────────────── */
 #MainMenu, footer { visibility: hidden; }
-[data-testid="stStatusWidget"]  { display: none !important; }
-[data-testid="stHeader"]        { display: none !important; }
-[data-testid="stToolbar"]       { display: none !important; }
-[data-testid="stAppToolbar"]    { display: none !important; }
-[data-testid="stDecoration"]    { display: none !important; }
-.stAppToolbar                   { display: none !important; }
-.stToolbar                      { display: none !important; }
-#stDecoration                   { display: none !important; }
+[data-testid="stStatusWidget"]         { display: none !important; }
+[data-testid="stHeader"]               { display: none !important; }
+[data-testid="stToolbar"]              { display: none !important; }
+[data-testid="stAppToolbar"]           { display: none !important; }
+[data-testid="stDecoration"]           { display: none !important; }
+[data-testid="stSpinnerContainer"]     { display: none !important; }
+[data-testid="stConnectionStatus"]     { display: none !important; }
+.stAppToolbar                          { display: none !important; }
+.stToolbar                             { display: none !important; }
+#stDecoration                          { display: none !important; }
+div[class*="StatusWidget"]             { display: none !important; }
 .block-container {
     padding-top: 1rem !important;
     max-width: 1300px;
