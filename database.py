@@ -1361,6 +1361,34 @@ def excluir_midia_diario(midia_id):
 # ✅ FREQUÊNCIA E RELATÓRIOS (MOTOR ANTI-FURO)
 # ==============================================================================
 @st.cache_data(ttl=300, show_spinner=False)
+def load_atestados_vencimento():
+    """Retorna DataFrame com colunas [id, data_vencimento_atestado].
+
+    Busca o atestado de aptidao_fisica mais recente (maior data_vencimento)
+    por aluno em atestados_temporarios. Usado para exibir semáforo de
+    vencimento no grid principal."""
+    try:
+        res = (
+            supabase.from_("atestados_temporarios")
+            .select("aluno_id, data_vencimento")
+            .eq("tipo_atestado", "aptidao_fisica")
+            .not_.is_("data_vencimento", "null")
+            .execute()
+        )
+        if not res.data:
+            return pd.DataFrame(columns=["id", "data_vencimento_atestado"])
+        df_at = pd.DataFrame(res.data)
+        df_at["data_vencimento"] = pd.to_datetime(df_at["data_vencimento"], errors="coerce")
+        mais_recente = (
+            df_at.groupby("aluno_id")["data_vencimento"].max().reset_index()
+        )
+        mais_recente.columns = ["id", "data_vencimento_atestado"]
+        return mais_recente
+    except Exception:
+        return pd.DataFrame(columns=["id", "data_vencimento_atestado"])
+
+
+@st.cache_data(ttl=300, show_spinner=False)
 def load_frequencia_ultima_presenca():
     """Retorna DataFrame com colunas [id, ultima_presenca] — máx data_aula PRESENTE por aluno."""
     try:

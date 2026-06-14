@@ -29,6 +29,7 @@ from database import (
     recuperar_senha_usuario,
     get_template_seguro_db,
     load_frequencia_ultima_presenca,
+    load_atestados_vencimento,
     ADMIN_MASTER,
     supabase,
 )
@@ -1771,8 +1772,9 @@ if st.session_state.menu_atual == "Principal":
         )
 
         # Carregar dados
-        _df_alunos = buscar_alunos_geral("")
+        _df_alunos  = buscar_alunos_geral("")
         _df_ultima  = load_frequencia_ultima_presenca()
+        _df_atestad = load_atestados_vencimento()
 
         # Templates WhatsApp — carregados uma vez, fora do loop.
         # Cada gatilho da tabela crm_templates (painel Configurações > Mensagens)
@@ -1802,6 +1804,12 @@ if st.session_state.menu_atual == "Principal":
             else:
                 _df_hg = _df_alunos.copy()
                 _df_hg["ultima_presenca"] = pd.NaT
+
+            # Merge com vencimento de atestado
+            if not _df_atestad.empty:
+                _df_hg = _df_hg.merge(_df_atestad, on="id", how="left")
+            else:
+                _df_hg["data_vencimento_atestado"] = pd.NaT
 
             _df_hg["ultima_presenca"] = pd.to_datetime(_df_hg["ultima_presenca"], errors="coerce")
 
@@ -1872,11 +1880,11 @@ if st.session_state.menu_atual == "Principal":
                 st.rerun()
 
             # ── Cabeçalho das colunas (clicável para ordenar) ──────────
-            _h0, _h1, _h2, _h3, _h4, _h5 = st.columns(
-                [0.5, 3.2, 1.6, 1.5, 1.8, 0.9], gap="small"
+            _h0, _h1, _h2, _h3, _h4, _h5, _h6 = st.columns(
+                [0.5, 2.8, 1.4, 1.3, 1.6, 1.5, 0.9], gap="small"
             )
             _h0.markdown(" ", unsafe_allow_html=True)
-            _h5.markdown(" ", unsafe_allow_html=True)
+            _h6.markdown(" ", unsafe_allow_html=True)
 
             def _sort_btn(col_widget, label, sort_key):
                 _ativo = (st.session_state.get("hg_sort_col") == sort_key)
@@ -1895,10 +1903,11 @@ if st.session_state.menu_atual == "Principal":
                     st.session_state.hg_pg = 1
                     st.rerun()
 
-            _sort_btn(_h1, "Nome",           "nome")
-            _sort_btn(_h2, "Turma",          "turma")
-            _sort_btn(_h3, "🎂 Aniversário", "aniversario")
-            _sort_btn(_h4, "⏱ Última Pres.", "ultima_presenca")
+            _sort_btn(_h1, "Nome",              "nome")
+            _sort_btn(_h2, "Turma",             "turma")
+            _sort_btn(_h3, "🎂 Aniversário",    "aniversario")
+            _sort_btn(_h4, "⏱ Última Pres.",    "ultima_presenca")
+            _sort_btn(_h5, "🏥 Venc. Atestado", "data_vencimento_atestado")
 
             # Pré-carregar IDs avaliados (1 query, sem N+1 no loop)
             try:
@@ -1915,8 +1924,8 @@ if st.session_state.menu_atual == "Principal":
 
             for _, _r in _df_pag.iterrows():
                 with st.container(border=True):
-                    _ca, _cb, _cc, _cd, _ce, _cf = st.columns(
-                        [0.5, 3.2, 1.6, 1.5, 1.8, 0.9], gap="small",
+                    _ca, _cb, _cc, _cd, _ce, _cg, _cf = st.columns(
+                        [0.5, 2.8, 1.4, 1.3, 1.6, 1.5, 0.9], gap="small",
                         vertical_alignment="center"
                     )
 
@@ -2088,6 +2097,37 @@ if st.session_state.menu_atual == "Principal":
                                         f"font-weight:600;'>📱 Contato</a>"
                                     )
                     _ce.markdown(_up_html, unsafe_allow_html=True)
+
+                    # Vencimento Atestado
+                    _dv = _r.get("data_vencimento_atestado")
+                    if pd.notna(_dv):
+                        _dv_dt   = pd.Timestamp(_dv).date()
+                        _dv_dias = (_dv_dt - _hoje_hg).days
+                        if _dv_dias < 0:
+                            _dv_cor   = "#DC2626"
+                            _dv_bg    = "#FEE2E2"
+                            _dv_icon  = "🔴"
+                            _dv_label = f"Vencido {abs(_dv_dias)}d"
+                        elif _dv_dias <= 30:
+                            _dv_cor   = "#D97706"
+                            _dv_bg    = "#FEF3C7"
+                            _dv_icon  = "🟡"
+                            _dv_label = f"{_dv_dias}d"
+                        else:
+                            _dv_cor   = "#059669"
+                            _dv_bg    = "#D1FAE5"
+                            _dv_icon  = "🟢"
+                            _dv_label = f"{_dv_dias}d"
+                        _dv_html = (
+                            f"<span style='font-size:11px;font-weight:700;color:{_dv_cor};"
+                            f"background:{_dv_bg};border-radius:4px;padding:2px 5px;"
+                            f"display:inline-block;'>"
+                            f"{_dv_icon} {_dv_dt.strftime('%d/%m/%y')}</span>"
+                            f"<br><span style='font-size:10px;color:#94A3B8;'>{_dv_label}</span>"
+                        )
+                    else:
+                        _dv_html = "<span style='font-size:11px;color:#CBD5E1;'>— sem atestado</span>"
+                    _cg.markdown(_dv_html, unsafe_allow_html=True)
 
                     # Botão Ficha
                     with _cf:
