@@ -14,6 +14,22 @@ st.set_page_config(
     initial_sidebar_state="collapsed",
 )
 
+# ── Esconde "Running..." e toolbar antes de qualquer render (incl. tela de login) ──
+st.markdown(
+    "<style>"
+    "[data-testid='stStatusWidget']{display:none !important;}"
+    "[data-testid='stToolbar']{display:none !important;}"
+    "[data-testid='stAppToolbar']{display:none !important;}"
+    "[data-testid='stDecoration']{display:none !important;}"
+    "[data-testid='stSpinnerContainer']{display:none !important;}"
+    "[data-testid='stConnectionStatus']{display:none !important;}"
+    ".stToolbar{display:none !important;}"
+    ".stAppToolbar{display:none !important;}"
+    "div[class*='StatusWidget']{display:none !important;}"
+    "</style>",
+    unsafe_allow_html=True,
+)
+
 import datetime
 import time
 import pandas as pd
