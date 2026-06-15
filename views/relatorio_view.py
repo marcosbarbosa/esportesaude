@@ -14,6 +14,7 @@ import io
 import os
 import re
 from views.relatorio_identificacao_view import renderizar_aba_caracracha
+from views.relatorio_pa_lote_view import tela_relatorio_pa_lote
 from gerador_pdf import (
     criar_prestacao_diaria_pdf,
     criar_prestacao_periodo_pdf,
@@ -2167,7 +2168,7 @@ def tela_relatorio():
         unsafe_allow_html=True,
     )
 
-    tab_diario, tab_f, tab_id, tab_a, tab_w, tab_sem_av, tab_clinico = st.tabs(
+    tab_diario, tab_f, tab_id, tab_a, tab_w, tab_sem_av, tab_clinico, tab_pa_lote = st.tabs(
         [
             "📋 Lista Frequência Oficial",
             "📊 Plan. Frequência",
@@ -2176,6 +2177,7 @@ def tela_relatorio():
             "🏆 Prestação Pedagógica",
             "🧪 Avaliações",
             "🏥 Monitoramento",
+            "🩺 Coleta PA em Lote",
         ]
     )
 
@@ -3072,6 +3074,9 @@ def tela_relatorio():
     # ==============================================================================
     with tab_clinico:
         _renderizar_monitoramento_clinico()
+
+    with tab_pa_lote:
+        tela_relatorio_pa_lote()
 
     st.markdown(
         "<br><p style='text-align:center; color:#94a3b8; font-size:10px;'>Moveright™ Gestão Inteligente - Projeto Esporte e Saúde Community Phase 2 - v8.40 PRIMEMAX</p>",

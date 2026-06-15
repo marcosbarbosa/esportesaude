@@ -1,0 +1,135 @@
+Crie um novo recurso dentro do módulo de relatórios do sistema: um relatório/formulário imprimível para coleta em LOTE de pressão arterial de vários alunos ao mesmo tempo.
+
+Objetivo:
+Gerar um formulário de impressão em papel, com o mesmo cabeçalho padrão já existente nos relatórios antigos do sistema, para permitir que o professor ou avaliador colete manualmente, em sala ou na aula, os dados de pressão arterial de vários alunos de uma vez. Depois, esses dados serão digitados no sistema com mais calma.
+
+Contexto:
+Esse formulário não substitui o prontuário digital individual do aluno. Ele funciona como uma folha de coleta em lote, para uso operacional em campo, facilitando a aferição rápida de vários alunos em papel.
+
+Requisitos principais:
+1. O relatório deve ser pensado para IMPRESSÃO.
+2. Deve aproveitar o cabeçalho visual e estrutural padrão já existente nos relatórios antigos do sistema.
+3. Deve conter campos para preenchimento manual à caneta.
+4. Deve permitir registrar vários alunos na mesma folha.
+5. O layout deve ser limpo, bem organizado, econômico em tinta e altamente legível.
+6. Deve estar disponível dentro do módulo de relatórios do portal/sistema.
+
+Título do relatório:
+“Formulário de Coleta em Lote – Pressão Arterial dos Alunos”
+
+Subtítulo ou apoio:
+“Uso em papel para coleta simultânea e posterior lançamento no prontuário do aluno.”
+
+Estrutura do cabeçalho:
+- Manter o cabeçalho padrão já usado nos relatórios antigos do sistema.
+- Incluir:
+  - Nome da instituição/empresa
+  - Nome do relatório
+  - Data de emissão
+  - Turma / grupo / horário
+  - Professor responsável
+  - Unidade / local
+  - Campo para observações gerais da turma
+
+Campos gerais no topo da folha:
+- Data da coleta
+- Horário da coleta
+- Professor responsável
+- Turma / grupo
+- Modalidade / aula
+- Local
+- Campo “Antes da aula / Depois da aula / Em repouso”
+- Campo “Observações gerais”
+
+Tabela principal para preenchimento em lote:
+Criar uma tabela grande, pronta para impressão, com várias linhas por página, para preenchimento manual de vários alunos.
+
+Colunas da tabela:
+1. Nº
+2. Nome do aluno
+3. Matrícula / ID
+4. Idade
+5. Sistólica
+6. Diastólica
+7. Pulso
+8. Hora da medição
+9. Sintomas
+10. Classificação manual
+11. Observações
+12. Assinatura/rubrica do responsável
+
+Observações de layout da tabela:
+- Deixar espaço suficiente para escrita manual.
+- Nome do aluno e observações devem ter colunas mais largas.
+- Sistólica, diastólica e pulso devem ficar em colunas centrais, bem visíveis.
+- Criar linhas horizontais bem definidas para facilitar escrita.
+- A tabela deve caber bem em A4 retrato ou, se necessário, A4 paisagem.
+- Avaliar qual formato é melhor para leitura e preenchimento em lote.
+
+Classificação visual de apoio:
+Mesmo sendo um formulário impresso, incluir no topo ou rodapé uma legenda explicativa com classificação de cores e faixas de pressão para servir de apoio ao professor no momento da coleta.
+
+Legenda sugerida:
+- Azul = Normal: abaixo de 120/80
+- Amarelo = Elevada: 120–129 e abaixo de 80
+- Vermelho = Estágio 1: 130–139 ou 80–89
+- Vermelho escuro = Estágio 2: 140 ou mais, ou 90 ou mais
+- Crítico = acima de 180 e/ou 120
+
+Como o relatório é impresso em papel e pode ser preto e branco:
+- Além das cores, usar rótulos textuais e padrões visuais que funcionem sem cor.
+- Exemplo:
+  - [NORMAL]
+  - [ATENÇÃO]
+  - [ALTERADA]
+  - [ALTA]
+  - [CRÍTICA]
+
+Seção educativa curta no rodapé:
+Adicionar um bloco discreto com instruções para coleta correta:
+- Medir com o aluno sentado e em repouso.
+- Braço apoiado.
+- Sem falar durante a medição.
+- Evitar medir logo após café, cigarro ou esforço intenso.
+- Repetir a medição se o valor estiver muito alterado.
+
+Requisitos técnicos:
+- Criar tela ou template HTML específico para impressão.
+- Usar CSS de impressão com @media print.
+- Ocultar botões e elementos desnecessários na impressão.
+- Garantir boa quebra de página.
+- Repetir cabeçalho da tabela em novas páginas, se possível.
+- Deixar margens adequadas para impressão em A4.
+- Criar botão “Imprimir formulário em lote”.
+- Criar opção futura para exportar em PDF.
+
+Integração com o sistema:
+- Esse recurso deve existir no módulo de relatórios.
+- Deve aproveitar o mesmo padrão visual já usado nos relatórios antigos.
+- Deve poder receber filtros como:
+  - turma
+  - professor
+  - unidade
+  - data
+- Opcionalmente, permitir pré-preencher nome e matrícula dos alunos da turma antes de imprimir, deixando apenas os campos de pressão, pulso e observações em branco.
+- Se houver lista de presença ou cadastro da turma, aproveitar esses dados automaticamente.
+
+Versões do formulário:
+Criar duas versões:
+1. Versão em branco: linhas totalmente vazias para preenchimento livre.
+2. Versão pré-preenchida: com nomes e matrículas dos alunos já carregados quando a turma for selecionada.
+
+Design esperado:
+- Visual institucional, profissional e limpo.
+- Aparência de relatório oficial do sistema.
+- Muito legível em papel.
+- Econômico no uso de tinta.
+- Bem organizado para uso operacional real.
+
+Entregáveis:
+- Interface no módulo de relatórios para gerar o formulário
+- Template HTML/CSS de impressão
+- Exemplo com dados fictícios
+- Botão de imprimir
+- Estrutura pronta para reaproveitar o cabeçalho antigo do sistema
+- Código organizado para futura integração com o banco de dados
