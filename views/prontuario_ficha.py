@@ -35,6 +35,7 @@ from database import (
     supabase,
 )
 from views.anamnese_dores_view import render_aba_mapa_dores
+from modulos_prontuario.tab_pressao_arterial import renderizar_aba_pressao_arterial
 
 try:
     from gerador_pdf import criar_documento_aluno_pdf
@@ -1701,7 +1702,7 @@ def renderizar_ficha():
                 height=0,
             )
 
-        t1, t2, t3, t4, t5, t6 = st.tabs(
+        t1, t2, t3, t4, t5, t6, t7 = st.tabs(
             [
                 "👤 Perfil e Contato",
                 "📝 Nova Medição",
@@ -1709,6 +1710,7 @@ def renderizar_ficha():
                 "📂 Documentação Legal",
                 "🏘️ Perfil Social",
                 "🩻 Mapa de Dores",
+                "🩺 Pressão Arterial",
             ]
         )
         with t1:
@@ -1724,5 +1726,9 @@ def renderizar_ficha():
             render_aba_social(aluno)
         with t6:
             render_aba_mapa_dores(
+                aluno, email_usuario=st.session_state.get("email", "")
+            )
+        with t7:
+            renderizar_aba_pressao_arterial(
                 aluno, email_usuario=st.session_state.get("email", "")
             )
