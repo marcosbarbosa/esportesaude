@@ -198,18 +198,18 @@ def renderizar_dashboard():
     if st.session_state.pop("_abrir_triagem", False):
         st.info(
             "📥 Você chegou pelo relatório para **aprovar novos cadastros**. "
-            "Abra a aba **🆕 NOVOS ALUNOS (Triagem)** abaixo para conferir documentos e aprovar.",
+            "Abra a aba **🆕 TRIAGEM** abaixo para conferir documentos e aprovar.",
             icon="👉",
         )
 
-    tab_ag, tab_med, tab_novos, tab_todos, tab_inativos, tab_triagem, tab_novo_cad = st.tabs([
-        "🗓️ Agenda da Semana",
+    tab_novo_cad, tab_triagem, tab_ag, tab_med, tab_novos, tab_inativos, tab_pa = st.tabs([
+        "📝 NOVO Aluno",
+        "🆕 TRIAGEM",
+        "🗓️ Agenda Med",
         f"📊 Já Medidos ({len(df_medidos)})",
         f"⚠️ Sem Medições ({len(df_nao_medidos)})",
-        f"🌍 Visão Global ({len(df_todos_crm)})",
         f"🗄️ Arquivo Morto ({len(df_inativos)})",
-        "🆕 NOVOS ALUNOS (Triagem)",
-        "📝 Novo Cadastro",
+        "🩸 Pressão Arterial",
     ])
 
     # --- ABA 1: AGENDA SEMANAL ---
@@ -393,15 +393,6 @@ def renderizar_dashboard():
                 st.markdown(
                     "<div class='linha-divisoria'></div>", unsafe_allow_html=True
                 )
-
-    # --- ABA 4: VISÃO GLOBAL ---
-    with tab_todos:
-        st.write("Base consolidada para auditoria rápida (Apenas Alunos Ativos).")
-        st.dataframe(
-            df_todos_crm[["nome", "turma", "data_avaliacao", "taxa_presenca"]],
-            use_container_width=True,
-            hide_index=True,
-        )
 
     # --- ABA 5: ARQUIVO MORTO ---
     with tab_inativos:
@@ -973,6 +964,11 @@ def renderizar_dashboard():
                 st.markdown(
                     "<div class='linha-divisoria'></div>", unsafe_allow_html=True
                 )
+
+    # --- ABA: PRESSÃO ARTERIAL (LOTE) ---
+    with tab_pa:
+        from views.relatorio_pa_lote_view import tela_relatorio_pa_lote
+        tela_relatorio_pa_lote()
 
     st.markdown("<br>", unsafe_allow_html=True)
     if st.button("🔄 Sincronizar Base de Dados", use_container_width=True):

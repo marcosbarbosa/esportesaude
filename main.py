@@ -1407,12 +1407,9 @@ menu = [
     "Principal",
     "Frequência",
     "Portal do Aluno",
-    "Radar de Acolhimento",
     "Relatórios & BI",
-    "Satisfação",
+    "Gestor",
 ]
-if st.session_state.perfil == "SuperAdmin":
-    menu.extend(["Config"])
 menu.append("Sair")
 
 
@@ -1421,10 +1418,8 @@ def format_nav(opt):
         "Principal": "🏠 Início",
         "Frequência": "✅ Frequência",
         "Portal do Aluno": "🩺 Portal do Aluno",
-        "Radar de Acolhimento": "💙 Radar",
         "Relatórios & BI": "📊 Relatórios & BI",
-        "Satisfação": "⭐ Satisfação",
-        "Config": "⚙️ Config",
+        "Gestor": "🎯 Gestor",
         "Sair": "🔓 Sair",
     }
     return mapa.get(opt, opt)
@@ -2159,11 +2154,6 @@ elif st.session_state.menu_atual == "Frequência":
     from views.frequencia_view import tela_frequencia
     tela_frequencia()
 
-elif st.session_state.menu_atual == "Radar de Acolhimento":
-    from views.radar_acolhimento_view import tela_radar_acolhimento
-
-    tela_radar_acolhimento()
-
 elif st.session_state.menu_atual == "Nova Matrícula":
     st.session_state.menu_atual = "Portal do Aluno"
     st.rerun()
@@ -2198,11 +2188,6 @@ elif st.session_state.menu_atual in ("Relatórios & BI", "BI Prime", "Relatório
         from views.bi_individual_view import render_bi_individual
         render_bi_individual()
 
-elif st.session_state.menu_atual == "Satisfação":
-    from views.relatorio_satisfacao_view import tela_relatorio_prime_satisfacao
-
-    tela_relatorio_prime_satisfacao()
-
 elif st.session_state.menu_atual == "Ficha de Matrícula":
     try:
         from views.ficha_aluno_view import tela_impressao_ficha
@@ -2211,87 +2196,104 @@ elif st.session_state.menu_atual == "Ficha de Matrícula":
     except:
         st.error("⚠️ Crie o ficheiro `ficha_aluno_view.py` na pasta `views`.")
 
-elif st.session_state.menu_atual in (
-    "Config", "Conferência Facial",
-    "Turmas", "Mensagens", "Identidade Visual", "Backup", "Mesclar Fichas",
-):
-    if st.session_state.menu_atual == "Conferência Facial":
-        _idx_cfg = None
-    else:
-        _idx_cfg = {
-            "Config": 0, "Turmas": 0, "Mensagens": 1,
-            "Identidade Visual": 2, "Backup": 3, "Mesclar Fichas": 4,
-        }.get(st.session_state.menu_atual, 0)
+elif st.session_state.menu_atual == "Conferência Facial":
+    from views.conferencia_facial_view import tela_conferencia_facial
+    tela_conferencia_facial()
 
-    if st.session_state.menu_atual == "Conferência Facial":
-        from views.conferencia_facial_view import tela_conferencia_facial
-        tela_conferencia_facial()
-    else:
-        _aba_cfg = st.tabs(
-            ["🏫 Turmas", "💬 Mensagens", "🎂 Aniversários", "🎨 Identidade Visual", "🛠️ Admin", "🔀 Mesclar Fichas", "📅 Calendário", "📧 Email BI", "👥 Usuários", "🔒 LGPD"]
-        )
-        with _aba_cfg[0]:
-            from views.turmas_view import tela_gestao_turmas
-            tela_gestao_turmas()
-        with _aba_cfg[1]:
-            from views.templates_view import tela_gestao_templates
-            tela_gestao_templates()
-        with _aba_cfg[2]:
-            from views.config_niver_view import tela_config_niver
-            tela_config_niver()
-        with _aba_cfg[3]:
-            from views.identidade_view import tela_identidade_visual
-            tela_identidade_visual()
-        with _aba_cfg[4]:
-            from views.backup_view import tela_backup
-            from database import ferramenta_reparacao_turmas
-            tela_backup()
-            st.markdown("---")
-            ferramenta_reparacao_turmas()
-        with _aba_cfg[5]:
-            from views.merge_alunos_view import tela_merge_alunos
-            tela_merge_alunos()
-        with _aba_cfg[6]:
-            _tela_calendario_institucional()
-        with _aba_cfg[7]:
-            _tela_email_bi()
-        with _aba_cfg[8]:
-            from views.gestao_usuarios_view import tela_gestao_usuarios
-            tela_gestao_usuarios()
-        with _aba_cfg[9]:
-            from database import get_logs_lgpd
-            st.markdown(
-                "<p style='font-weight:800;color:#0A2540;font-size:1rem;margin-bottom:4px;'>"
-                "🔒 Histórico de Alterações — Autorização de Imagem (LGPD)</p>",
-                unsafe_allow_html=True,
-            )
-            st.caption("Cada alteração do campo 'Uso de Imagem e Voz' registra automaticamente data/hora, operador e novo status.")
-            _logs_lgpd = get_logs_lgpd()
-            if not _logs_lgpd:
-                st.info("Nenhuma alteração registrada ainda.")
-            else:
-                if st.button("🔄 Atualizar", key="lgpd_log_refresh"):
-                    get_logs_lgpd.clear()
-                    st.rerun()
-                for _lg in _logs_lgpd:
-                    _ts_fmt = str(_lg.get("timestamp", ""))[:16].replace("T", " ")
-                    _status_color = "#065F46" if _lg.get("status") == "Autorizado" else "#7F1D1D"
-                    _status_bg = "#D1FAE5" if _lg.get("status") == "Autorizado" else "#FEE2E2"
-                    _status_icon = "✅" if _lg.get("status") == "Autorizado" else "🚫"
-                    st.markdown(
-                        f"<div style='padding:8px 12px;border-radius:6px;margin-bottom:6px;"
-                        f"background:#F8FAFC;border:1px solid #E2E8F0;display:flex;align-items:center;gap:12px;'>"
-                        f"<span style='font-size:12px;color:#64748B;min-width:120px;'>🕒 {_ts_fmt}</span>"
-                        f"<span style='font-size:13px;font-weight:700;color:#0F172A;flex:1;'>"
-                        f"{_lg.get('aluno_nome', '—').upper()}</span>"
-                        f"<span style='padding:2px 10px;border-radius:12px;font-size:12px;font-weight:700;"
-                        f"background:{_status_bg};color:{_status_color};'>"
-                        f"{_status_icon} {_lg.get('status', '—')}</span>"
-                        f"<span style='font-size:11px;color:#94A3B8;min-width:100px;text-align:right;'>"
-                        f"op: {_lg.get('operador', '—')}</span>"
-                        f"</div>",
-                        unsafe_allow_html=True,
-                    )
+elif st.session_state.menu_atual in (
+    "Gestor",
+    # ── Redirect de estados legados ─────────────────────────────────────
+    "Radar de Acolhimento", "Satisfação",
+    "Config", "Turmas", "Mensagens", "Identidade Visual", "Backup", "Mesclar Fichas",
+):
+    # ── Gestor: Radar · Satisfação · Emergência · Config (SuperAdmin) ──
+    _aba_g_nomes = ["💙 Radar", "⭐ Satisfação", "🚨 Emergência"]
+    _e_super = st.session_state.get("perfil") == "SuperAdmin"
+    if _e_super:
+        _aba_g_nomes.append("⚙️ Config")
+    _aba_g = st.tabs(_aba_g_nomes)
+
+    with _aba_g[0]:
+        from views.radar_acolhimento_view import tela_radar_acolhimento
+        tela_radar_acolhimento()
+
+    with _aba_g[1]:
+        from views.relatorio_satisfacao_view import tela_relatorio_prime_satisfacao
+        tela_relatorio_prime_satisfacao()
+
+    with _aba_g[2]:
+        from modulos_frequencia.tab_emergencia import renderizar_aba_emergencia
+        renderizar_aba_emergencia(None, "Gestor")
+
+    if _e_super:
+        with _aba_g[3]:
+            _aba_cfg = st.tabs([
+                "🏫 Turmas", "💬 Mensagens", "🔔 Auto Niver", "🎨 Identidade Visual",
+                "🗄️ Bck Adm", "🔀 Mescla Cad", "📅 Calendário", "📧 Email BI",
+                "👥 Usuários", "🔒 LGPD",
+            ])
+            with _aba_cfg[0]:
+                from views.turmas_view import tela_gestao_turmas
+                tela_gestao_turmas()
+            with _aba_cfg[1]:
+                from views.templates_view import tela_gestao_templates
+                tela_gestao_templates()
+            with _aba_cfg[2]:
+                from views.config_niver_view import tela_config_niver
+                tela_config_niver()
+            with _aba_cfg[3]:
+                from views.identidade_view import tela_identidade_visual
+                tela_identidade_visual()
+            with _aba_cfg[4]:
+                from views.backup_view import tela_backup
+                from database import ferramenta_reparacao_turmas
+                tela_backup()
+                st.markdown("---")
+                ferramenta_reparacao_turmas()
+            with _aba_cfg[5]:
+                from views.merge_alunos_view import tela_merge_alunos
+                tela_merge_alunos()
+            with _aba_cfg[6]:
+                _tela_calendario_institucional()
+            with _aba_cfg[7]:
+                _tela_email_bi()
+            with _aba_cfg[8]:
+                from views.gestao_usuarios_view import tela_gestao_usuarios
+                tela_gestao_usuarios()
+            with _aba_cfg[9]:
+                from database import get_logs_lgpd
+                st.markdown(
+                    "<p style='font-weight:800;color:#0A2540;font-size:1rem;margin-bottom:4px;'>"
+                    "🔒 Histórico de Alterações — Autorização de Imagem (LGPD)</p>",
+                    unsafe_allow_html=True,
+                )
+                st.caption("Cada alteração do campo 'Uso de Imagem e Voz' registra automaticamente data/hora, operador e novo status.")
+                _logs_lgpd = get_logs_lgpd()
+                if not _logs_lgpd:
+                    st.info("Nenhuma alteração registrada ainda.")
+                else:
+                    if st.button("🔄 Atualizar", key="lgpd_log_refresh"):
+                        get_logs_lgpd.clear()
+                        st.rerun()
+                    for _lg in _logs_lgpd:
+                        _ts_fmt = str(_lg.get("timestamp", ""))[:16].replace("T", " ")
+                        _status_color = "#065F46" if _lg.get("status") == "Autorizado" else "#7F1D1D"
+                        _status_bg = "#D1FAE5" if _lg.get("status") == "Autorizado" else "#FEE2E2"
+                        _status_icon = "✅" if _lg.get("status") == "Autorizado" else "🚫"
+                        st.markdown(
+                            f"<div style='padding:8px 12px;border-radius:6px;margin-bottom:6px;"
+                            f"background:#F8FAFC;border:1px solid #E2E8F0;display:flex;align-items:center;gap:12px;'>"
+                            f"<span style='font-size:12px;color:#64748B;min-width:120px;'>🕒 {_ts_fmt}</span>"
+                            f"<span style='font-size:13px;font-weight:700;color:#0F172A;flex:1;'>"
+                            f"{_lg.get('aluno_nome', '—').upper()}</span>"
+                            f"<span style='padding:2px 10px;border-radius:12px;font-size:12px;font-weight:700;"
+                            f"background:{_status_bg};color:{_status_color};'>"
+                            f"{_status_icon} {_lg.get('status', '—')}</span>"
+                            f"<span style='font-size:11px;color:#94A3B8;min-width:100px;text-align:right;'>"
+                            f"op: {_lg.get('operador', '—')}</span>"
+                            f"</div>",
+                            unsafe_allow_html=True,
+                        )
 
 # ── Rodapé Fixo ─────────────────────────────────────────────────────────────
 from utils.identidade import get_config as _gcfg_rodape
