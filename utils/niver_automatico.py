@@ -25,8 +25,9 @@ _CHAVES = [
     "niver_zapi_client_token",   # client token Z-API
     "niver_zapi_habilitado",     # "1" / "0"
     "niver_zapi_horario",        # "08:00"
-    "niver_mensagem_padrao",     # texto com {nome}
     "niver_aviso_dias",          # int: janela de aviso em dias (0 = só hoje)
+    # NOTA: niver_mensagem_padrao foi removido.
+    # O texto é gerenciado exclusivamente em Config → Mensagens (crm_templates).
 ]
 
 
@@ -78,10 +79,6 @@ def get_config_niver() -> dict:
         "zapi_habilitado":  cfg.get("niver_zapi_habilitado", "0") == "1",
         "zapi_horario":     cfg.get("niver_zapi_horario", "08:00"),
         "aviso_dias":       int(cfg.get("niver_aviso_dias", "0") or "0"),
-        "mensagem_padrao":  cfg.get(
-            "niver_mensagem_padrao",
-            "Olá {nome}! 🎂 Feliz Aniversário! O time do Esporte e Saúde deseja a você muita saúde, disposição e muitos anos de vida ativa! 🎉🏃"
-        ),
     }
 
 
@@ -229,18 +226,24 @@ def status_niver_por_delta(delta: int) -> str | None:
     return None
 
 
+_MSG_NIVER_FALLBACK = (
+    "Olá {nome}! 🎂 Feliz Aniversário! "
+    "O time do Esporte e Saúde deseja a você muita saúde, "
+    "disposição e muitos anos de vida ativa! 🎉🏃"
+)
+
+
 def get_template_niver_por_status(status: str) -> str:
     """Texto do template conforme status: 'hoje' (niver_hoje) ou 'passou' (niver_passou).
 
-    Fonte única: painel admin 'Mensagens' (crm_templates). Se o texto estiver
-    vazio/ausente, cai para a mensagem padrão configurada em Aniversários.
+    Fonte única: Config → Mensagens (crm_templates).
+    Fallback de segurança: texto padrão embutido, caso o template ainda não
+    tenha sido cadastrado no módulo Mensagens.
     """
     tpl_map = _ler_templates_crm_niver()
     gatilho = "niver_passou" if status == "passou" else "niver_hoje"
     template = (tpl_map.get(gatilho) or "").strip()
-    if not template:
-        template = get_config_niver()["mensagem_padrao"]
-    return template
+    return template or _MSG_NIVER_FALLBACK
 
 
 def montar_mensagem_niver(status: str, nome: str) -> str:

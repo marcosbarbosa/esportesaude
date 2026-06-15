@@ -24,25 +24,12 @@ def tela_config_niver():
 
     cfg = get_config_niver()
 
-    # ── MENSAGEM PADRÃO ───────────────────────────────────────────────────────
-    with st.expander("💬 Mensagem Padrão de Aniversário", expanded=True):
-        st.caption("Use {nome} para inserir o primeiro nome do aluno automaticamente.")
-        nova_msg = st.text_area(
-            "Texto da mensagem:",
-            value=cfg["mensagem_padrao"],
-            height=100,
-            key="niver_msg_padrao",
-        )
-        st.markdown(
-            f"<div style='background:#F0FDF4;border:1px solid #BBF7D0;border-radius:8px;"
-            f"padding:10px 14px;font-size:12px;color:#166534;margin-top:6px;'>"
-            f"<strong>Prévia:</strong> {nova_msg.replace('{nome}', '<b>João</b>')}</div>",
-            unsafe_allow_html=True,
-        )
-        if st.button("💾 Salvar Mensagem", key="btn_salvar_msg"):
-            salvar_config_niver({"niver_mensagem_padrao": nova_msg})
-            st.success("✅ Mensagem salva!")
-            st.rerun()
+    st.info(
+        "💬 **Texto da mensagem de aniversário** — edite em "
+        "**Config → Mensagens → Parabenizações (Aniversários) → 🎉 Aniversário (Dia Exato)**. "
+        "Essa é a fonte única usada pelo WhatsApp, e-mail e disparo Z-API.",
+        icon="ℹ️",
+    )
 
     st.markdown("---")
 
