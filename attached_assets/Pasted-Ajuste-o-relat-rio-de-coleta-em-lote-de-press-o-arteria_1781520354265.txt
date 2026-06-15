@@ -1,0 +1,162 @@
+Ajuste o relatório de coleta em lote de pressão arterial que já foi implementado no sistema/Replit.
+
+Contexto:
+O primeiro relatório já foi gerado, mas ainda não continha os nomes dos alunos. Agora quero melhorar esse recurso para que ele:
+- traga os alunos já cadastrados no sistema
+- permita imprimir TODAS as turmas ou apenas a turma X ou Y
+- organize os alunos em ordem alfabética
+- mantenha o layout compacto, legível e funcional para coleta em papel
+- preserve o cabeçalho padrão já existente nos relatórios antigos do sistema
+
+Objetivo:
+Transformar o relatório em uma ferramenta prática de coleta em lote, com possibilidade de impressão geral ou filtrada por turma.
+
+Ajustes obrigatórios:
+
+1. Filtro de abrangência do relatório
+Criar no módulo de relatórios uma opção de seleção com estes modos:
+- Todas as turmas
+- Apenas uma turma específica
+- Turmas selecionadas manualmente
+
+Exemplo de comportamento:
+- Se o usuário escolher “Todas as turmas”, o relatório deve incluir todos os alunos de todas as turmas disponíveis no contexto selecionado.
+- Se o usuário escolher “Apenas uma turma específica”, o sistema deve permitir selecionar a turma desejada.
+- Se o usuário escolher “Turmas selecionadas manualmente”, o sistema deve permitir marcar uma ou mais turmas específicas, por exemplo turma X e turma Y.
+
+2. Pré-preenchimento dos alunos
+Ao gerar o relatório, buscar automaticamente do sistema:
+- nome do aluno
+- matrícula/ID
+- idade, se disponível
+- turma do aluno
+
+Deixar em branco apenas os campos da coleta manual:
+- sistólica
+- diastólica
+- pulso
+- hora
+- sintomas
+- classificação
+- observações
+- rubrica
+
+3. Ordenação
+- Ordenar os alunos em ordem alfabética pelo nome.
+- Quando o relatório incluir mais de uma turma, permitir uma destas abordagens:
+  a) agrupar por turma e ordenar alfabeticamente dentro de cada turma
+  ou
+  b) listar tudo em ordem alfabética geral, mantendo a turma visível em cada linha
+- Preferência recomendada:
+  - se for uma única turma: ordem alfabética simples
+  - se forem várias turmas: agrupar por turma + ordem alfabética dentro do grupo
+
+4. Exibição da turma
+A turma deve aparecer de forma discreta, mas legível:
+- sempre no cabeçalho do relatório, quando houver filtro por turma
+- e também na linha do aluno, principalmente quando houver mais de uma turma no mesmo impresso
+Pode usar uma destas soluções:
+- coluna “Turma”
+- texto secundário abaixo do nome
+- badge discreta
+A informação precisa ser visível sem poluir o layout.
+
+5. Cabeçalho do relatório
+Manter o cabeçalho padrão já usado nos relatórios antigos do sistema.
+No cabeçalho, exibir:
+- nome da instituição
+- nome do relatório
+- data de emissão
+- professor responsável
+- unidade/local
+- tipo da coleta
+- filtro aplicado:
+  - todas as turmas
+  - turma X
+  - turmas X e Y
+
+Título do relatório:
+“Coleta em Lote – Pressão Arterial dos Alunos”
+
+Subtítulo:
+“Formulário para coleta manual e posterior lançamento no prontuário do aluno”
+
+6. Layout de impressão
+- Manter o relatório compacto e legível
+- Usar A4 paisagem como padrão
+- Usar tabela otimizada para papel
+- Repetir cabeçalho da tabela em novas páginas
+- Evitar excesso de bordas pesadas
+- Funcionar bem em preto e branco
+- Se houver várias turmas, destacar o nome da turma de forma sutil entre blocos ou linhas
+
+7. Estrutura da tabela
+Colunas sugeridas:
+1. Nº
+2. Nome do aluno
+3. Matrícula
+4. Idade
+5. Turma
+6. SIS
+7. DIA
+8. Pulso
+9. Hora
+10. Sint.
+11. Classif.
+12. Obs.
+13. Rubrica
+
+Observações:
+- Se o relatório for de apenas uma turma, a coluna “Turma” pode ser opcional para economizar espaço.
+- Se o relatório incluir múltiplas turmas, a coluna “Turma” deve aparecer obrigatoriamente.
+
+8. Paginação e agrupamento
+- Se o usuário escolher todas as turmas ou várias turmas, o sistema deve quebrar o relatório em páginas de forma organizada.
+- Pode:
+  a) separar por blocos de turma
+  b) repetir o nome da turma no início de cada bloco
+- Nunca cortar uma linha no meio da página.
+- Sempre repetir cabeçalhos em novas páginas.
+
+9. Tela de geração do relatório
+Adicionar filtros simples e claros:
+- abrangência:
+  - todas as turmas
+  - uma turma
+  - turmas selecionadas
+- turma(s)
+- data
+- horário
+- professor
+- unidade/local
+- tipo da coleta
+
+10. Botões e ações
+- Botão “Gerar relatório”
+- Botão “Imprimir”
+- Estrutura pronta para futura exportação em PDF
+
+11. Legenda e apoio
+Incluir legenda discreta com referência de classificação:
+- Normal: <120/80
+- Elevada: 120–129 e <80
+- Estágio 1: 130–139 ou 80–89
+- Estágio 2: >=140 ou >=90
+- Crítica: >180 e/ou >120
+
+12. Regras de usabilidade
+- Aproveitar o máximo do código já existente
+- Não reconstruir tudo do zero
+- Aplicar o ajuste sobre o relatório atual
+- Priorizar velocidade operacional
+- O documento precisa parecer oficial e funcional para uso diário
+
+13. Entregáveis deste ajuste
+- relatório com nomes dos alunos vindos do sistema
+- opção para imprimir todas as turmas
+- opção para imprimir apenas turma X
+- opção para imprimir turmas selecionadas, como X e Y
+- ordenação alfabética
+- exibição discreta e legível da turma
+- layout compacto para impressão
+- compatibilidade com o cabeçalho antigo dos relatórios do sistema
