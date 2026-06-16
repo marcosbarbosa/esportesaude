@@ -30,7 +30,7 @@ from database import (
     supabase,
 )
 from utils.texto import normalizar_fonetica
-from utils.busca_aluno import filtrar_alunos_df
+from utils.busca_aluno import filtrar_alunos_df, busca_com_sugestoes
 
 
 # ==============================================================================
@@ -676,35 +676,23 @@ def renderizar_dashboard():
         # Controles Superiores
         c_busca, c_pag = st.columns([4, 1], vertical_alignment="bottom")
 
-        # 🚀 A MÁGICA DO LIVE SEARCH (ST_KEYUP)
-        placeholder_texto = "🔍 Filtrar Ativos (mín. 3 letras)..."
+        # 🚀 BUSCA COM SUGESTÕES EM TEMPO REAL
         with c_busca:
-            if HAS_KEYUP:
-                busca = st_keyup(
-                    "Filtrar Aluno:",
-                    placeholder=placeholder_texto,
-                    debounce=300,
-                    key="busca_dash",
-                    label_visibility="collapsed",
-                )
-            else:
-                busca = st.text_input(
-                    "Filtrar Aluno:",
-                    placeholder=placeholder_texto,
-                    key="busca_dash_fallback",
-                    label_visibility="collapsed",
-                )
+            busca, _ = busca_com_sugestoes(
+                df_base_periodo,
+                key="busca_dash",
+                placeholder="🔍 Digite pelo menos 3 letras do nome ou turma…",
+                label="Buscar aluno:",
+                debounce=250,
+                max_sugestoes=8,
+            )
 
-        # 🚀 Aplicação de Filtros (Gatilho de 3 Caracteres e Ignorando Acentos)
+        # Aplicação de Filtros no grid (Gatilho de 3 caracteres)
         df_grid = df_base_periodo.copy()
-
         if busca:
             busca_limpa = normalizar_fonetica(busca).strip()
-
             if len(busca_limpa) >= 3:
                 df_grid = filtrar_alunos_df(df_grid, busca, cols=["nome", "turma"], min_len=3)
-            elif len(busca_limpa) > 0:
-                st.caption("⏳ Digite pelo menos 3 letras para iniciar a filtragem rápida...")
 
         # Aplicação de Ordenação via session_state (cabeçalhos clicáveis)
         _scol = st.session_state.get("dash_sort_col", "nome")

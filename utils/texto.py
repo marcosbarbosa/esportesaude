@@ -21,18 +21,31 @@ def remover_acentos(texto) -> str:
 
 
 def normalizar_fonetica(texto) -> str:
-    """Normaliza para busca fonética tolerante a erros ortográficos."""
+    """Normaliza para busca fonética tolerante a erros ortográficos e variações do português."""
     if not texto or not isinstance(texto, str):
         return ""
     t = remover_acentos(texto)
+    # Fonética portuguesa — ordem importa: mais específico antes
     t = (
-        t.replace("ct", "t")
-         .replace("ph", "f")
-         .replace("th", "t")
-         .replace("y", "i")
-         .replace("ll", "l")
-         .replace("nn", "n")
+        t.replace("ss",  "s")
+         .replace("rr",  "r")
+         .replace("lh",  "li")
+         .replace("nh",  "ni")
+         .replace("ch",  "x")
+         .replace("ct",  "t")
+         .replace("ph",  "f")
+         .replace("th",  "t")
+         .replace("qu",  "k")
+         .replace("gue", "ge")
+         .replace("gui", "gi")
+         .replace("ll",  "l")
+         .replace("nn",  "n")
+         .replace("mb",  "m")
+         .replace("mp",  "m")
+         .replace("y",   "i")
     )
+    # Remove h inicial de palavras (Henrique → enrike, Haroldo → aroldo)
+    t = re.sub(r"\bh", "", t)
     return t.strip()
 
 
