@@ -15,6 +15,7 @@ from database import (
     get_registros_pa_turma,
     _tabela_pa_existe,
     SQL_CRIAR_REGISTROS_PA,
+    SQL_CORRIGIR_RLS_PA,
 )
 
 
@@ -249,8 +250,18 @@ def tela_lancamento_pa_digital():
                     unsafe_allow_html=True,
                 )
 
+        rls_detectado = any("row-level security" in e.lower() or "42501" in e for e in erros_salvo)
         for err in erros_salvo:
             st.error(f"Erro: {err}")
+
+        if rls_detectado:
+            st.warning(
+                "🔒 **Bloqueio de segurança (RLS) detectado na tabela `registros_pa`.**\n\n"
+                "Isso acontece quando a tabela foi criada sem desabilitar o Row-Level Security. "
+                "Execute o SQL abaixo no **Supabase → SQL Editor** e tente salvar novamente:"
+            )
+            with st.expander("🛠️ SQL de correção — copie e execute no Supabase", expanded=True):
+                st.code(SQL_CORRIGIR_RLS_PA, language="sql")
 
         if not salvos and not erros_salvo:
             st.info("Nenhum valor preenchido. "

@@ -13,7 +13,7 @@ try:
     from database import (
         salvar_registro_pa, atualizar_registro_pa,
         get_registros_pa, deletar_registro_pa,
-        _tabela_pa_existe, SQL_CRIAR_REGISTROS_PA,
+        _tabela_pa_existe, SQL_CRIAR_REGISTROS_PA, SQL_CORRIGIR_RLS_PA,
     )
     _DB_PA_OK = True
 except Exception:
@@ -112,6 +112,9 @@ def salvar_registro(aluno_id, dados):
         ok, msg = salvar_registro_pa(dados)
         if not ok:
             st.error(f"Erro ao salvar no banco: {msg}")
+            if "row-level security" in msg.lower() or "42501" in msg:
+                st.warning("🔒 **Problema de RLS detectado.** Execute o SQL abaixo no Supabase → SQL Editor:")
+                st.code(SQL_CORRIGIR_RLS_PA, language="sql")
             return
         st.session_state.pop(k, None)
     else:

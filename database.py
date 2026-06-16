@@ -2767,6 +2767,14 @@ CREATE TABLE IF NOT EXISTS registros_pa (
 );
 CREATE INDEX IF NOT EXISTS idx_registros_pa_aluno ON registros_pa(aluno_id);
 CREATE INDEX IF NOT EXISTS idx_registros_pa_data  ON registros_pa(data DESC);
+-- Desabilita RLS para que o client anon do sistema possa ler/gravar:
+ALTER TABLE registros_pa DISABLE ROW LEVEL SECURITY;
+"""
+
+# SQL para corrigir tabela já existente que foi criada com RLS habilitado
+SQL_CORRIGIR_RLS_PA = """-- Correção rápida: desabilita Row-Level Security na tabela registros_pa
+-- Execute no Supabase → SQL Editor:
+ALTER TABLE registros_pa DISABLE ROW LEVEL SECURITY;
 """
 
 
