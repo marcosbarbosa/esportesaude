@@ -558,7 +558,9 @@ st.markdown(
 div[class*="StatusWidget"]             { display: none !important; }
 .block-container {
     padding-top: 1rem !important;
-    max-width: 1300px;
+    padding-left: 1.5rem !important;
+    padding-right: 1.5rem !important;
+    max-width: 100% !important;
     padding-bottom: 74px !important;
 }
 .stApp {
@@ -661,6 +663,9 @@ div[role="radiogroup"] {
     box-shadow: 0 2px 8px rgba(0,0,0,.05) !important; border: 1px solid #E2E8F0 !important;
     margin-bottom: 16px !important; margin-top: 0 !important;
     justify-content: flex-end !important;
+    flex-wrap: nowrap !important;
+    overflow-x: auto !important;
+    min-height: 44px !important;
 }
 div[role="radiogroup"]::before {
     content: "🏃 IMBRA"; color: #0056b3; font-size: 16px; font-weight: 900;
