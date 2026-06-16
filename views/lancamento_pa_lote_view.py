@@ -322,83 +322,33 @@ def _mostrar_historico_turma(turma, data):
         st.info("Nenhum registro lançado para esta turma e data ainda.")
         return
 
-    total    = len(registros)
+    total     = len(registros)
     todos_ids = [str(r.get("id", "")) for r in registros]
 
     if "lpa_confirmar_lote" not in st.session_state:
         st.session_state["lpa_confirmar_lote"] = False
 
-    # ── REGRA CENTRAL: derivar sel a partir dos widgets (nunca o contrário) ───
-    # Lemos o estado atual de cada checkbox ANTES de renderizá-los.
-    # Os widgets ainda não foram criados neste run, então lemos do session_state
-    # que foi gravado pelo run anterior.
-    sel = {rid for rid in todos_ids
-           if st.session_state.get(f"lpa_chk_{rid}", False)}
-    n_sel = len(sel)
-
-    # ── Barra de controle ─────────────────────────────────────────────────────
+    # ── Botões de seleção rápida ───────────────────────────────────────────────
     st.markdown("<hr style='margin:4px 0 8px;border-color:#E2E8F0;'>", unsafe_allow_html=True)
-    bar_l, bar_m, bar_r = st.columns([2.5, 4.5, 2])
-
-    b_todos, b_nenhum = bar_l.columns(2)
-    if b_todos.button("☑ Todos", key="lpa_sel_todos", use_container_width=True):
+    b_l, _, b_r = st.columns([2, 7, 2])
+    if b_l.button("☑ Todos", key="lpa_sel_todos", use_container_width=True):
         for rid in todos_ids:
             st.session_state[f"lpa_chk_{rid}"] = True
         st.session_state["lpa_confirmar_lote"] = False
         st.rerun()
-    if b_nenhum.button("☐ Nenhum", key="lpa_sel_nenhum", use_container_width=True):
+    if b_r.button("☐ Nenhum", key="lpa_sel_nenhum", use_container_width=True):
         for rid in todos_ids:
             st.session_state[f"lpa_chk_{rid}"] = False
         st.session_state["lpa_confirmar_lote"] = False
         st.rerun()
 
-    legenda = f"**{total}** registro(s) · **{turma}** · {data}"
-    if n_sel:
-        legenda += f" · ✔ **{n_sel} selecionado(s)**"
-    bar_m.caption(legenda)
-
-    if n_sel > 0:
-        if bar_r.button(
-            f"🗑️ Excluir {n_sel}",
-            type="secondary",
-            use_container_width=True,
-            key="lpa_btn_del_lote",
-            help=f"Excluir {n_sel} registro(s) selecionado(s)",
-        ):
-            st.session_state["lpa_confirmar_lote"] = True
-            st.rerun()
-
-    # ── Confirmação de exclusão em lote ───────────────────────────────────────
-    if st.session_state.get("lpa_confirmar_lote") and n_sel > 0:
-        st.warning(
-            f"⚠️ Excluir permanentemente **{n_sel}** registro(s)? "
-            "Esta ação não pode ser desfeita.",
-            icon="🚨",
-        )
-        c_ok, c_no = st.columns(2)
-        if c_ok.button("✅ Confirmar exclusão", type="primary",
-                       use_container_width=True, key="lpa_lote_ok"):
-            ids_del = list(sel)
-            qtd, erros = deletar_registros_pa_lote(ids_del)
-            # Limpa exatamente os checkboxes dos registros excluídos
-            for rid in ids_del:
-                st.session_state.pop(f"lpa_chk_{rid}", None)
-            st.session_state["lpa_confirmar_lote"] = False
-            if erros:
-                st.error(f"Erro ao excluir {len(erros)} registro(s): {erros[0]}")
-            else:
-                st.success(f"✅ {qtd} registro(s) excluído(s) com sucesso.")
-            st.rerun()
-        if c_no.button("❌ Cancelar", use_container_width=True, key="lpa_lote_nao"):
-            st.session_state["lpa_confirmar_lote"] = False
-            st.rerun()
-
     st.markdown("<hr style='margin:6px 0 8px;border-color:#E2E8F0;'>", unsafe_allow_html=True)
 
     # ── Lista de registros com checkbox ───────────────────────────────────────
-    # Sem value= nos checkboxes: Streamlit gerencia o estado pela key.
-    # O rerun natural do Streamlit (ao clicar num checkbox) já re-executa
-    # tudo acima e recalcula sel/n_sel corretamente.
+    # IMPORTANTE: os checkboxes são renderizados ANTES de calcular sel/n_sel.
+    # Assim, quando o usuário clica num checkbox, o st.session_state[key]
+    # é atualizado pelo Streamlit antes de continuar a execução — e a barra
+    # de ação abaixo lê os valores corretos no mesmo run.
     for r in registros:
         rid   = str(r.get("id", ""))
         nome  = r.get("aluno_nome") or "Aluno"
@@ -410,16 +360,13 @@ def _mostrar_historico_turma(turma, data):
         lbl, cor, bg = _CLS.get(cls_k, ("—", "#64748B", "#F8FAFC"))
         pul_txt = f" · Pulso: <strong>{pul}</strong> bpm" if pul else ""
 
-        is_sel  = rid in sel
-        borda   = "3px solid #1D4ED8" if is_sel else f"4px solid {cor}"
-        bg_row  = "#DBEAFE" if is_sel else bg
+        # Checkbox sem value= : Streamlit gerencia o estado pelo key
+        is_sel = st.session_state.get(f"lpa_chk_{rid}", False)
+        borda  = "3px solid #1D4ED8" if is_sel else f"4px solid {cor}"
+        bg_row = "#DBEAFE" if is_sel else bg
 
         c_chk, c_info = st.columns([0.5, 11])
-        c_chk.checkbox(
-            "sel",
-            key=f"lpa_chk_{rid}",
-            label_visibility="collapsed",
-        )
+        c_chk.checkbox("sel", key=f"lpa_chk_{rid}", label_visibility="collapsed")
         c_info.markdown(
             f"<div class='lpa-hist-row' style='border-left:{borda};"
             f"background:{bg_row};margin:0;'>"
@@ -433,3 +380,58 @@ def _mostrar_historico_turma(turma, data):
             f"</div>",
             unsafe_allow_html=True,
         )
+
+    # ── Barra de ação — calculada DEPOIS dos checkboxes ───────────────────────
+    # Os st.checkbox() acima já atualizaram session_state neste run,
+    # então sel reflete exatamente o que o usuário marcou.
+    sel   = {rid for rid in todos_ids if st.session_state.get(f"lpa_chk_{rid}", False)}
+    n_sel = len(sel)
+
+    st.markdown("<hr style='margin:10px 0 6px;border-color:#E2E8F0;'>", unsafe_allow_html=True)
+    act_l, act_m, act_r = st.columns([4, 2, 3])
+
+    legenda = f"**{total}** registro(s) · **{turma}** · {data}"
+    if n_sel:
+        legenda += f" &nbsp;·&nbsp; ✔ **{n_sel} selecionado(s)**"
+    act_l.markdown(f"<small>{legenda}</small>", unsafe_allow_html=True)
+
+    if n_sel > 0 and not st.session_state.get("lpa_confirmar_lote"):
+        if act_r.button(
+            f"🗑️ Excluir {n_sel} selecionado(s)",
+            type="secondary",
+            use_container_width=True,
+            key="lpa_btn_del_lote",
+        ):
+            st.session_state["lpa_confirmar_lote"] = True
+            st.rerun()
+
+    # ── Confirmação de exclusão ────────────────────────────────────────────────
+    if st.session_state.get("lpa_confirmar_lote"):
+        # Recalcula sel no momento da confirmação (pode ter mudado)
+        sel_conf = {rid for rid in todos_ids
+                    if st.session_state.get(f"lpa_chk_{rid}", False)}
+        n_conf = len(sel_conf)
+        if n_conf > 0:
+            st.warning(
+                f"⚠️ Excluir permanentemente **{n_conf}** registro(s)? "
+                "Esta ação não pode ser desfeita.",
+                icon="🚨",
+            )
+            c_ok, c_no = st.columns(2)
+            if c_ok.button("✅ Confirmar exclusão", type="primary",
+                           use_container_width=True, key="lpa_lote_ok"):
+                ids_del = list(sel_conf)
+                qtd, erros = deletar_registros_pa_lote(ids_del)
+                for rid in ids_del:
+                    st.session_state.pop(f"lpa_chk_{rid}", None)
+                st.session_state["lpa_confirmar_lote"] = False
+                if erros:
+                    st.error(f"Erro: {erros[0]}")
+                else:
+                    st.success(f"✅ {qtd} registro(s) excluído(s) com sucesso.")
+                st.rerun()
+            if c_no.button("❌ Cancelar", use_container_width=True, key="lpa_lote_nao"):
+                st.session_state["lpa_confirmar_lote"] = False
+                st.rerun()
+        else:
+            st.session_state["lpa_confirmar_lote"] = False
