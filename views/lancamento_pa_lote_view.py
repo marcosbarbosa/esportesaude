@@ -13,7 +13,7 @@ from database import (
     get_todas_turmas,
     salvar_registro_pa,
     get_registros_pa_turma,
-    deletar_registro_pa,
+    deletar_registros_pa_lote,
     _tabela_pa_existe,
     SQL_CRIAR_REGISTROS_PA,
     SQL_CORRIGIR_RLS_PA,
@@ -296,13 +296,16 @@ def tela_lancamento_pa_digital():
 
 
 def _mostrar_historico_turma(turma, data):
-    """Exibe registros de PA já lançados para esta turma e data, com botão de exclusão."""
+    """Exibe registros de PA desta sessão com seleção em lote e exclusão em lote."""
     if not turma or not data:
         return
 
+    # ── Cabeçalho ─────────────────────────────────────────────────────────────
     col_tit, col_ref = st.columns([5, 1])
     col_tit.markdown("#### 📊 Registros Desta Sessão")
     if col_ref.button("🔄", key="lpa_refresh_hist", help="Atualizar histórico"):
+        st.session_state.pop("lpa_sel", None)
+        st.session_state["lpa_confirmar_lote"] = False
         st.rerun()
 
     registros = get_registros_pa_turma(turma, data)
@@ -311,15 +314,81 @@ def _mostrar_historico_turma(turma, data):
         st.info("Nenhum registro lançado para esta turma e data ainda.")
         return
 
-    st.caption(f"**{len(registros)}** registro(s) · **{turma}** · {data}")
-    st.markdown("<hr style='margin:4px 0 10px;border-color:#E2E8F0;'>", unsafe_allow_html=True)
+    total = len(registros)
+    todos_ids = [str(r.get("id", "")) for r in registros]
 
-    # Controle de confirmação de exclusão
-    if "lpa_confirmar_del" not in st.session_state:
-        st.session_state["lpa_confirmar_del"] = None
+    # ── Estado de seleção ─────────────────────────────────────────────────────
+    if "lpa_sel" not in st.session_state:
+        st.session_state["lpa_sel"] = set()
+    if "lpa_confirmar_lote" not in st.session_state:
+        st.session_state["lpa_confirmar_lote"] = False
 
+    sel: set = st.session_state["lpa_sel"]
+    # Remove IDs que não existem mais (após exclusão anterior)
+    sel &= set(todos_ids)
+
+    # ── Barra de controle (selecionar todos + botão lixeira) ──────────────────
+    st.markdown("<hr style='margin:4px 0 8px;border-color:#E2E8F0;'>", unsafe_allow_html=True)
+
+    bar_l, bar_m, bar_r = st.columns([2, 4, 2])
+
+    todos_marcados = (len(sel) == total and total > 0)
+    marcar_todos = bar_l.checkbox(
+        f"Selecionar todos ({total})",
+        value=todos_marcados,
+        key="lpa_chk_todos",
+    )
+    if marcar_todos and not todos_marcados:
+        st.session_state["lpa_sel"] = set(todos_ids)
+        st.session_state["lpa_confirmar_lote"] = False
+        st.rerun()
+    elif not marcar_todos and todos_marcados:
+        st.session_state["lpa_sel"] = set()
+        st.session_state["lpa_confirmar_lote"] = False
+        st.rerun()
+
+    bar_m.caption(f"**{total}** registro(s) · **{turma}** · {data}"
+                  + (f" · **{len(sel)} selecionado(s)**" if sel else ""))
+
+    n_sel = len(sel)
+    if n_sel > 0:
+        if bar_r.button(
+            f"🗑️ Excluir {n_sel} selecionado(s)",
+            type="secondary",
+            use_container_width=True,
+            key="lpa_btn_del_lote",
+        ):
+            st.session_state["lpa_confirmar_lote"] = True
+            st.rerun()
+
+    # ── Confirmação de exclusão em lote ───────────────────────────────────────
+    if st.session_state.get("lpa_confirmar_lote") and n_sel > 0:
+        st.warning(
+            f"⚠️ Você está prestes a excluir **{n_sel}** registro(s) permanentemente. "
+            "Esta ação não pode ser desfeita.",
+            icon="🚨",
+        )
+        c_ok, c_no = st.columns(2)
+        if c_ok.button("✅ Confirmar exclusão", type="primary",
+                       use_container_width=True, key="lpa_lote_ok"):
+            ids_del = list(sel)
+            qtd, erros = deletar_registros_pa_lote(ids_del)
+            st.session_state["lpa_sel"] = set()
+            st.session_state["lpa_confirmar_lote"] = False
+            if erros:
+                st.error(f"Erro ao excluir {len(erros)} registro(s): {erros[0]}")
+            else:
+                st.success(f"✅ {qtd} registro(s) excluído(s) com sucesso.")
+            st.rerun()
+        if c_no.button("❌ Cancelar", use_container_width=True, key="lpa_lote_nao"):
+            st.session_state["lpa_confirmar_lote"] = False
+            st.rerun()
+
+    st.markdown("<hr style='margin:6px 0 8px;border-color:#E2E8F0;'>", unsafe_allow_html=True)
+
+    # ── Lista de registros com checkbox ───────────────────────────────────────
     for idx, r in enumerate(registros):
-        rid   = r.get("id", "")
+        rid   = str(r.get("id", ""))
         nome  = r.get("aluno_nome") or "Aluno"
         sis   = r.get("sistolica", 0)
         dia   = r.get("diastolica", 0)
@@ -329,33 +398,36 @@ def _mostrar_historico_turma(turma, data):
         lbl, cor, bg = _CLS.get(cls_k, ("—", "#64748B", "#F8FAFC"))
         pul_txt = f" · Pulso: <strong>{pul}</strong> bpm" if pul else ""
 
-        # Linha: conteúdo + botão de exclusão
-        c_info, c_del = st.columns([11, 1])
+        c_chk, c_info = st.columns([0.5, 11])
 
+        marcado = c_chk.checkbox(
+            "sel",
+            value=(rid in sel),
+            key=f"lpa_chk_{idx}",
+            label_visibility="collapsed",
+        )
+        if marcado and rid not in sel:
+            st.session_state["lpa_sel"].add(rid)
+            st.session_state["lpa_confirmar_lote"] = False
+            st.rerun()
+        elif not marcado and rid in sel:
+            st.session_state["lpa_sel"].discard(rid)
+            st.session_state["lpa_confirmar_lote"] = False
+            st.rerun()
+
+        # Destaca linha se selecionada
+        borda_sel = "3px solid #1D4ED8" if rid in sel else f"4px solid {cor}"
+        opacidade = "1.0" if rid in sel else "1.0"
         c_info.markdown(
-            f"<div class='lpa-hist-row' style='border-left:4px solid {cor};background:{bg};margin:0;'>"
-            f"<span style='font-weight:700;color:#0F172A;min-width:180px;display:inline-block;'>{nome}</span>"
+            f"<div class='lpa-hist-row' style='border-left:{borda_sel};"
+            f"background:{bg};margin:0;opacity:{opacidade};'>"
+            f"<span style='font-weight:700;color:#0F172A;min-width:180px;"
+            f"display:inline-block;'>{nome}</span>"
             f"<span style='color:#475569;font-size:13px;'>"
             f"<strong>{sis}/{dia}</strong> mmHg{pul_txt}"
             f"{'&nbsp;·&nbsp;'+hora if hora else ''}</span>"
-            f"&nbsp;&nbsp;<span style='color:{cor};font-weight:800;font-size:12px;white-space:nowrap;'>{lbl}</span>"
+            f"&nbsp;&nbsp;<span style='color:{cor};font-weight:800;"
+            f"font-size:12px;white-space:nowrap;'>{lbl}</span>"
             f"</div>",
             unsafe_allow_html=True,
         )
-
-        # Botão de exclusão ou confirmação
-        if st.session_state["lpa_confirmar_del"] == rid:
-            # Linha de confirmação
-            cc1, cc2 = c_del.columns(2)
-            if cc1.button("✅", key=f"lpa_del_ok_{idx}", help="Confirmar exclusão"):
-                deletar_registro_pa(rid)
-                st.session_state["lpa_confirmar_del"] = None
-                st.rerun()
-            if cc2.button("❌", key=f"lpa_del_nao_{idx}", help="Cancelar"):
-                st.session_state["lpa_confirmar_del"] = None
-                st.rerun()
-        else:
-            if c_del.button("🗑️", key=f"lpa_del_{idx}",
-                            help=f"Excluir registro de {nome}"):
-                st.session_state["lpa_confirmar_del"] = rid
-                st.rerun()

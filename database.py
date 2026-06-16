@@ -2834,6 +2834,21 @@ def deletar_registro_pa(registro_id: str) -> tuple:
         return False, str(e)
 
 
+def deletar_registros_pa_lote(ids: list[str]) -> tuple[int, list[str]]:
+    """Remove uma lista de registros de PA em lote.
+
+    Retorna (qtd_deletados, lista_de_erros).
+    """
+    deletados, erros = 0, []
+    for rid in ids:
+        try:
+            supabase.table("registros_pa").delete().eq("id", rid).execute()
+            deletados += 1
+        except Exception as e:
+            erros.append(str(e))
+    return deletados, erros
+
+
 def get_registros_pa_turma(turma: str, data: str) -> list:
     """Retorna todos os registros de PA de uma turma numa data específica."""
     try:
