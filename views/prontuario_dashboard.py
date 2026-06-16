@@ -965,10 +965,15 @@ def renderizar_dashboard():
                     "<div class='linha-divisoria'></div>", unsafe_allow_html=True
                 )
 
-    # --- ABA: PRESSÃO ARTERIAL (LOTE) ---
+    # --- ABA: PRESSÃO ARTERIAL ---
     with tab_pa:
-        from views.relatorio_pa_lote_view import tela_relatorio_pa_lote
-        tela_relatorio_pa_lote()
+        _pa_subtabs = st.tabs(["📲 Lançar Digitalmente", "🖨️ Formulário em Papel"])
+        with _pa_subtabs[0]:
+            from views.lancamento_pa_lote_view import tela_lancamento_pa_digital
+            tela_lancamento_pa_digital()
+        with _pa_subtabs[1]:
+            from views.relatorio_pa_lote_view import tela_relatorio_pa_lote
+            tela_relatorio_pa_lote()
 
     st.markdown("<br>", unsafe_allow_html=True)
     if st.button("🔄 Sincronizar Base de Dados", use_container_width=True):

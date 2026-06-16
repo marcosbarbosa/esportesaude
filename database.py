@@ -2736,3 +2736,107 @@ def excluir_usuario_sistema(uid: str, email_session: str):
         return True, "✅ Usuário excluído permanentemente."
     except Exception as e:
         return False, str(e)
+
+
+# ==============================================================================
+# 🩺 REGISTROS DE PRESSÃO ARTERIAL
+# ==============================================================================
+SQL_CRIAR_REGISTROS_PA = """-- Execute no Supabase → SQL Editor para habilitar lançamento digital de PA:
+CREATE TABLE IF NOT EXISTS registros_pa (
+    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    aluno_id        UUID REFERENCES alunos(id) ON DELETE CASCADE,
+    aluno_nome      TEXT,
+    data            DATE NOT NULL,
+    hora            TEXT,
+    sistolica       INTEGER NOT NULL,
+    diastolica      INTEGER NOT NULL,
+    pulso           INTEGER,
+    momento         TEXT DEFAULT 'Antes da aula',
+    braco           TEXT DEFAULT 'Esquerdo',
+    posicao         TEXT DEFAULT 'Sentado',
+    repeticao       TEXT DEFAULT '1ª aferição',
+    exercicio_antes BOOLEAN DEFAULT FALSE,
+    estimulantes    BOOLEAN DEFAULT FALSE,
+    sintomas        JSONB DEFAULT '[]',
+    obs             TEXT,
+    turma           TEXT,
+    professor       TEXT,
+    registrado_por  TEXT,
+    classificacao   TEXT,
+    criado_em       TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_registros_pa_aluno ON registros_pa(aluno_id);
+CREATE INDEX IF NOT EXISTS idx_registros_pa_data  ON registros_pa(data DESC);
+"""
+
+
+def _tabela_pa_existe() -> bool:
+    """Verifica se a tabela registros_pa existe no Supabase."""
+    try:
+        supabase.table("registros_pa").select("id").limit(1).execute()
+        return True
+    except Exception:
+        return False
+
+
+def salvar_registro_pa(payload: dict) -> tuple:
+    """Insere um registro de PA. Retorna (bool, msg)."""
+    try:
+        import uuid as _uuid
+        payload.setdefault("id", str(_uuid.uuid4()))
+        supabase.table("registros_pa").insert(payload).execute()
+        return True, "ok"
+    except Exception as e:
+        return False, str(e)
+
+
+def atualizar_registro_pa(registro_id: str, payload: dict) -> tuple:
+    """Atualiza um registro de PA existente. Retorna (bool, msg)."""
+    try:
+        p = {k: v for k, v in payload.items() if k != "id"}
+        supabase.table("registros_pa").update(p).eq("id", registro_id).execute()
+        return True, "ok"
+    except Exception as e:
+        return False, str(e)
+
+
+def get_registros_pa(aluno_id: str, limit: int = 100) -> list:
+    """Retorna histórico de PA de um aluno, do mais recente para o mais antigo."""
+    try:
+        r = (
+            supabase.table("registros_pa")
+            .select("*")
+            .eq("aluno_id", aluno_id)
+            .order("data", desc=True)
+            .order("criado_em", desc=True)
+            .limit(limit)
+            .execute()
+        )
+        return r.data or []
+    except Exception:
+        return []
+
+
+def deletar_registro_pa(registro_id: str) -> tuple:
+    """Remove permanentemente um registro de PA. Retorna (bool, msg)."""
+    try:
+        supabase.table("registros_pa").delete().eq("id", registro_id).execute()
+        return True, "ok"
+    except Exception as e:
+        return False, str(e)
+
+
+def get_registros_pa_turma(turma: str, data: str) -> list:
+    """Retorna todos os registros de PA de uma turma numa data específica."""
+    try:
+        r = (
+            supabase.table("registros_pa")
+            .select("*")
+            .eq("turma", turma)
+            .eq("data", data)
+            .order("aluno_nome")
+            .execute()
+        )
+        return r.data or []
+    except Exception:
+        return []

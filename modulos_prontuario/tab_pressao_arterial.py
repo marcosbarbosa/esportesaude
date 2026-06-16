@@ -9,6 +9,16 @@ import pandas as pd
 import datetime
 import uuid
 
+try:
+    from database import (
+        salvar_registro_pa, atualizar_registro_pa,
+        get_registros_pa, deletar_registro_pa,
+        _tabela_pa_existe, SQL_CRIAR_REGISTROS_PA,
+    )
+    _DB_PA_OK = True
+except Exception:
+    _DB_PA_OK = False
+
 
 # ──────────────────────────────────────────────────────────────────────────────
 # CLASSIFICAÇÃO / LÓGICA CLÍNICA
@@ -75,73 +85,64 @@ def avaliar_conduta(classificacao, sintomas):
     return _CONDUTA.get(classificacao, ("—", "#374151", "#F9FAFB"))
 
 
-# ──────────────────────────────────────────────────────────────────────────────
-# DADOS MOCK (sessão — substituir por Supabase quando tabela existir)
-# ──────────────────────────────────────────────────────────────────────────────
-_MOCK = [
-    {"id": "m1", "data": "2026-06-01", "hora": "08:30", "sistolica": 125, "diastolica": 79,
-     "pulso": 72, "momento": "Antes da aula", "sintomas": ["Sem sintomas"],
-     "braco": "Esquerdo", "posicao": "Sentado", "repeticao": "1ª aferição",
-     "exercicio_antes": False, "estimulantes": False,
-     "obs": "Paciente em bom estado geral.", "profissional": "Prof. Marcos",
-     "classificacao": "elevada"},
-    {"id": "m2", "data": "2026-05-15", "hora": "09:00", "sistolica": 118, "diastolica": 76,
-     "pulso": 68, "momento": "Antes da aula", "sintomas": ["Sem sintomas"],
-     "braco": "Esquerdo", "posicao": "Sentado", "repeticao": "1ª aferição",
-     "exercicio_antes": False, "estimulantes": False,
-     "obs": "Pressão excelente.", "profissional": "Prof. Marcos",
-     "classificacao": "normal"},
-    {"id": "m3", "data": "2026-04-10", "hora": "10:15", "sistolica": 138, "diastolica": 87,
-     "pulso": 80, "momento": "Depois da aula", "sintomas": ["Tontura"],
-     "braco": "Direito", "posicao": "Sentado", "repeticao": "2ª aferição",
-     "exercicio_antes": True, "estimulantes": False,
-     "obs": "Aluno referiu tontura leve após aula.", "profissional": "Prof. Ana",
-     "classificacao": "estagio1"},
-    {"id": "m4", "data": "2026-03-22", "hora": "08:45", "sistolica": 145, "diastolica": 92,
-     "pulso": 88, "momento": "Em repouso", "sintomas": ["Dor de cabeça"],
-     "braco": "Esquerdo", "posicao": "Sentado", "repeticao": "1ª aferição",
-     "exercicio_antes": False, "estimulantes": True,
-     "obs": "Tomou café antes. Repetir na próxima aula.", "profissional": "Prof. Marcos",
-     "classificacao": "estagio2"},
-    {"id": "m5", "data": "2026-02-05", "hora": "07:55", "sistolica": 116, "diastolica": 74,
-     "pulso": 65, "momento": "Antes da aula", "sintomas": ["Sem sintomas"],
-     "braco": "Esquerdo", "posicao": "Sentado", "repeticao": "1ª aferição",
-     "exercicio_antes": False, "estimulantes": False,
-     "obs": "", "profissional": "Prof. Marcos",
-     "classificacao": "normal"},
-]
-
 
 def _chave(aluno_id, sufixo):
     return f"pa_{sufixo}_{aluno_id}"
 
 
 def _init_historico(aluno_id):
+    """Carrega histórico do Supabase; fallback para lista vazia se DB indisponível."""
     k = _chave(aluno_id, "hist")
     if k not in st.session_state:
-        st.session_state[k] = list(_MOCK)
+        if _DB_PA_OK:
+            try:
+                st.session_state[k] = get_registros_pa(aluno_id)
+            except Exception:
+                st.session_state[k] = []
+        else:
+            st.session_state[k] = []
 
 
 def salvar_registro(aluno_id, dados):
     k = _chave(aluno_id, "hist")
-    _init_historico(aluno_id)
-    st.session_state[k].insert(0, dados)
+    dados["aluno_nome"] = st.session_state.get(f"pa_nome_{aluno_id}", "")
+    if _DB_PA_OK:
+        dados["aluno_id"] = aluno_id
+        dados.setdefault("id", str(uuid.uuid4()))
+        ok, msg = salvar_registro_pa(dados)
+        if not ok:
+            st.error(f"Erro ao salvar no banco: {msg}")
+            return
+        st.session_state.pop(k, None)
+    else:
+        _init_historico(aluno_id)
+        st.session_state[k].insert(0, dados)
 
 
 def editar_registro(aluno_id, registro_id, dados):
     k = _chave(aluno_id, "hist")
-    _init_historico(aluno_id)
-    for i, r in enumerate(st.session_state[k]):
-        if r["id"] == registro_id:
-            st.session_state[k][i] = {**r, **dados}
-            break
+    if _DB_PA_OK:
+        ok, msg = atualizar_registro_pa(registro_id, dados)
+        if not ok:
+            st.error(f"Erro ao atualizar: {msg}")
+            return
+        st.session_state.pop(k, None)
+    else:
+        _init_historico(aluno_id)
+        for i, r in enumerate(st.session_state[k]):
+            if r["id"] == registro_id:
+                st.session_state[k][i] = {**r, **dados}
+                break
 
 
 def excluir_registro(aluno_id, registro_id):
     k = _chave(aluno_id, "hist")
-    _init_historico(aluno_id)
-    st.session_state[k] = [r for r in st.session_state[k] if r["id"] != registro_id]
-
+    if _DB_PA_OK:
+        deletar_registro_pa(registro_id)
+        st.session_state.pop(k, None)
+    else:
+        _init_historico(aluno_id)
+        st.session_state[k] = [r for r in st.session_state[k] if r["id"] != registro_id]
 
 def filtrar_historico(registros, periodo_ini, periodo_fim, cls_filtro, momento_filtro):
     res = registros
@@ -674,6 +675,18 @@ def renderizar_aba_pressao_arterial(aluno, email_usuario=""):
 
     aluno_id  = str(aluno.get("id", "demo"))
     nome      = aluno.get("nome", "Aluno")
+
+    # Armazena nome para uso interno em salvar_registro
+    st.session_state[f"pa_nome_{aluno_id}"] = nome
+
+    # Verificar disponibilidade do banco
+    if not _DB_PA_OK:
+        st.warning("⚠️ Banco de dados indisponível. Os registros serão perdidos ao encerrar a sessão.")
+    elif not _tabela_pa_existe():
+        st.error("⚠️ Tabela `registros_pa` ainda não existe no banco de dados.")
+        with st.expander("🛠️ SQL para criar — copie e execute no Supabase SQL Editor", expanded=True):
+            st.code(SQL_CRIAR_REGISTROS_PA, language="sql")
+        return
 
     _init_historico(aluno_id)
 
