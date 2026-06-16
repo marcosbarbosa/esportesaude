@@ -13,6 +13,7 @@ from database import (
     get_todas_turmas,
     salvar_registro_pa,
     get_registros_pa_turma,
+    deletar_registro_pa,
     _tabela_pa_existe,
     SQL_CRIAR_REGISTROS_PA,
     SQL_CORRIGIR_RLS_PA,
@@ -74,9 +75,31 @@ _CSS = """
     padding: 8px 12px; border-radius: 6px; margin: 3px 0;
 }
 .lpa-hist-row {
-    background: #F8FAFC; border: 1px solid #E2E8F0;
+    border: 1px solid #E2E8F0;
     border-radius: 8px; padding: 8px 14px; margin: 4px 0;
     display: flex; justify-content: space-between; align-items: center;
+}
+
+/* ── GRADE — linhas alternadas (tema claro) ──────────────────────────────── */
+[data-testid="stForm"] [data-testid="stHorizontalBlock"]:nth-child(odd) {
+    background: rgba(219,234,254,0.38) !important;
+    border-radius: 6px !important;
+}
+[data-testid="stForm"] [data-testid="stHorizontalBlock"]:nth-child(even) {
+    background: rgba(248,250,252,0.70) !important;
+    border-radius: 6px !important;
+}
+
+/* ── GRADE — linhas alternadas (tema escuro) ─────────────────────────────── */
+[data-testid="stApp"][data-theme="dark"]
+[data-testid="stForm"] [data-testid="stHorizontalBlock"]:nth-child(odd) {
+    background: rgba(99,132,199,0.15) !important;
+    border-radius: 6px !important;
+}
+[data-testid="stApp"][data-theme="dark"]
+[data-testid="stForm"] [data-testid="stHorizontalBlock"]:nth-child(even) {
+    background: rgba(255,255,255,0.04) !important;
+    border-radius: 6px !important;
 }
 </style>
 """
@@ -273,14 +296,14 @@ def tela_lancamento_pa_digital():
 
 
 def _mostrar_historico_turma(turma, data):
-    """Exibe registros de PA já lançados para esta turma e data."""
+    """Exibe registros de PA já lançados para esta turma e data, com botão de exclusão."""
     if not turma or not data:
         return
 
     col_tit, col_ref = st.columns([5, 1])
     col_tit.markdown("#### 📊 Registros Desta Sessão")
     if col_ref.button("🔄", key="lpa_refresh_hist", help="Atualizar histórico"):
-        pass  # rerun natural ao clicar
+        st.rerun()
 
     registros = get_registros_pa_turma(turma, data)
 
@@ -291,7 +314,12 @@ def _mostrar_historico_turma(turma, data):
     st.caption(f"**{len(registros)}** registro(s) · **{turma}** · {data}")
     st.markdown("<hr style='margin:4px 0 10px;border-color:#E2E8F0;'>", unsafe_allow_html=True)
 
-    for r in registros:
+    # Controle de confirmação de exclusão
+    if "lpa_confirmar_del" not in st.session_state:
+        st.session_state["lpa_confirmar_del"] = None
+
+    for idx, r in enumerate(registros):
+        rid   = r.get("id", "")
         nome  = r.get("aluno_nome") or "Aluno"
         sis   = r.get("sistolica", 0)
         dia   = r.get("diastolica", 0)
@@ -301,13 +329,33 @@ def _mostrar_historico_turma(turma, data):
         lbl, cor, bg = _CLS.get(cls_k, ("—", "#64748B", "#F8FAFC"))
         pul_txt = f" · Pulso: <strong>{pul}</strong> bpm" if pul else ""
 
-        st.markdown(
-            f"<div class='lpa-hist-row' style='border-left:4px solid {cor};background:{bg};'>"
-            f"<span style='font-weight:700;color:#0F172A;min-width:200px;'>{nome}</span>"
+        # Linha: conteúdo + botão de exclusão
+        c_info, c_del = st.columns([11, 1])
+
+        c_info.markdown(
+            f"<div class='lpa-hist-row' style='border-left:4px solid {cor};background:{bg};margin:0;'>"
+            f"<span style='font-weight:700;color:#0F172A;min-width:180px;display:inline-block;'>{nome}</span>"
             f"<span style='color:#475569;font-size:13px;'>"
             f"<strong>{sis}/{dia}</strong> mmHg{pul_txt}"
             f"{'&nbsp;·&nbsp;'+hora if hora else ''}</span>"
-            f"<span style='color:{cor};font-weight:800;font-size:12px;white-space:nowrap;'>{lbl}</span>"
+            f"&nbsp;&nbsp;<span style='color:{cor};font-weight:800;font-size:12px;white-space:nowrap;'>{lbl}</span>"
             f"</div>",
             unsafe_allow_html=True,
         )
+
+        # Botão de exclusão ou confirmação
+        if st.session_state["lpa_confirmar_del"] == rid:
+            # Linha de confirmação
+            cc1, cc2 = c_del.columns(2)
+            if cc1.button("✅", key=f"lpa_del_ok_{idx}", help="Confirmar exclusão"):
+                deletar_registro_pa(rid)
+                st.session_state["lpa_confirmar_del"] = None
+                st.rerun()
+            if cc2.button("❌", key=f"lpa_del_nao_{idx}", help="Cancelar"):
+                st.session_state["lpa_confirmar_del"] = None
+                st.rerun()
+        else:
+            if c_del.button("🗑️", key=f"lpa_del_{idx}",
+                            help=f"Excluir registro de {nome}"):
+                st.session_state["lpa_confirmar_del"] = rid
+                st.rerun()
