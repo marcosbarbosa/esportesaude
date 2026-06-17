@@ -2023,7 +2023,7 @@ if st.session_state.menu_atual == "Principal":
 
             _sort_btn(_h1, "Nome",              "nome")
             _sort_btn(_h2, "Turma",             "turma")
-            _sort_btn(_h3, "🏅 Total Pres.",    "total_presencas_hist")
+            _sort_btn(_h3, "📅 Freq. 60d",      "total_presencas_hist")
             _sort_btn(_h4, "⏱ Última Pres.",    "ultima_presenca")
             _sort_btn(_h5, "🏥 Venc. Atestado", "data_vencimento_atestado")
             _sort_btn(_h5b, "🩸 Últ. PA",       "_pa_sis")
@@ -2117,13 +2117,13 @@ if st.session_state.menu_atual == "Principal":
                         unsafe_allow_html=True,
                     )
 
-                    # Total histórico de presenças
+                    # Frequências nos últimos 60 dias
                     _tp_hist = int(_r.get("total_presencas_hist", 0))
-                    _tp_cor  = "#10B981" if _tp_hist >= 50 else ("#F59E0B" if _tp_hist >= 10 else "#94A3B8")
+                    _tp_cor  = "#10B981" if _tp_hist >= 8 else ("#F59E0B" if _tp_hist >= 3 else "#EF4444")
                     _cd.markdown(
                         f"<div style='text-align:center;'>"
                         f"<span style='font-size:18px;font-weight:900;color:{_tp_cor};'>{_tp_hist}</span>"
-                        f"<br><span style='font-size:9px;color:#94A3B8;'>visitas</span>"
+                        f"<br><span style='font-size:9px;color:#94A3B8;'>freq. 60d</span>"
                         f"</div>",
                         unsafe_allow_html=True,
                     )

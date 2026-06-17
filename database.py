@@ -1413,12 +1413,15 @@ def load_frequencia_ultima_presenca():
 
 @st.cache_data(ttl=300, show_spinner=False)
 def load_total_presencas_todos():
-    """Retorna DataFrame [id, total_presencas_hist] — total de presenças por aluno desde o início."""
+    """Retorna DataFrame [id, total_presencas_hist] — total de presenças por aluno nos últimos 60 dias."""
+    import datetime as _dt
     try:
+        _corte = (_dt.date.today() - _dt.timedelta(days=60)).isoformat()
         res = (
             supabase.from_("frequencia")
             .select("aluno_id")
             .eq("status", "PRESENTE")
+            .gte("data_aula", _corte)
             .limit(200000)
             .execute()
         )
