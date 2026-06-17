@@ -2122,7 +2122,7 @@ if st.session_state.menu_atual == "Principal":
                     # Turma
                     _turma_v = str(_r.get("turma") or "—").strip() or "—"
                     _cc.markdown(
-                        f"<span style='font-size:12px;color:#475569;'>{_turma_v}</span>",
+                        f"<span style='font-size:14px;font-weight:600;color:#475569;'>{_turma_v}</span>",
                         unsafe_allow_html=True,
                     )
 
