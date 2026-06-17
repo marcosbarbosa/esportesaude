@@ -2834,6 +2834,37 @@ def deletar_registro_pa(registro_id: str) -> tuple:
         return False, str(e)
 
 
+@st.cache_data(ttl=120, show_spinner=False)
+def get_ultima_pa_todos() -> dict:
+    """Retorna a última medição de PA registrada para cada aluno.
+
+    Retorna dict {aluno_id: {"sis": int, "dia": int, "pul": int|None, "cls": str, "data": str}}
+    """
+    try:
+        r = (
+            supabase.table("registros_pa")
+            .select("aluno_id, sistolica, diastolica, pulso, classificacao, data, hora")
+            .order("data", desc=True)
+            .order("hora", desc=True)
+            .limit(5000)
+            .execute()
+        )
+        resultado: dict = {}
+        for rec in (r.data or []):
+            aid = rec.get("aluno_id")
+            if aid and aid not in resultado:
+                resultado[aid] = {
+                    "sis":  rec.get("sistolica"),
+                    "dia":  rec.get("diastolica"),
+                    "pul":  rec.get("pulso"),
+                    "cls":  rec.get("classificacao") or "",
+                    "data": rec.get("data") or "",
+                }
+        return resultado
+    except Exception:
+        return {}
+
+
 def deletar_registros_pa_lote(ids: list[str]) -> tuple[int, list[str]]:
     """Remove uma lista de registros de PA em lote.
 

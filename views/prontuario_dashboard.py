@@ -27,10 +27,130 @@ from database import (
     cadastrar_novo_aluno,
     get_todas_turmas,
     alterar_status_aluno,
+    get_ultima_pa_todos,
     supabase,
 )
 from utils.texto import normalizar_fonetica
 from utils.busca_aluno import filtrar_alunos_df, busca_com_sugestoes
+
+
+# ==============================================================================
+# 🛠️ HELPERS — PA compacta + PDF da lista
+# ==============================================================================
+
+_PA_ABBR = {
+    "normal":   "Norm",
+    "elevada":  "Elev",
+    "estagio1": "Estg1",
+    "estagio2": "Estg2",
+    "crise":    "Crise",
+}
+_PA_COR = {
+    "normal":   "#1565C0",
+    "elevada":  "#F57F17",
+    "estagio1": "#E64A19",
+    "estagio2": "#B71C1C",
+    "crise":    "#7F0000",
+}
+
+
+def _pa_compact_html(sis, dia, pul, cls_k: str) -> str:
+    """Retorna HTML compacto para exibição de PA na coluna do grid."""
+    if not sis or not dia or int(sis) <= 0:
+        return "<span style='color:#CBD5E1;font-size:12px;'>—</span>"
+    abbr = _PA_ABBR.get(cls_k, "")
+    cor  = _PA_COR.get(cls_k, "#475569")
+    pul_txt = f" ❤{int(pul)}" if pul else ""
+    return (
+        f"<div style='font-size:12px;font-weight:700;color:{cor};line-height:1.3;'>"
+        f"{sis}/{dia}{pul_txt}<br>"
+        f"<span style='font-size:10px;'>{abbr}</span>"
+        f"</div>"
+    )
+
+
+def _pa_compact_txt(sis, dia, pul, cls_k: str) -> str:
+    """Retorna texto plano compacto para PDF e sort."""
+    if not sis or not dia or int(sis) <= 0:
+        return "—"
+    abbr = _PA_ABBR.get(cls_k, "")
+    pul_txt = f" b{int(pul)}" if pul else ""
+    return f"{sis}/{dia}{pul_txt} {abbr}".strip()
+
+
+def _gerar_pdf_lista(df: pd.DataFrame, label_periodo: str) -> bytes:
+    """Gera PDF tabular da lista de alunos respeitando a ordenação atual."""
+    from fpdf import FPDF
+
+    class _PDF(FPDF):
+        def header(self):
+            self.set_font("Helvetica", "B", 12)
+            self.cell(0, 7, "IMBRA — Lista de Alunos", align="C",
+                      new_x="LMARGIN", new_y="NEXT")
+            self.set_font("Helvetica", "", 8)
+            self.cell(
+                0, 5,
+                f"Período: {label_periodo}  ·  Gerado em: "
+                f"{datetime.date.today().strftime('%d/%m/%Y')}  ·  "
+                f"Total: {len(df)} aluno(s)",
+                align="C", new_x="LMARGIN", new_y="NEXT",
+            )
+            self.ln(2)
+
+        def footer(self):
+            self.set_y(-13)
+            self.set_font("Helvetica", "I", 7)
+            self.cell(0, 8, f"Pág. {self.page_no()}", align="C")
+
+    pdf = _PDF(orientation="L", unit="mm", format="A4")
+    pdf.add_page()
+    pdf.set_auto_page_break(True, margin=14)
+
+    hdrs   = ["#", "Nome", "Turma", "Nasc.", "Aulas", "Pres.", "Taxa%", "Últ. PA"]
+    widths = [8,   65,    32,     22,      13,      13,      16,      60]
+
+    # Cabeçalho
+    pdf.set_font("Helvetica", "B", 8)
+    pdf.set_fill_color(30, 77, 216)
+    pdf.set_text_color(255, 255, 255)
+    for w, h in zip(widths, hdrs):
+        pdf.cell(w, 6, h, border=0, fill=True)
+    pdf.ln()
+
+    pdf.set_font("Helvetica", "", 8)
+    pdf.set_text_color(15, 23, 42)
+
+    for i, (_, a) in enumerate(df.iterrows()):
+        if i % 2 == 0:
+            pdf.set_fill_color(239, 246, 255)
+        else:
+            pdf.set_fill_color(255, 255, 255)
+
+        _dn = a.get("data_nascimento")
+        try:
+            dn_fmt = pd.to_datetime(_dn).strftime("%d/%m/%Y") if pd.notna(_dn) and _dn else "—"
+        except Exception:
+            dn_fmt = "—"
+
+        _aulas = int(a.get("total_aulas", 0))
+        taxa_txt = f"{float(a.get('taxa_presenca', 0)):.1f}%" if _aulas > 0 else "—"
+        pa_txt   = str(a.get("_pa_txt", "") or "—")[:28]
+
+        vals = [
+            str(i + 1),
+            str(a.get("nome", ""))[:36],
+            str(a.get("turma", ""))[:18],
+            dn_fmt,
+            str(int(a.get("total_aulas", 0))),
+            str(int(a.get("total_presencas", 0))),
+            taxa_txt,
+            pa_txt,
+        ]
+        for w, v in zip(widths, vals):
+            pdf.cell(w, 5, v, border=0, fill=True)
+        pdf.ln()
+
+    return bytes(pdf.output())
 
 
 # ==============================================================================
@@ -671,10 +791,29 @@ def renderizar_dashboard():
             index=df_base_periodo.index
         )
 
+        # ── Dados de PA (última medição por aluno) ────────────────────────────
+        _pa_dict = get_ultima_pa_todos()
+        def _pa_row(row):
+            pa = _pa_dict.get(str(row.get("id", "")), {})
+            sis = pa.get("sis") or 0
+            dia = pa.get("dia") or 0
+            pul = pa.get("pul")
+            cls = pa.get("cls", "")
+            return pd.Series({
+                "_pa_sis":  int(sis) if sis else 0,
+                "_pa_txt":  _pa_compact_txt(sis, dia, pul, cls),
+                "_pa_html": _pa_compact_html(sis, dia, pul, cls),
+                "_pa_cls":  cls,
+                "_pa_pul":  int(pul) if pul else 0,
+            })
+        df_base_periodo = pd.concat(
+            [df_base_periodo, df_base_periodo.apply(_pa_row, axis=1)], axis=1
+        )
+
         st.markdown("<hr style='margin:8px 0 4px 0;border-color:#E2E8F0;'/>", unsafe_allow_html=True)
 
         # Controles Superiores
-        c_busca, c_pag = st.columns([4, 1], vertical_alignment="bottom")
+        c_busca, c_imp, c_pag = st.columns([4, 1, 1], vertical_alignment="bottom")
 
         # 🚀 BUSCA COM SUGESTÕES EM TEMPO REAL
         with c_busca:
@@ -701,8 +840,29 @@ def renderizar_dashboard():
             df_grid["_sort_dn"] = pd.to_datetime(df_grid["data_nascimento"], errors="coerce")
             df_grid = df_grid.sort_values("_sort_dn", ascending=_sasc, na_position="last")
             df_grid = df_grid.drop(columns=["_sort_dn"])
+        elif _scol == "_pa_sis":
+            df_grid = df_grid.sort_values("_pa_sis", ascending=_sasc, na_position="last")
         else:
             df_grid = df_grid.sort_values(_scol, ascending=_sasc, na_position="last")
+
+        # ── Botão de impressão PDF (lista com ordenação atual) ────────────────
+        _pdf_lista_key = "pdf_lista_grid"
+        if st.session_state.get(_pdf_lista_key):
+            c_imp.download_button(
+                "📥 PDF",
+                data=st.session_state[_pdf_lista_key],
+                file_name=f"Lista_Alunos_{label_periodo.replace(' ', '_')}.pdf",
+                mime="application/pdf",
+                key="dl_lista_pdf",
+                type="primary",
+                use_container_width=True,
+            )
+        else:
+            if c_imp.button("🖨️ Imprimir", key="btn_imp_lista",
+                            use_container_width=True, help="Gerar PDF da lista com a ordenação atual"):
+                with st.spinner("Gerando PDF…"):
+                    st.session_state[_pdf_lista_key] = _gerar_pdf_lista(df_grid, label_periodo)
+                st.rerun()
 
         # Paginação
         itens_por_pagina = 15
@@ -740,18 +900,20 @@ def renderizar_dashboard():
         )
         with st.container():
             st.markdown("<div class='sort-header'>", unsafe_allow_html=True)
-            gh0, gh1, gh2, gh3, gh4, gh5 = st.columns([3.5, 0.9, 1, 1, 1.5, 2])
+            gh0, gh1, gh2, gh3, gh4, gh5, gh6 = st.columns([3, 0.8, 0.8, 0.8, 1.2, 1.5, 2])
             if gh0.button(f"Aluno / Turma{_sort_icon('nome')}", key="sh_nome", use_container_width=True):
                 _on_sort("nome"); st.rerun()
             if gh1.button(f"Nasc.{_sort_icon('data_nascimento')}", key="sh_nasc", use_container_width=True):
                 _on_sort("data_nascimento"); st.rerun()
-            if gh2.button(f"Aulas ({label_periodo}){_sort_icon('total_aulas')}", key="sh_aulas", use_container_width=True):
+            if gh2.button(f"Aulas{_sort_icon('total_aulas')}", key="sh_aulas", use_container_width=True):
                 _on_sort("total_aulas"); st.rerun()
-            if gh3.button(f"Pres. ({label_periodo}){_sort_icon('total_presencas')}", key="sh_pres", use_container_width=True):
+            if gh3.button(f"Pres.{_sort_icon('total_presencas')}", key="sh_pres", use_container_width=True):
                 _on_sort("total_presencas"); st.rerun()
-            if gh4.button(f"Taxa / Risco{_sort_icon('taxa_presenca')}", key="sh_taxa", use_container_width=True):
+            if gh4.button(f"Taxa/Risco{_sort_icon('taxa_presenca')}", key="sh_taxa", use_container_width=True):
                 _on_sort("taxa_presenca"); st.rerun()
-            gh5.markdown("<div style='text-align:center;font-weight:700;font-size:13px;padding:4px 2px;'>Ações</div>", unsafe_allow_html=True)
+            if gh5.button(f"Últ. PA{_sort_icon('_pa_sis')}", key="sh_pa", use_container_width=True):
+                _on_sort("_pa_sis"); st.rerun()
+            gh6.markdown("<div style='text-align:center;font-weight:700;font-size:13px;padding:4px 2px;'>Ações</div>", unsafe_allow_html=True)
             st.markdown("</div>", unsafe_allow_html=True)
         st.markdown("<hr style='margin:0 0 6px 0;border-color:#CBD5E1;'/>", unsafe_allow_html=True)
 
@@ -795,8 +957,8 @@ def renderizar_dashboard():
         else:
             # Renderização das Linhas do Grid
             for _, a in df_page.iterrows():
-                c1, c2, c3, c4, c5, c6 = st.columns(
-                    [3.5, 0.9, 1, 1, 1.5, 2], vertical_alignment="center"
+                c1, c2, c3, c4, c5, c6, c7 = st.columns(
+                    [3, 0.8, 0.8, 0.8, 1.2, 1.5, 2], vertical_alignment="center"
                 )
 
                 # Col 1: Foto + Nome e Turma (MÁGICA DO FLEXBOX)
@@ -870,8 +1032,14 @@ def renderizar_dashboard():
                     unsafe_allow_html=True,
                 )
 
-                # Col 6: Botões de Ação Direta
-                with c6:
+                # Col 6: Última PA compacta
+                c6.markdown(
+                    str(a.get("_pa_html", "<span style='color:#CBD5E1;font-size:12px;'>—</span>")),
+                    unsafe_allow_html=True,
+                )
+
+                # Col 7: Botões de Ação Direta
+                with c7:
                     st.markdown('<div class="btn-compact">', unsafe_allow_html=True)
                     cb1, cb2, cb3 = st.columns(3, gap="small")
 
