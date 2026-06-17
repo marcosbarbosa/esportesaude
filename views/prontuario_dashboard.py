@@ -82,17 +82,35 @@ def _gerar_pdf_lista(df: pd.DataFrame, label_periodo: str) -> bytes:
     """Gera PDF tabular da lista de alunos respeitando a ordenação atual."""
     from fpdf import FPDF
 
+    def _s(text: str) -> str:
+        """Sanitiza texto para Latin-1: substitui chars problemáticos e descarta o resto."""
+        return (
+            str(text)
+            .replace("\u2014", "-")    # em dash —
+            .replace("\u2013", "-")    # en dash –
+            .replace("\u2764", "")     # ❤
+            .replace("\u00b7", ".")    # · middle dot
+            .replace("\u2019", "'")   # ' right single quote
+            .replace("\u201c", '"')    # " left double quote
+            .replace("\u201d", '"')    # " right double quote
+            .encode("latin-1", errors="replace")
+            .decode("latin-1")
+        )
+
+    _label_pdf = _s(label_periodo)
+    _total_pdf = len(df)
+
     class _PDF(FPDF):
         def header(self):
             self.set_font("Helvetica", "B", 12)
-            self.cell(0, 7, "IMBRA — Lista de Alunos", align="C",
+            self.cell(0, 7, _s("IMBRA - Lista de Alunos"), align="C",
                       new_x="LMARGIN", new_y="NEXT")
             self.set_font("Helvetica", "", 8)
             self.cell(
                 0, 5,
-                f"Período: {label_periodo}  ·  Gerado em: "
-                f"{datetime.date.today().strftime('%d/%m/%Y')}  ·  "
-                f"Total: {len(df)} aluno(s)",
+                _s(f"Periodo: {_label_pdf}  |  Gerado em: "
+                   f"{datetime.date.today().strftime('%d/%m/%Y')}  |  "
+                   f"Total: {_total_pdf} aluno(s)"),
                 align="C", new_x="LMARGIN", new_y="NEXT",
             )
             self.ln(2)
@@ -100,13 +118,13 @@ def _gerar_pdf_lista(df: pd.DataFrame, label_periodo: str) -> bytes:
         def footer(self):
             self.set_y(-13)
             self.set_font("Helvetica", "I", 7)
-            self.cell(0, 8, f"Pág. {self.page_no()}", align="C")
+            self.cell(0, 8, _s(f"Pag. {self.page_no()}"), align="C")
 
     pdf = _PDF(orientation="L", unit="mm", format="A4")
     pdf.add_page()
     pdf.set_auto_page_break(True, margin=14)
 
-    hdrs   = ["#", "Nome", "Turma", "Nasc.", "Aulas", "Pres.", "Taxa%", "Últ. PA"]
+    hdrs   = ["#", "Nome", "Turma", "Nasc.", "Aulas", "Pres.", "Taxa%", "Ult. PA"]
     widths = [8,   65,    32,     22,      13,      13,      16,      60]
 
     # Cabeçalho
@@ -114,7 +132,7 @@ def _gerar_pdf_lista(df: pd.DataFrame, label_periodo: str) -> bytes:
     pdf.set_fill_color(30, 77, 216)
     pdf.set_text_color(255, 255, 255)
     for w, h in zip(widths, hdrs):
-        pdf.cell(w, 6, h, border=0, fill=True)
+        pdf.cell(w, 6, _s(h), border=0, fill=True)
     pdf.ln()
 
     pdf.set_font("Helvetica", "", 8)
@@ -128,13 +146,13 @@ def _gerar_pdf_lista(df: pd.DataFrame, label_periodo: str) -> bytes:
 
         _dn = a.get("data_nascimento")
         try:
-            dn_fmt = pd.to_datetime(_dn).strftime("%d/%m/%Y") if pd.notna(_dn) and _dn else "—"
+            dn_fmt = pd.to_datetime(_dn).strftime("%d/%m/%Y") if pd.notna(_dn) and _dn else "-"
         except Exception:
-            dn_fmt = "—"
+            dn_fmt = "-"
 
         _aulas = int(a.get("total_aulas", 0))
-        taxa_txt = f"{float(a.get('taxa_presenca', 0)):.1f}%" if _aulas > 0 else "—"
-        pa_txt   = str(a.get("_pa_txt", "") or "—")[:28]
+        taxa_txt = f"{float(a.get('taxa_presenca', 0)):.1f}%" if _aulas > 0 else "-"
+        pa_txt   = str(a.get("_pa_txt", "") or "-")[:28]
 
         vals = [
             str(i + 1),
@@ -147,7 +165,7 @@ def _gerar_pdf_lista(df: pd.DataFrame, label_periodo: str) -> bytes:
             pa_txt,
         ]
         for w, v in zip(widths, vals):
-            pdf.cell(w, 5, v, border=0, fill=True)
+            pdf.cell(w, 5, _s(v), border=0, fill=True)
         pdf.ln()
 
     return bytes(pdf.output())
