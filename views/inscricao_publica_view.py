@@ -450,10 +450,27 @@ def tela_inscricao_publica_move_right(modo_admin=False):
                         if modo_admin and turma_admin:
                             dados_inserir["turma"] = turma_admin
 
+                        def _tentar_inserir(dados: dict) -> None:
+                            """Tenta inserir; se falhar por coluna ausente, retira o campo e repete."""
+                            try:
+                                supabase.table("pre_cadastros").insert(dados).execute()
+                            except Exception as e1:
+                                err_str = str(e1)
+                                if "PGRST204" in err_str or "column" in err_str.lower():
+                                    for campo_opt in ("turma",):
+                                        if campo_opt in dados:
+                                            dados_sem = {k: v for k, v in dados.items() if k != campo_opt}
+                                            supabase.table("pre_cadastros").insert(dados_sem).execute()
+                                            st.warning(
+                                                f"⚠️ Campo '{campo_opt}' ainda não existe na tabela do Supabase "
+                                                f"— inscrição salva sem ele. Rode o SQL: "
+                                                f"`ALTER TABLE pre_cadastros ADD COLUMN IF NOT EXISTS {campo_opt} TEXT;`"
+                                            )
+                                            return
+                                raise
+
                         try:
-                            supabase.table("pre_cadastros").insert(
-                                dados_inserir
-                            ).execute()
+                            _tentar_inserir(dados_inserir)
 
                             disparar_email_lgpd(
                                 email,
