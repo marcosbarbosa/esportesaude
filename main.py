@@ -46,6 +46,7 @@ from database import (
     get_template_seguro_db,
     load_frequencia_ultima_presenca,
     load_atestados_vencimento,
+    load_total_presencas_todos,
     ADMIN_MASTER,
     supabase,
 )
@@ -1791,9 +1792,10 @@ if st.session_state.menu_atual == "Principal":
         )
 
         # Carregar dados
-        _df_alunos  = buscar_alunos_geral("")
-        _df_ultima  = load_frequencia_ultima_presenca()
-        _df_atestad = load_atestados_vencimento()
+        _df_alunos      = buscar_alunos_geral("")
+        _df_ultima      = load_frequencia_ultima_presenca()
+        _df_atestad     = load_atestados_vencimento()
+        _df_total_pres  = load_total_presencas_todos()
 
         # Templates WhatsApp — carregados uma vez, fora do loop.
         # Cada gatilho da tabela crm_templates (painel Configurações > Mensagens)
@@ -1832,6 +1834,13 @@ if st.session_state.menu_atual == "Principal":
 
             _df_hg["ultima_presenca"] = pd.to_datetime(_df_hg["ultima_presenca"], errors="coerce")
 
+            # Merge com total histórico de presenças
+            if not _df_total_pres.empty:
+                _df_hg = _df_hg.merge(_df_total_pres, on="id", how="left")
+            else:
+                _df_hg["total_presencas_hist"] = 0
+            _df_hg["total_presencas_hist"] = _df_hg["total_presencas_hist"].fillna(0).astype(int)
+
             # Merge com última PA
             try:
                 from database import get_ultima_pa_todos
@@ -1849,10 +1858,6 @@ if st.session_state.menu_atual == "Principal":
                 _df_hg["_pa_sis"]  = None
                 _df_hg["_pa_html"] = "<span style='color:#CBD5E1;font-size:11px;'>—</span>"
 
-            # Birthday
-            _df_hg["_dt_nasc"] = pd.to_datetime(_df_hg["data_nascimento"], errors="coerce")
-            _df_hg["_dia_n"]   = _df_hg["_dt_nasc"].dt.day
-            _df_hg["_mes_n"]   = _df_hg["_dt_nasc"].dt.month
 
             # Filtro de turma
             _turmas_disp = sorted(
@@ -1876,11 +1881,7 @@ if st.session_state.menu_atual == "Principal":
                 st.session_state.hg_sort_asc = True
             _sc = st.session_state.get("hg_sort_col", "nome")
             _sa = st.session_state.get("hg_sort_asc", True)
-            if _sc == "aniversario":
-                _df_grid = _df_grid.sort_values(
-                    ["_mes_n", "_dia_n"], ascending=_sa, na_position="last"
-                )
-            elif _sc in _df_grid.columns:
+            if _sc in _df_grid.columns:
                 _df_grid = _df_grid.sort_values(_sc, ascending=_sa, na_position="last")
             else:
                 _df_grid = _df_grid.sort_values("nome")
@@ -1902,9 +1903,76 @@ if st.session_state.menu_atual == "Principal":
             _hg_ini = (_hg_pg - 1) * _hg_ppp
             _df_pag = _df_grid.iloc[_hg_ini: _hg_ini + _hg_ppp]
 
-            # Barra de info + navegação
-            _pc1, _pc2, _pc3, _pc4 = st.columns([3, 0.6, 0.6, 1], gap="small",
-                                                  vertical_alignment="center")
+            # Gerador de PDF da lista home
+            def _gerar_pdf_hg(df: pd.DataFrame) -> bytes:
+                from fpdf import FPDF
+                def _s(t):
+                    return (
+                        str(t)
+                        .replace("\u2014", "-").replace("\u2013", "-")
+                        .replace("\u2764", "").replace("\u00b7", ".")
+                        .replace("\u2019", "'").replace("\u201c", '"').replace("\u201d", '"')
+                        .encode("latin-1", errors="replace").decode("latin-1")
+                    )
+                _tot_pdf = len(df)
+                class _PDFHG(FPDF):
+                    def header(self):
+                        self.set_font("Helvetica", "B", 13)
+                        self.cell(0, 8, _s("IMBRA - Alunos Ativos"), align="C",
+                                  new_x="LMARGIN", new_y="NEXT")
+                        self.set_font("Helvetica", "", 8)
+                        self.cell(0, 5,
+                                  _s(f"Emitido em: {datetime.date.today().strftime('%d/%m/%Y')}  |  Total: {_tot_pdf} aluno(s)"),
+                                  align="C", new_x="LMARGIN", new_y="NEXT")
+                        self.ln(2)
+                    def footer(self):
+                        self.set_y(-13)
+                        self.set_font("Helvetica", "I", 7)
+                        self.cell(0, 8, _s(f"Pag. {self.page_no()}"), align="C")
+                pdf = _PDFHG(orientation="L", unit="mm", format="A4")
+                pdf.add_page()
+                pdf.set_auto_page_break(True, margin=14)
+                hdrs   = ["#", "Nome", "Turma", "Total Pres.", "Ultima Pres.", "Venc. Atestado", "Ult. PA"]
+                widths = [8,   80,    32,      20,             30,             30,                57]
+                pdf.set_font("Helvetica", "B", 8)
+                pdf.set_fill_color(30, 77, 216)
+                pdf.set_text_color(255, 255, 255)
+                for w, h in zip(widths, hdrs):
+                    pdf.cell(w, 6, _s(h), border=0, fill=True)
+                pdf.ln()
+                pdf.set_font("Helvetica", "", 8)
+                pdf.set_text_color(15, 23, 42)
+                _hoje_pdf = datetime.date.today()
+                for i, (_, a) in enumerate(df.iterrows()):
+                    pdf.set_fill_color(239, 246, 255) if i % 2 == 0 else pdf.set_fill_color(255, 255, 255)
+                    _up = a.get("ultima_presenca")
+                    try:
+                        _up_str = pd.Timestamp(_up).strftime("%d/%m/%y") if pd.notna(_up) and _up else "-"
+                    except Exception:
+                        _up_str = "-"
+                    _dv = a.get("data_vencimento_atestado")
+                    try:
+                        _dv_str = pd.Timestamp(_dv).strftime("%d/%m/%y") if pd.notna(_dv) and _dv else "-"
+                    except Exception:
+                        _dv_str = "-"
+                    vals = [
+                        str(i + 1),
+                        str(a.get("nome", ""))[:40],
+                        str(a.get("turma", ""))[:18],
+                        str(int(a.get("total_presencas_hist", 0))),
+                        _up_str,
+                        _dv_str,
+                        str(a.get("_pa_txt", "") or "-")[:22],
+                    ]
+                    for w, v in zip(widths, vals):
+                        pdf.cell(w, 5, _s(v), border=0, fill=True)
+                    pdf.ln()
+                return bytes(pdf.output())
+
+            # Barra de info + navegação + impressão
+            _hg_pdf_key = "hg_pdf_lista"
+            _pc1, _pc2, _pc3, _pc_imp = st.columns([2.5, 0.6, 0.6, 1.0], gap="small",
+                                                     vertical_alignment="center")
             _pc1.caption(f"{len(_df_grid)} aluno(s) · pág {_hg_pg}/{_hg_total}")
             if _pc2.button("◀", key="hg_prev", disabled=(_hg_pg <= 1),
                            use_container_width=True):
@@ -1914,6 +1982,20 @@ if st.session_state.menu_atual == "Principal":
                            use_container_width=True):
                 st.session_state.hg_pg += 1
                 st.rerun()
+            if st.session_state.get(_hg_pdf_key):
+                _pc_imp.download_button(
+                    "📥 PDF",
+                    data=st.session_state[_hg_pdf_key],
+                    file_name=f"Alunos_Ativos_{datetime.date.today().strftime('%Y%m%d')}.pdf",
+                    mime="application/pdf",
+                    key="hg_dl_pdf",
+                    type="primary",
+                    use_container_width=True,
+                )
+            else:
+                if _pc_imp.button("🖨️ Imprimir", key="hg_imp", use_container_width=True):
+                    st.session_state[_hg_pdf_key] = _gerar_pdf_hg(_df_grid)
+                    st.rerun()
 
             # ── Cabeçalho das colunas (clicável para ordenar) ──────────
             _h0, _h1, _h2, _h3, _h4, _h5, _h5b, _h6 = st.columns(
@@ -1941,7 +2023,7 @@ if st.session_state.menu_atual == "Principal":
 
             _sort_btn(_h1, "Nome",              "nome")
             _sort_btn(_h2, "Turma",             "turma")
-            _sort_btn(_h3, "🎂 Aniversário",    "aniversario")
+            _sort_btn(_h3, "🏅 Total Pres.",    "total_presencas_hist")
             _sort_btn(_h4, "⏱ Última Pres.",    "ultima_presenca")
             _sort_btn(_h5, "🏥 Venc. Atestado", "data_vencimento_atestado")
             _sort_btn(_h5b, "🩸 Últ. PA",       "_pa_sis")
@@ -2035,54 +2117,14 @@ if st.session_state.menu_atual == "Principal":
                         unsafe_allow_html=True,
                     )
 
-                    # Aniversário
-                    _dia_n = _r.get("_dia_n")
-                    _mes_n = _r.get("_mes_n")
-                    if pd.notna(_dia_n) and pd.notna(_mes_n):
-                        _dia_n, _mes_n = int(_dia_n), int(_mes_n)
-                        _nasc_str = f"{_dia_n:02d}/{_meses_abr[_mes_n]}"
-                        if _mes_n == _hoje_mes and _dia_n == _hoje_dia:
-                            _niver_html = f"<span class='hg-niver-hoje'>🎉 {_nasc_str} HOJE!</span>"
-                        elif (_mes_n > _hoje_mes) or (_mes_n == _hoje_mes and _dia_n > _hoje_dia):
-                            _niver_html = f"<span class='hg-niver-breve'>⏳ {_nasc_str}</span>"
-                        else:
-                            _niver_html = f"<span class='hg-niver-passou'>🎈 {_nasc_str}</span>"
-                        # Link WhatsApp de parabéns — aparece apenas no mês do aniversário
-                        if _wapp_ok and _mes_n == _hoje_mes:
-                            _ja_parab_hg = str(_r.get("id", "")) in _parab_dict
-                            if _ja_parab_hg:
-                                _ts_hg = _parab_dict.get(str(_r.get("id", "")), "")
-                                _ts_hg = _ts_hg.split("|")[0][:10].replace("T", " ") if _ts_hg else ""
-                                _niver_html += (
-                                    f"<br><span style='font-size:10px;color:#065F46;"
-                                    f"font-weight:800;background:#D1FAE5;padding:1px 5px;"
-                                    f"border-radius:4px;'>✅ Parabenizado</span>"
-                                    + (f"<br><span style='font-size:9px;color:#94A3B8;'>{_ts_hg}</span>" if _ts_hg else "")
-                                )
-                            else:
-                                _wap_n = str(_r.get("whatsapp") or "").strip()
-                                # Texto idêntico ao painel admin conforme status:
-                                # Dia Exato (niver_hoje) ou Atrasado (niver_passou).
-                                # Aniversários futuros não recebem parabéns antecipado.
-                                if _mes_n == _hoje_mes and _dia_n == _hoje_dia:
-                                    _niver_status = "hoje"
-                                elif _dia_n < _hoje_dia:
-                                    _niver_status = "passou"
-                                else:
-                                    _niver_status = None
-                                if _wap_n and _niver_status:
-                                    _msg_n = montar_mensagem_niver(_niver_status, str(_r.get("nome", "")))
-                                    _link_n = montar_link_whatsapp(_wap_n, _msg_n)
-                                    if _link_n:
-                                        _niver_html += (
-                                            f"<br><a href='{_link_n}' target='_blank' "
-                                            f"style='font-size:10px;color:#25D366;text-decoration:none;"
-                                            f"font-weight:600;'>📱 Parabéns</a>"
-                                        )
-                    else:
-                        _niver_html = "<span style='color:#CBD5E1;'>—</span>"
+                    # Total histórico de presenças
+                    _tp_hist = int(_r.get("total_presencas_hist", 0))
+                    _tp_cor  = "#10B981" if _tp_hist >= 50 else ("#F59E0B" if _tp_hist >= 10 else "#94A3B8")
                     _cd.markdown(
-                        f"<span style='font-size:12px;'>{_niver_html}</span>",
+                        f"<div style='text-align:center;'>"
+                        f"<span style='font-size:18px;font-weight:900;color:{_tp_cor};'>{_tp_hist}</span>"
+                        f"<br><span style='font-size:9px;color:#94A3B8;'>visitas</span>"
+                        f"</div>",
                         unsafe_allow_html=True,
                     )
 

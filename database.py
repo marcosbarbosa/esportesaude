@@ -1411,6 +1411,27 @@ def load_frequencia_ultima_presenca():
         return pd.DataFrame(columns=["id", "ultima_presenca"])
 
 
+@st.cache_data(ttl=300, show_spinner=False)
+def load_total_presencas_todos():
+    """Retorna DataFrame [id, total_presencas_hist] — total de presenças por aluno desde o início."""
+    try:
+        res = (
+            supabase.from_("frequencia")
+            .select("aluno_id")
+            .eq("status", "PRESENTE")
+            .limit(200000)
+            .execute()
+        )
+        if not res.data:
+            return pd.DataFrame(columns=["id", "total_presencas_hist"])
+        df_f = pd.DataFrame(res.data)
+        total = df_f.groupby("aluno_id").size().reset_index(name="total_presencas_hist")
+        total.rename(columns={"aluno_id": "id"}, inplace=True)
+        return total
+    except Exception:
+        return pd.DataFrame(columns=["id", "total_presencas_hist"])
+
+
 def alternar_presenca(aluno_id, data_aula, presente, solicitante_email=""):
     status = "PRESENTE" if presente else "FALTA"
     try:
