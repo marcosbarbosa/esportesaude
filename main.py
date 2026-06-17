@@ -1849,13 +1849,17 @@ if st.session_state.menu_atual == "Principal":
                 def _pa_html_row(aluno_id):
                     p = _pa_dict.get(str(aluno_id)) or _pa_dict.get(int(aluno_id) if str(aluno_id).isdigit() else aluno_id)
                     if not p:
-                        return None, "<span style='color:#CBD5E1;font-size:11px;'>—</span>"
-                    return p.get("sis"), _pa_compact_html(p.get("sis"), p.get("dia"), p.get("pul"), p.get("cls", "normal"))
-                _df_hg[["_pa_sis", "_pa_html"]] = _df_hg["id"].apply(
+                        return None, "—", "<span style='color:#CBD5E1;font-size:11px;'>—</span>"
+                    _sis = p.get("sis")
+                    _dia = p.get("dia")
+                    _txt = f"{_sis}/{_dia}" if _sis and _dia else (str(_sis) if _sis else "—")
+                    return _sis, _txt, _pa_compact_html(_sis, _dia, p.get("pul"), p.get("cls", "normal"))
+                _df_hg[["_pa_sis", "_pa_txt", "_pa_html"]] = _df_hg["id"].apply(
                     lambda _aid: pd.Series(_pa_html_row(_aid))
                 )
             except Exception:
                 _df_hg["_pa_sis"]  = None
+                _df_hg["_pa_txt"]  = "—"
                 _df_hg["_pa_html"] = "<span style='color:#CBD5E1;font-size:11px;'>—</span>"
 
 
@@ -1915,6 +1919,7 @@ if st.session_state.menu_atual == "Principal":
             # Gerador de PDF da lista home
             def _gerar_pdf_hg(df: pd.DataFrame) -> bytes:
                 from fpdf import FPDF
+                df = df.reset_index(drop=True)   # garante ordem exata do grid
                 def _s(t):
                     return (
                         str(t)
@@ -1941,7 +1946,7 @@ if st.session_state.menu_atual == "Principal":
                 pdf = _PDFHG(orientation="L", unit="mm", format="A4")
                 pdf.add_page()
                 pdf.set_auto_page_break(True, margin=14)
-                hdrs   = ["#", "Nome", "Turma", "Total Pres.", "Ultima Pres.", "Venc. Atestado", "Ult. PA"]
+                hdrs   = ["#", "Nome", "Turma", "Freq.60d", "Ultima Pres.", "Venc. Atestado", "Ult. PA"]
                 widths = [8,   80,    32,      20,             30,             30,                57]
                 pdf.set_font("Helvetica", "B", 8)
                 pdf.set_fill_color(30, 77, 216)
