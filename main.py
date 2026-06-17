@@ -1946,8 +1946,8 @@ if st.session_state.menu_atual == "Principal":
                 pdf = _PDFHG(orientation="L", unit="mm", format="A4")
                 pdf.add_page()
                 pdf.set_auto_page_break(True, margin=14)
-                hdrs   = ["#", "Nome", "Turma", "Freq.60d", "Ultima Pres.", "Venc. Atestado", "Ult. PA"]
-                widths = [8,   80,    32,      20,             30,             30,                57]
+                hdrs   = ["#", "Nome", "Turma", "Aniversario", "Freq.60d", "Ultima Pres.", "Venc. Atestado", "Ult. PA"]
+                widths = [8,   70,    26,      18,            16,         26,              26,                52]
                 pdf.set_font("Helvetica", "B", 8)
                 pdf.set_fill_color(30, 77, 216)
                 pdf.set_text_color(255, 255, 255)
@@ -1957,6 +1957,7 @@ if st.session_state.menu_atual == "Principal":
                 pdf.set_font("Helvetica", "", 8)
                 pdf.set_text_color(15, 23, 42)
                 _hoje_pdf = datetime.date.today()
+                _meses_pdf = ["","jan","fev","mar","abr","mai","jun","jul","ago","set","out","nov","dez"]
                 for i, (_, a) in enumerate(df.iterrows()):
                     pdf.set_fill_color(239, 246, 255) if i % 2 == 0 else pdf.set_fill_color(255, 255, 255)
                     _up = a.get("ultima_presenca")
@@ -1969,14 +1970,21 @@ if st.session_state.menu_atual == "Principal":
                         _dv_str = pd.Timestamp(_dv).strftime("%d/%m/%y") if pd.notna(_dv) and _dv else "-"
                     except Exception:
                         _dv_str = "-"
+                    _dn = a.get("_dia_n")
+                    _mn = a.get("_mes_n")
+                    try:
+                        _nasc_pdf = f"{int(_dn):02d}/{_meses_pdf[int(_mn)]}" if pd.notna(_dn) and pd.notna(_mn) else "-"
+                    except Exception:
+                        _nasc_pdf = "-"
                     vals = [
                         str(i + 1),
-                        str(a.get("nome", ""))[:40],
-                        str(a.get("turma", ""))[:18],
+                        str(a.get("nome", ""))[:38],
+                        str(a.get("turma", ""))[:16],
+                        _nasc_pdf,
                         str(int(a.get("total_presencas_hist", 0))),
                         _up_str,
                         _dv_str,
-                        str(a.get("_pa_txt", "") or "-")[:22],
+                        str(a.get("_pa_txt", "") or "-")[:18],
                     ]
                     for w, v in zip(widths, vals):
                         pdf.cell(w, 5, _s(v), border=0, fill=True)
