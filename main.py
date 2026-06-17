@@ -1859,6 +1859,11 @@ if st.session_state.menu_atual == "Principal":
                 _df_hg["_pa_html"] = "<span style='color:#CBD5E1;font-size:11px;'>—</span>"
 
 
+            # Birthday cols
+            _df_hg["_dt_nasc"] = pd.to_datetime(_df_hg["data_nascimento"], errors="coerce")
+            _df_hg["_dia_n"]   = _df_hg["_dt_nasc"].dt.day
+            _df_hg["_mes_n"]   = _df_hg["_dt_nasc"].dt.month
+
             # Filtro de turma
             _turmas_disp = sorted(
                 [t for t in _df_hg["turma"].dropna().unique().tolist() if str(t).strip()],
@@ -1881,7 +1886,11 @@ if st.session_state.menu_atual == "Principal":
                 st.session_state.hg_sort_asc = True
             _sc = st.session_state.get("hg_sort_col", "nome")
             _sa = st.session_state.get("hg_sort_asc", True)
-            if _sc in _df_grid.columns:
+            if _sc == "aniversario":
+                _df_grid = _df_grid.sort_values(
+                    ["_mes_n", "_dia_n"], ascending=_sa, na_position="last"
+                )
+            elif _sc in _df_grid.columns:
                 _df_grid = _df_grid.sort_values(_sc, ascending=_sa, na_position="last")
             else:
                 _df_grid = _df_grid.sort_values("nome")
@@ -1999,7 +2008,7 @@ if st.session_state.menu_atual == "Principal":
 
             # ── Cabeçalho das colunas (clicável para ordenar) ──────────
             _h0, _h1, _h2, _h3, _h4, _h5, _h5b, _h6 = st.columns(
-                [0.5, 2.5, 1.2, 1.2, 1.5, 1.3, 1.3, 0.9], gap="small"
+                [0.5, 2.5, 1.1, 1.0, 1.9, 1.2, 1.2, 0.9], gap="small"
             )
             _h0.markdown(" ", unsafe_allow_html=True)
             _h6.markdown(" ", unsafe_allow_html=True)
@@ -2021,12 +2030,12 @@ if st.session_state.menu_atual == "Principal":
                     st.session_state.hg_pg = 1
                     st.rerun()
 
-            _sort_btn(_h1, "Nome",              "nome")
-            _sort_btn(_h2, "Turma",             "turma")
-            _sort_btn(_h3, "📅 Freq. 60d",      "total_presencas_hist")
-            _sort_btn(_h4, "⏱ Última Pres.",    "ultima_presenca")
-            _sort_btn(_h5, "🏥 Venc. Atestado", "data_vencimento_atestado")
-            _sort_btn(_h5b, "🩸 Últ. PA",       "_pa_sis")
+            _sort_btn(_h1, "Nome",                 "nome")
+            _sort_btn(_h2, "Turma",                "turma")
+            _sort_btn(_h3, "🎂 Aniversário",       "aniversario")
+            _sort_btn(_h4, "⏱ Freq.60d + Pres.",  "total_presencas_hist")
+            _sort_btn(_h5, "🏥 Venc. Atestado",    "data_vencimento_atestado")
+            _sort_btn(_h5b, "🩸 Últ. PA",          "_pa_sis")
 
             # Pré-carregar IDs avaliados (1 query, sem N+1 no loop)
             try:
@@ -2044,7 +2053,7 @@ if st.session_state.menu_atual == "Principal":
             for _, _r in _df_pag.iterrows():
                 with st.container(border=True):
                     _ca, _cb, _cc, _cd, _ce, _cg, _cpa, _cf = st.columns(
-                        [0.5, 2.5, 1.2, 1.2, 1.5, 1.3, 1.3, 0.9], gap="small",
+                        [0.5, 2.5, 1.1, 1.0, 1.9, 1.2, 1.2, 0.9], gap="small",
                         vertical_alignment="center"
                     )
 
@@ -2117,18 +2126,56 @@ if st.session_state.menu_atual == "Principal":
                         unsafe_allow_html=True,
                     )
 
-                    # Frequências nos últimos 60 dias
-                    _tp_hist = int(_r.get("total_presencas_hist", 0))
-                    _tp_cor  = "#10B981" if _tp_hist >= 8 else ("#F59E0B" if _tp_hist >= 3 else "#EF4444")
+                    # Aniversário
+                    _dia_n = _r.get("_dia_n")
+                    _mes_n = _r.get("_mes_n")
+                    if pd.notna(_dia_n) and pd.notna(_mes_n):
+                        _dia_n, _mes_n = int(_dia_n), int(_mes_n)
+                        _nasc_str = f"{_dia_n:02d}/{_meses_abr[_mes_n]}"
+                        if _mes_n == _hoje_mes and _dia_n == _hoje_dia:
+                            _niver_html = f"<span class='hg-niver-hoje'>🎉 {_nasc_str} HOJE!</span>"
+                        elif (_mes_n > _hoje_mes) or (_mes_n == _hoje_mes and _dia_n > _hoje_dia):
+                            _niver_html = f"<span class='hg-niver-breve'>⏳ {_nasc_str}</span>"
+                        else:
+                            _niver_html = f"<span class='hg-niver-passou'>🎈 {_nasc_str}</span>"
+                        if _wapp_ok and _mes_n == _hoje_mes:
+                            _ja_parab_hg = str(_r.get("id", "")) in _parab_dict
+                            if _ja_parab_hg:
+                                _ts_hg = _parab_dict.get(str(_r.get("id", "")), "")
+                                _ts_hg = _ts_hg.split("|")[0][:10].replace("T", " ") if _ts_hg else ""
+                                _niver_html += (
+                                    f"<br><span style='font-size:10px;color:#065F46;"
+                                    f"font-weight:800;background:#D1FAE5;padding:1px 5px;"
+                                    f"border-radius:4px;'>✅ Parabenizado</span>"
+                                    + (f"<br><span style='font-size:9px;color:#94A3B8;'>{_ts_hg}</span>" if _ts_hg else "")
+                                )
+                            else:
+                                _wap_n = str(_r.get("whatsapp") or "").strip()
+                                if _mes_n == _hoje_mes and _dia_n == _hoje_dia:
+                                    _niver_status = "hoje"
+                                elif _dia_n < _hoje_dia:
+                                    _niver_status = "passou"
+                                else:
+                                    _niver_status = None
+                                if _wap_n and _niver_status:
+                                    _msg_n = montar_mensagem_niver(_niver_status, str(_r.get("nome", "")))
+                                    _link_n = montar_link_whatsapp(_wap_n, _msg_n)
+                                    if _link_n:
+                                        _niver_html += (
+                                            f"<br><a href='{_link_n}' target='_blank' "
+                                            f"style='font-size:10px;color:#25D366;text-decoration:none;"
+                                            f"font-weight:600;'>📱 Parabéns</a>"
+                                        )
+                    else:
+                        _niver_html = "<span style='color:#CBD5E1;'>—</span>"
                     _cd.markdown(
-                        f"<div style='text-align:center;'>"
-                        f"<span style='font-size:18px;font-weight:900;color:{_tp_cor};'>{_tp_hist}</span>"
-                        f"<br><span style='font-size:9px;color:#94A3B8;'>freq. 60d</span>"
-                        f"</div>",
+                        f"<span style='font-size:12px;'>{_niver_html}</span>",
                         unsafe_allow_html=True,
                     )
 
-                    # Última Presença
+                    # Freq.60d + Última Presença (coluna combinada)
+                    _tp_hist  = int(_r.get("total_presencas_hist", 0))
+                    _tp_cor   = "#10B981" if _tp_hist >= 8 else ("#F59E0B" if _tp_hist >= 3 else "#EF4444")
                     _up = _r.get("ultima_presenca")
                     _dias_sem = ["seg","ter","qua","qui","sex","sáb","dom"]
                     if pd.notna(_up):
@@ -2140,15 +2187,12 @@ if st.session_state.menu_atual == "Principal":
                         _up_html = (
                             f"<span style='font-size:12px;font-weight:700;color:{_up_cor};'>"
                             f"{_up_txt}</span>"
-                            f"<span style='font-size:10px;color:#94A3B8;margin-left:4px;'>"
+                            f"<span style='font-size:10px;color:#94A3B8;margin-left:3px;'>"
                             f"{_up_dsem} · {_up_dias}d</span>"
                         )
-                        # Link WhatsApp de retenção/evasão — aparece quando ausente > 14 dias
                         if _wapp_ok and _up_dias > 14:
                             _wap_e = str(_r.get("whatsapp") or "").strip()
                             if _wap_e:
-                                # Gatilho correto conforme grau de ausência:
-                                # 14-30 dias → evasao_60 | >30 dias → evasao_80
                                 _ev_key = "evasao_60" if _up_dias <= 30 else "evasao_80"
                                 _tpl_e = _tpl_map.get(_ev_key, "Olá {nome}, sentimos sua falta!")
                                 _msg_e = personalizar_mensagem(_tpl_e, str(_r.get("nome", "")))
@@ -2161,8 +2205,7 @@ if st.session_state.menu_atual == "Principal":
                                         f"font-weight:600;'>📱 Contato</a>"
                                     )
                     else:
-                        _up_html = "<span style='font-size:12px;color:#CBD5E1;'>Sem registro</span>"
-                        # Sem histórico = aluno nunca veio → gatilho evasao_nunca
+                        _up_html = "<span style='font-size:11px;color:#CBD5E1;'>Sem registro</span>"
                         if _wapp_ok:
                             _wap_e = str(_r.get("whatsapp") or "").strip()
                             if _wap_e:
@@ -2175,7 +2218,14 @@ if st.session_state.menu_atual == "Principal":
                                         f"style='font-size:10px;color:#EF4444;text-decoration:none;"
                                         f"font-weight:600;'>📱 Contato</a>"
                                     )
-                    _ce.markdown(_up_html, unsafe_allow_html=True)
+                    _ce.markdown(
+                        f"<div style='line-height:1.35;'>"
+                        f"<span style='font-size:15px;font-weight:900;color:{_tp_cor};'>{_tp_hist}</span>"
+                        f"<span style='font-size:9px;color:#94A3B8;margin-left:2px;'>aulas/60d</span>"
+                        f"<br>{_up_html}"
+                        f"</div>",
+                        unsafe_allow_html=True,
+                    )
 
                     # Vencimento Atestado
                     _dv = _r.get("data_vencimento_atestado")
