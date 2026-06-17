@@ -1832,6 +1832,23 @@ if st.session_state.menu_atual == "Principal":
 
             _df_hg["ultima_presenca"] = pd.to_datetime(_df_hg["ultima_presenca"], errors="coerce")
 
+            # Merge com última PA
+            try:
+                from database import get_ultima_pa_todos
+                from views.prontuario_dashboard import _pa_compact_html
+                _pa_dict = get_ultima_pa_todos()
+                def _pa_html_row(aluno_id):
+                    p = _pa_dict.get(str(aluno_id)) or _pa_dict.get(int(aluno_id) if str(aluno_id).isdigit() else aluno_id)
+                    if not p:
+                        return None, "<span style='color:#CBD5E1;font-size:11px;'>—</span>"
+                    return p.get("sis"), _pa_compact_html(p.get("sis"), p.get("dia"), p.get("pul"), p.get("cls", "normal"))
+                _df_hg[["_pa_sis", "_pa_html"]] = _df_hg["id"].apply(
+                    lambda _aid: pd.Series(_pa_html_row(_aid))
+                )
+            except Exception:
+                _df_hg["_pa_sis"]  = None
+                _df_hg["_pa_html"] = "<span style='color:#CBD5E1;font-size:11px;'>—</span>"
+
             # Birthday
             _df_hg["_dt_nasc"] = pd.to_datetime(_df_hg["data_nascimento"], errors="coerce")
             _df_hg["_dia_n"]   = _df_hg["_dt_nasc"].dt.day
@@ -1899,8 +1916,8 @@ if st.session_state.menu_atual == "Principal":
                 st.rerun()
 
             # ── Cabeçalho das colunas (clicável para ordenar) ──────────
-            _h0, _h1, _h2, _h3, _h4, _h5, _h6 = st.columns(
-                [0.5, 2.8, 1.4, 1.3, 1.6, 1.5, 0.9], gap="small"
+            _h0, _h1, _h2, _h3, _h4, _h5, _h5b, _h6 = st.columns(
+                [0.5, 2.5, 1.2, 1.2, 1.5, 1.3, 1.3, 0.9], gap="small"
             )
             _h0.markdown(" ", unsafe_allow_html=True)
             _h6.markdown(" ", unsafe_allow_html=True)
@@ -1927,6 +1944,7 @@ if st.session_state.menu_atual == "Principal":
             _sort_btn(_h3, "🎂 Aniversário",    "aniversario")
             _sort_btn(_h4, "⏱ Última Pres.",    "ultima_presenca")
             _sort_btn(_h5, "🏥 Venc. Atestado", "data_vencimento_atestado")
+            _sort_btn(_h5b, "🩸 Últ. PA",       "_pa_sis")
 
             # Pré-carregar IDs avaliados (1 query, sem N+1 no loop)
             try:
@@ -1943,8 +1961,8 @@ if st.session_state.menu_atual == "Principal":
 
             for _, _r in _df_pag.iterrows():
                 with st.container(border=True):
-                    _ca, _cb, _cc, _cd, _ce, _cg, _cf = st.columns(
-                        [0.5, 2.8, 1.4, 1.3, 1.6, 1.5, 0.9], gap="small",
+                    _ca, _cb, _cc, _cd, _ce, _cg, _cpa, _cf = st.columns(
+                        [0.5, 2.5, 1.2, 1.2, 1.5, 1.3, 1.3, 0.9], gap="small",
                         vertical_alignment="center"
                     )
 
@@ -2147,6 +2165,12 @@ if st.session_state.menu_atual == "Principal":
                     else:
                         _dv_html = "<span style='font-size:11px;color:#CBD5E1;'>— sem atestado</span>"
                     _cg.markdown(_dv_html, unsafe_allow_html=True)
+
+                    # Última PA compacta
+                    _cpa.markdown(
+                        str(_r.get("_pa_html", "<span style='color:#CBD5E1;font-size:11px;'>—</span>")),
+                        unsafe_allow_html=True,
+                    )
 
                     # Botão Ficha
                     with _cf:
