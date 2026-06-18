@@ -450,27 +450,47 @@ def tela_inscricao_publica_move_right(modo_admin=False):
                         if modo_admin and turma_admin:
                             dados_inserir["turma"] = turma_admin
 
-                        def _tentar_inserir(dados: dict) -> None:
-                            """Tenta inserir; se falhar por coluna ausente, retira o campo e repete."""
-                            try:
-                                supabase.table("pre_cadastros").insert(dados).execute()
-                            except Exception as e1:
-                                err_str = str(e1)
-                                if "PGRST204" in err_str or "column" in err_str.lower():
-                                    for campo_opt in ("turma",):
-                                        if campo_opt in dados:
-                                            dados_sem = {k: v for k, v in dados.items() if k != campo_opt}
-                                            supabase.table("pre_cadastros").insert(dados_sem).execute()
-                                            st.warning(
-                                                f"⚠️ Campo '{campo_opt}' ainda não existe na tabela do Supabase "
-                                                f"— inscrição salva sem ele. Rode o SQL: "
-                                                f"`ALTER TABLE pre_cadastros ADD COLUMN IF NOT EXISTS {campo_opt} TEXT;`"
-                                            )
-                                            return
-                                raise
+                        def _tentar_inserir(dados: dict) -> list:
+                            """Insere na pre_cadastros removendo automaticamente colunas ausentes.
+                            Retorna lista de colunas que foram descartadas (para aviso ao operador)."""
+                            import re as _re
+                            _ESSENCIAIS = {"nome", "cpf", "email", "celular", "status"}
+                            _dados = dict(dados)
+                            removidas = []
+                            while True:
+                                try:
+                                    supabase.table("pre_cadastros").insert(_dados).execute()
+                                    return removidas
+                                except Exception as _e:
+                                    _err = str(_e)
+                                    if "PGRST204" in _err or (
+                                        "column" in _err.lower() and
+                                        ("not found" in _err.lower() or "schema" in _err.lower())
+                                    ):
+                                        _m = _re.search(r"'([a-z_]+)'\s+column", _err)
+                                        if not _m:
+                                            _m = _re.search(r"column\s+'([a-z_]+)'", _err)
+                                        if not _m:
+                                            _m = _re.search(r"find\s+the\s+'([a-z_]+)'", _err)
+                                        _col = _m.group(1) if _m else None
+                                        if _col and _col in _dados and _col not in _ESSENCIAIS:
+                                            removidas.append(_col)
+                                            del _dados[_col]
+                                            continue
+                                    raise
 
                         try:
-                            _tentar_inserir(dados_inserir)
+                            _cols_removidas = _tentar_inserir(dados_inserir)
+                            if _cols_removidas:
+                                _sql_fix = "\n".join(
+                                    f"ALTER TABLE pre_cadastros ADD COLUMN IF NOT EXISTS {c} TEXT;"
+                                    for c in _cols_removidas
+                                )
+                                st.warning(
+                                    f"⚠️ Inscrição salva, mas **{len(_cols_removidas)} campo(s) ignorado(s)** "
+                                    f"por não existirem ainda na tabela: `{'`, `'.join(_cols_removidas)}`.\n\n"
+                                    f"Peça ao administrador para rodar no Supabase SQL Editor:\n```sql\n{_sql_fix}\n```"
+                                )
 
                             disparar_email_lgpd(
                                 email,

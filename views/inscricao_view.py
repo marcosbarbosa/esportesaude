@@ -413,10 +413,47 @@ def tela_inscricao_publica_move_right():
                             "status": "Pendente",
                         }
 
+                        def _tentar_inserir_iv(dados: dict) -> list:
+                            """Insere na pre_cadastros removendo automaticamente colunas ausentes.
+                            Retorna lista de colunas descartadas."""
+                            import re as _re
+                            _ESSENCIAIS = {"nome", "cpf", "email", "celular", "status"}
+                            _dados = dict(dados)
+                            removidas = []
+                            while True:
+                                try:
+                                    supabase.table("pre_cadastros").insert(_dados).execute()
+                                    return removidas
+                                except Exception as _e:
+                                    _err = str(_e)
+                                    if "PGRST204" in _err or (
+                                        "column" in _err.lower() and
+                                        ("not found" in _err.lower() or "schema" in _err.lower())
+                                    ):
+                                        _m = _re.search(r"'([a-z_]+)'\s+column", _err)
+                                        if not _m:
+                                            _m = _re.search(r"column\s+'([a-z_]+)'", _err)
+                                        if not _m:
+                                            _m = _re.search(r"find\s+the\s+'([a-z_]+)'", _err)
+                                        _col = _m.group(1) if _m else None
+                                        if _col and _col in _dados and _col not in _ESSENCIAIS:
+                                            removidas.append(_col)
+                                            del _dados[_col]
+                                            continue
+                                    raise
+
                         try:
-                            supabase.table("pre_cadastros").insert(
-                                dados_inserir
-                            ).execute()
+                            _cols_rem = _tentar_inserir_iv(dados_inserir)
+                            if _cols_rem:
+                                _sql_fix = "\n".join(
+                                    f"ALTER TABLE pre_cadastros ADD COLUMN IF NOT EXISTS {c} TEXT;"
+                                    for c in _cols_rem
+                                )
+                                st.warning(
+                                    f"⚠️ Inscrição salva, mas **{len(_cols_rem)} campo(s) ignorado(s)** "
+                                    f"por não existirem na tabela: `{'`, `'.join(_cols_rem)}`.\n\n"
+                                    f"Execute no Supabase SQL Editor:\n```sql\n{_sql_fix}\n```"
+                                )
                             disparar_email_lgpd(
                                 email,
                                 nome.split()[0],
