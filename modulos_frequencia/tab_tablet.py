@@ -202,6 +202,30 @@ def renderizar_aba_terminal(df_alunos_tab, data_aula, presencas_turma_geral, blo
         opacity: 0;
     }
 
+    /* 🫀🦴 TAGS DE SAÚDE CLÍNICA */
+    .saude-hiper {
+        position: absolute;
+        top: 30px; right: -6px;
+        background: #FEF2F2;
+        border: 2px solid #DC2626;
+        border-radius: 50%;
+        width: 24px; height: 24px;
+        display: flex; align-items: center; justify-content: center;
+        font-size: 11px; z-index: 101;
+        box-shadow: 0 2px 5px rgba(220,38,38,0.35);
+    }
+    .saude-artro {
+        position: absolute;
+        top: 56px; right: -6px;
+        background: #FFFBEB;
+        border: 2px solid #D97706;
+        border-radius: 50%;
+        width: 24px; height: 24px;
+        display: flex; align-items: center; justify-content: center;
+        font-size: 11px; z-index: 101;
+        box-shadow: 0 2px 5px rgba(217,119,6,0.35);
+    }
+
     /* 🟢/🔴/🟡 ESTADOS DE PRESENÇA */
     .status-ausente .avatar-visual { border-color: #CBD5E1; }
     .status-ausente .badge-status { background: #F1F5F9; color: #94A3B8; }
@@ -314,6 +338,15 @@ def renderizar_aba_terminal(df_alunos_tab, data_aula, presencas_turma_geral, blo
                     if _aval_pend else ""
                 )
 
+                # 🫀🦴 TAGS DE SAÚDE — badges clínicos no canto direito do avatar
+                _tags_raw_tab = str(row.get("tags_saude") or "")
+                _tags_tab = [t.strip() for t in _tags_raw_tab.split(",") if t.strip()]
+                _sh = ("<div class='saude-hiper' title='Hipertensão/Cardiopatia — Monitorar PA'>🫀</div>"
+                       if "Hipertensão/Cardiopatia" in _tags_tab else "")
+                _sa = ("<div class='saude-artro' title='Artrose/Artrite — Evitar alto impacto'>🦴</div>"
+                       if "Artrose/Artrite" in _tags_tab else "")
+                saude_html = _sh + _sa
+
                 # Botão de chamada: bloqueado por admin-lock, atestado médico OU avaliação pendente
                 _botao_bloqueado = bloqueio_ativo or _atestado_bloq or _aval_pend
                 if not _botao_bloqueado:
@@ -329,7 +362,7 @@ def renderizar_aba_terminal(df_alunos_tab, data_aula, presencas_turma_geral, blo
                 cartao_html_seguro = (
                     f'<div class="celula-tablet {status_class}">'
                     f'<div class="avatar-visual">'
-                    f'{avatar_html}{cadeado_html}{lgpd_html}{atestado_html}{aval_pend_html}'
+                    f'{avatar_html}{cadeado_html}{lgpd_html}{atestado_html}{aval_pend_html}{saude_html}'
                     f'</div>'
                     f'<div class="badge-status">{indicador}</div>'
                     f'<div class="nome-aluno">{nome_formatado}</div>'

@@ -1100,6 +1100,50 @@ def render_aba_perfil(aluno):
         )
 
         st.markdown("#### 🏥 Saúde e Alertas")
+
+        # ── Tags Clínicas de Saúde ─────────────────────────────────────────────
+        _TAGS_CLINICAS = ["Hipertensão/Cardiopatia", "Artrose/Artrite"]
+        _TAGS_REGRAS = {
+            "Hipertensão/Cardiopatia": {
+                "icone": "🫀", "cor": "#DC2626", "fundo": "#FEF2F2",
+                "dica": "🔴 Evitar isometria e manobra de Valsalva. Exige monitoramento de PA.",
+                "tipo": "error",
+            },
+            "Artrose/Artrite": {
+                "icone": "🦴", "cor": "#D97706", "fundo": "#FFFBEB",
+                "dica": "🟡 Evitar alto impacto. Focar em mobilidade e avaliar escala de dor (Borg).",
+                "tipo": "warning",
+            },
+        }
+        _tags_raw = aluno.get("tags_saude") or ""
+        _tags_atuais = [t.strip() for t in str(_tags_raw).split(",") if t.strip() in _TAGS_CLINICAS]
+        tags_ed = st.multiselect(
+            "🏷️ Tags Clínicas de Saúde:",
+            options=_TAGS_CLINICAS,
+            default=_tags_atuais,
+            help="Grupos de risco clínico — alertam o professor no Tablet de Chamada.",
+        )
+        if tags_ed:
+            _badges_html = " ".join(
+                f"<span style='background:{_TAGS_REGRAS[t]['cor']};color:white;"
+                f"padding:3px 12px;border-radius:12px;font-size:12px;font-weight:700;"
+                f"margin-right:6px;'>{_TAGS_REGRAS[t]['icone']} {t}</span>"
+                for t in tags_ed if t in _TAGS_REGRAS
+            )
+            st.markdown(
+                f"<div style='background:#F8FAFC;border:1px solid #E2E8F0;"
+                f"padding:10px 14px;border-radius:8px;margin-bottom:6px;'>"
+                f"<b>🏥 Card de Saúde:</b>&nbsp; {_badges_html}</div>",
+                unsafe_allow_html=True,
+            )
+            for _t in tags_ed:
+                if _t in _TAGS_REGRAS:
+                    _r = _TAGS_REGRAS[_t]
+                    if _r["tipo"] == "error":
+                        st.error(_r["dica"])
+                    else:
+                        st.warning(_r["dica"])
+
         _c_em, _c_par = st.columns([3, 2])
         cont_em_ed = _c_em.text_input(
             "Contato de Emergência:",
@@ -1124,9 +1168,10 @@ def render_aba_perfil(aluno):
         _ps_val = "" if pd.isna(aluno.get("problemas_saude")) else str(aluno.get("problemas_saude"))
         _ps_h   = max(150, len(_ps_val.split("\n")) * 25)
         prob_ed = c_s1.text_area(
-            "Problemas de Saúde:",
+            "Observações Clínicas (Livre):",
             value=_ps_val,
             height=_ps_h,
+            help="Campo de texto livre para observações. Use as Tags Clínicas acima para categorização estruturada.",
         )
         _med_val = "" if pd.isna(aluno.get("medicamentos")) else str(aluno.get("medicamentos"))
         _med_h   = max(150, len(_med_val.split("\n")) * 25)
@@ -1184,6 +1229,7 @@ def render_aba_perfil(aluno):
                         "problemas_saude": prob_ed,
                         "medicamentos": meds_ed,
                         "restricoes_fisicas": rest_ed,
+                        "tags_saude": ",".join(tags_ed) if tags_ed else None,
                     }
                     sucesso, msg_bd = atualizar_perfil_aluno_dict_seguro(
                         aluno["id"], dados_salvar

@@ -1,0 +1,35 @@
+Replit, atue como um Engenheiro de Software Full-Stack e Especialista em Health Analytics. Precisamos evoluir o nosso módulo de Saúde e Alertas (Streamlit + Supabase) focando no monitoramento de Grupos Especiais, especificamente Hipertensão e Artrose.
+
+Siga rigorosamente os 3 passos abaixo, garantindo estabilidade e preservando dados antigos:
+
+PASSO 1: Estrutura de Dados e Tags Inteligentes (Supabase / Lógica)
+
+Adicione suporte a um novo campo estruturado no banco para armazenar as patologias em formato de lista/array, chamado tags_saude (ou crie a lógica para salvar essas tags separadas por vírgula no próprio banco). O campo antigo de texto livre (problemas_saude) NÃO deve ser apagado, deve ser renomeado visualmente na UI para 'Observações Clínicas (Antigo)'.
+
+Crie uma lista fixa de opções no código com as duas Tags Clínicas Principais:
+
+Hipertensão/Cardiopatia (Risco Vermelho)
+
+Artrose/Artrite (Risco Amarelo)
+
+Crie um dicionário de regras atrelado a elas: Se tiver Hipertensão, a dica de treino é: '🔴 Evitar isometria e manobra de Valsalva. Exige monitoramento de PA.' Se tiver Artrose, a dica é: '🟡 Evitar alto impacto. Focar em mobilidade e avaliar escala de dor (Borg).'
+
+PASSO 2: Atualização do Prontuário do Aluno (Ficha Digital UI)
+
+Na tela de cadastro/edição do aluno, insira um st.multiselect para que o operador possa selecionar essas Tags de Saúde.
+
+Na visualização da ficha do aluno, crie um 'Card de Saúde'. Se ele tiver a tag de Hipertensão, exiba um selo/badge vermelho. Se tiver Artrose, exiba um selo amarelo.
+
+Exiba as Dicas de Treino correspondentes logo abaixo dos selos usando st.warning ou st.error para alertar o operador que está a ler a ficha.
+
+PASSO 3: Alertas Vivos no Tablet de Chamada (Grid do Professor)
+
+No arquivo responsável por renderizar a chamada dos alunos (modulos_frequencia/tab_tablet.py ou similar), busque a coluna tags_saude de cada aluno na query.
+
+Na renderização do cartão de cada aluno no grid:
+
+Se o aluno possuir a tag Hipertensão/Cardiopatia, injete um ícone visível 🫀 (Coração Vermelho) ao lado do nome dele, alertando o professor para medir a pressão.
+
+Se o aluno possuir a tag Artrose/Artrite, injete um ícone 🦴 (Osso/Articulação) alertando sobre o impacto.
+
+Retorne os códigos atualizados das views de Prontuário e do Tablet, implementando essa lógica de UI/UX clínica de forma limpa, e me dê o script SQL caso eu precise rodar algo no Supabase para criar a coluna tags_saude.
