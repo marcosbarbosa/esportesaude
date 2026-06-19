@@ -282,9 +282,9 @@ def criar_documento_aluno_pdf(aluno_data, avaliacoes, historico, estatisticas):
 
     y_atual = pdf.get_y()
 
-    url_foto = aluno_data.get("url_foto")
-    if pd.notna(url_foto):
-        tmp = baixar_imagem_temp(url_foto)
+    foto_url = aluno_data.get("foto_url")
+    if pd.notna(foto_url):
+        tmp = baixar_imagem_temp(foto_url)
         if tmp:
             pdf.image(tmp, x=160, y=y_atual, w=35, h=35)
             pdf.rect(160, y_atual, 35, 35)

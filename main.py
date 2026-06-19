@@ -2071,7 +2071,7 @@ if st.session_state.menu_atual == "Principal":
                     )
 
                     # Foto
-                    _foto = str(_r.get("url_foto") or "").strip()
+                    _foto = str(_r.get("foto_url") or "").strip()
                     _inic = "".join(p[0].upper() for p in str(_r["nome"]).split()[:2] if p)
                     if _foto.startswith("http"):
                         _av_html = (

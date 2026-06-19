@@ -310,7 +310,7 @@ def _card_aluno(row, ult_pres: dict, bloqueado: bool, modo: str, obs: str):
     aluno_id = str(row.get("id", ""))
     nome = str(row.get("nome", "")).strip()
     turma = str(row.get("turma") or "—").strip()
-    url_foto = str(row.get("url_foto") or "").strip()
+    foto_url = str(row.get("foto_url") or "").strip()
     inic = "".join(p[0].upper() for p in nome.split()[:2] if p)
     up = ult_pres.get(aluno_id)
     up_str = str(up) if up else "Sem registro"
@@ -323,9 +323,9 @@ def _card_aluno(row, ult_pres: dict, bloqueado: bool, modo: str, obs: str):
     with st.container(border=True):
         c_foto, c_info, c_btn = st.columns([0.6, 5, 1.5], vertical_alignment="center")
         with c_foto:
-            if url_foto.startswith("http"):
+            if foto_url.startswith("http"):
                 st.markdown(
-                    f"<img class='zoom-avatar-aval' src='{url_foto}' alt='{inic}' "
+                    f"<img class='zoom-avatar-aval' src='{foto_url}' alt='{inic}' "
                     f"onerror=\"this.outerHTML='<div class=aval-avatar-ph>👤</div>'\">",
                     unsafe_allow_html=True,
                 )

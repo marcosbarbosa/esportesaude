@@ -124,8 +124,8 @@ def tela_frequencia():
                         with st.container():
                             ci, cb, ce = st.columns([1.8, 5.7, 1.5])
                             with ci: 
-                                with st.popover("👤" if not row.get("url_foto") else "🖼️", use_container_width=True):
-                                    if row.get("url_foto"): st.image(row["url_foto"], use_container_width=True)
+                                with st.popover("👤" if not row.get("foto_url") else "🖼️", use_container_width=True):
+                                    if row.get("foto_url"): st.image(row["foto_url"], use_container_width=True)
                                     else: st.write("Sem foto.")
                             with cb:
                                 st.markdown(f"""<style>#pres_{row['id']} button {{ border: 1px solid {"#dc3545" if is_p else "#dddddd"} !important; height: 38px !important; }}</style>""", unsafe_allow_html=True)
@@ -177,7 +177,7 @@ def tela_prontuario():
 
         # Header com Zoom
         cp_f, cp_i = st.columns([1, 6])
-        u_v = aluno.get('url_foto')
+        u_v = aluno.get('foto_url')
         with cp_f:
             if u_v:
                 with st.popover("🖼️", use_container_width=True): st.image(u_v, use_container_width=True)

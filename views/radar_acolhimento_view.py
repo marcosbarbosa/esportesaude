@@ -162,7 +162,7 @@ def gerar_pdf_atrasados(lista_alunos):
                 else f'<span style="color:#94A3B8;">-</span>'
             )
 
-            data_url = _fetch_foto_base64(aluno.get("url_foto"))
+            data_url = _fetch_foto_base64(aluno.get("foto_url"))
             if data_url:
                 foto_html = (
                     f'<img src="{data_url}" '
@@ -355,7 +355,7 @@ def tela_radar_acolhimento():
     try:
         res_alunos = (
             supabase.table("alunos")
-            .select("id, nome, whatsapp, turma, url_foto")
+            .select("id, nome, whatsapp, turma, foto_url")
             .eq("status", "Ativo")
             .execute()
         )
@@ -411,7 +411,7 @@ def tela_radar_acolhimento():
                 continue
 
             if dias_calculados >= st.session_state.dias_busca_radar:
-                foto = aluno.get("url_foto")
+                foto = aluno.get("foto_url")
                 if pd.isna(foto) or not foto:
                     foto = None
 
@@ -429,7 +429,7 @@ def tela_radar_acolhimento():
                         "nome": str(aluno["nome"]),
                         "turma": turma_val,
                         "whatsapp": whats,
-                        "url_foto": foto,
+                        "foto_url": foto,
                         "dias": dias_calculados,
                         "data_ultima": ultima_presenca,
                     }
@@ -493,8 +493,8 @@ def tela_radar_acolhimento():
                     )
 
                     with col_foto:
-                        if item.get("url_foto"):
-                            st.image(item["url_foto"], use_container_width=True)
+                        if item.get("foto_url"):
+                            st.image(item["foto_url"], use_container_width=True)
                         else:
                             st.markdown(
                                 "<h1 style='text-align: center; color: #ccc; margin: 0;'>👤</h1>",

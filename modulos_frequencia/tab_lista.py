@@ -41,7 +41,7 @@ def renderizar_aba_frequencia(df_alunos, data_aula, turma_selecionada, presencas
                     c_img, c_btn, c_ed, *c_del = st.columns(layout_cols, gap="small", vertical_alignment="center")
 
                     with c_img:
-                        u_f = row.get("url_foto")
+                        u_f = row.get("foto_url")
                         if pd.notna(u_v := u_f) and str(u_v).strip(): 
                             st.markdown(f'<img src="{u_v}" class="zoom-avatar">', unsafe_allow_html=True)
                         else: 

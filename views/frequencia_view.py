@@ -265,7 +265,7 @@ def tela_frequencia():
 
                         # ── Avatar redondo ───────────────────────────────────────
                         with col_av:
-                            foto = aluno.get("url_foto")
+                            foto = aluno.get("foto_url")
                             if foto and not pd.isna(foto) and str(foto).strip():
                                 st.markdown(
                                     f"<img src='{foto}' class='zoom-avatar' "

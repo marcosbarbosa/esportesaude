@@ -211,13 +211,13 @@ def _bloco_auditoria(base_url: str = "") -> str:
     try:
         from database import supabase
         res = supabase.from_("alunos").select(
-            "id,nome,turma,url_foto,cpf,data_nascimento,status"
+            "id,nome,turma,foto_url,cpf,data_nascimento,status"
         ).eq("status", "Ativo").execute()
         alunos = res.data or []
         problemas = []
         for a in alunos:
             issues = []
-            if not a.get("url_foto"):
+            if not a.get("foto_url"):
                 issues.append("sem foto")
             if not a.get("cpf"):
                 issues.append("sem CPF")
@@ -262,7 +262,7 @@ def _bloco_novos_cadastros(base_url: str = "") -> str:
         linhas = []
         for p in pendentes:
             faltas = []
-            if not p.get("url_foto"):
+            if not p.get("foto_url"):
                 faltas.append("foto")
             if not p.get("url_rg"):
                 faltas.append("RG")

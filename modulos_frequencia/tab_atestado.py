@@ -80,7 +80,7 @@ def renderizar_aba_atestado():
         with st.container(border=True):
             c_img, c_info, c_ficha = st.columns([1.2, 5, 1.8], vertical_alignment="center")
 
-            foto = row.get("url_foto", "")
+            foto = row.get("foto_url", "")
             if foto and pd.notna(foto) and str(foto).strip() not in ["", "none", "nan", "null"]:
                 c_img.markdown(f'<img src="{foto}" class="zoom-avatar-atestado">', unsafe_allow_html=True)
             else:
@@ -135,7 +135,7 @@ def _gerar_pdf_atestado(df: pd.DataFrame, ult_pres_map: dict, total: int):
     for i, (_, row) in enumerate(df.iterrows(), 1):
         nome  = str(row.get("nome", "")).strip()
         turma = str(row.get("turma", "—")).strip()
-        foto  = str(row.get("url_foto", "")).strip()
+        foto  = str(row.get("foto_url", "")).strip()
         ult_p = ult_pres_map.get(str(row.get("id", "")), "—")
         obs   = str(row.get("obs_atestado_bloqueio") or "—").strip()
 

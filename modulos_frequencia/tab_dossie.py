@@ -78,8 +78,8 @@ def renderizar_aba_dossie(df_alunos_tab, data_aula, turma_selecionada, chave_uni
                 aluno_data = df_alunos_tab[df_alunos_tab["nome"] == aluno_sel].iloc[0]
                 c_f, c_i = st.columns([1, 4])
                 with c_f:
-                    if pd.notna(aluno_data.get("url_foto")):
-                        st.image(aluno_data.get("url_foto"), width=120)
+                    if pd.notna(aluno_data.get("foto_url")):
+                        st.image(aluno_data.get("foto_url"), width=120)
                     else:
                         st.markdown(
                             '<div style="font-size:80px;">👤</div>',

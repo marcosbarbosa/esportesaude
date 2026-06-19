@@ -416,9 +416,9 @@ def renderizar_dashboard():
                 c1, c2, c3, c4 = st.columns([3, 0.8, 0.8, 0.8], vertical_alignment="center")
 
                 # Renderiza o Avatar
-                url_foto = a.get('url_foto')
-                if pd.notna(url_foto) and str(url_foto).strip() and str(url_foto).strip().lower() not in ["none", "nan", "null", ""]:
-                    avatar_html = f"<img src='{url_foto}' class='zoom-avatar-dash' alt='Foto'>"
+                foto_url = a.get('foto_url')
+                if pd.notna(foto_url) and str(foto_url).strip() and str(foto_url).strip().lower() not in ["none", "nan", "null", ""]:
+                    avatar_html = f"<img src='{foto_url}' class='zoom-avatar-dash' alt='Foto'>"
                 else:
                     avatar_html = "<div class='avatar-placeholder'>👤</div>"
 
@@ -504,9 +504,9 @@ def renderizar_dashboard():
                 c1, c2, c3 = st.columns([3.5, 0.8, 0.8], vertical_alignment="center")
 
                 # Renderiza o Avatar
-                url_foto = a.get('url_foto')
-                if pd.notna(url_foto) and str(url_foto).strip() and str(url_foto).strip().lower() not in ["none", "nan", "null", ""]:
-                    avatar_html = f"<img src='{url_foto}' class='zoom-avatar-dash' alt='Foto'>"
+                foto_url = a.get('foto_url')
+                if pd.notna(foto_url) and str(foto_url).strip() and str(foto_url).strip().lower() not in ["none", "nan", "null", ""]:
+                    avatar_html = f"<img src='{foto_url}' class='zoom-avatar-dash' alt='Foto'>"
                 else:
                     avatar_html = "<div class='avatar-placeholder'>👤</div>"
 
@@ -596,9 +596,9 @@ def renderizar_dashboard():
                 c3 = colunas[2]
                 c4 = colunas[3] if is_super else None
 
-                url_foto = a.get('url_foto')
-                if pd.notna(url_foto) and str(url_foto).strip() and str(url_foto).strip().lower() not in ["none", "nan", "null", ""]:
-                    avatar_html = f"<img src='{url_foto}' class='zoom-avatar-dash' style='filter: grayscale(100%); opacity: 0.7;' alt='Foto'>"
+                foto_url = a.get('foto_url')
+                if pd.notna(foto_url) and str(foto_url).strip() and str(foto_url).strip().lower() not in ["none", "nan", "null", ""]:
+                    avatar_html = f"<img src='{foto_url}' class='zoom-avatar-dash' style='filter: grayscale(100%); opacity: 0.7;' alt='Foto'>"
                 else:
                     avatar_html = "<div class='avatar-placeholder' style='background-color: #F8FAFC; color: #CBD5E1;'>👤</div>"
 
@@ -984,9 +984,9 @@ def renderizar_dashboard():
                     )
 
                     # Col 1: Foto + Nome e Turma (MÁGICA DO FLEXBOX)
-                    url_foto = a.get('url_foto')
-                    if pd.notna(url_foto) and str(url_foto).strip() and str(url_foto).strip().lower() not in ["none", "nan", "null", ""]:
-                        avatar_html = f"<img src='{url_foto}' class='zoom-avatar-dash' alt='Foto'>"
+                    foto_url = a.get('foto_url')
+                    if pd.notna(foto_url) and str(foto_url).strip() and str(foto_url).strip().lower() not in ["none", "nan", "null", ""]:
+                        avatar_html = f"<img src='{foto_url}' class='zoom-avatar-dash' alt='Foto'>"
                     else:
                         avatar_html = "<div class='avatar-placeholder'>👤</div>"
 

@@ -116,7 +116,7 @@ def criar_documento_dossie(data_aula, turma):
     doc.add_heading('4. Evidências Fotográficas', level=1)
     if diario:
         todas_fotos = []
-        url_grupo = diario.get('url_foto_grupo') or diario.get('foto_grupo') or diario.get('url_foto')
+        url_grupo = diario.get('url_foto_grupo') or diario.get('foto_grupo') or diario.get('foto_url')
         if url_grupo:
             todas_fotos.append({'url': url_grupo, 'desc': 'Foto Oficial do Grupo'})
 
@@ -273,9 +273,9 @@ def criar_documento_aluno_word(aluno_data, avaliacoes, historico, estatisticas):
     r_vp.font.color.rgb = RGBColor(30, 136, 229)
 
     # Foto do aluno (opcional — à direita do perfil via anchor não suportado facilmente, colocamos inline)
-    url_foto = aluno_data.get("url_foto")
-    if url_foto and str(url_foto).strip().lower() not in ("", "nan", "none", "null"):
-        img_stream = baixar_imagem(url_foto)
+    foto_url = aluno_data.get("foto_url")
+    if foto_url and str(foto_url).strip().lower() not in ("", "nan", "none", "null"):
+        img_stream = baixar_imagem(foto_url)
         if img_stream:
             try:
                 p_img = doc.add_paragraph()

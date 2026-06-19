@@ -37,7 +37,7 @@ def _buscar_turmas():
 def _buscar_alunos_turma(turma_id: str):
     r = (
         supabase.table("alunos")
-        .select("id,nome,url_foto,turma_id")
+        .select("id,nome,foto_url,turma_id")
         .eq("status", "Ativo")
         .eq("turma_id", turma_id)
         .execute()
@@ -119,16 +119,16 @@ def _reconhecer_aluno(grupo_path: str, aluno: dict) -> dict:
 
     aluno_id = aluno["id"]
     nome = aluno["nome"]
-    url_foto = aluno.get("url_foto") or ""
+    foto_url = aluno.get("foto_url") or ""
 
-    if not url_foto:
+    if not foto_url:
         return {
             "aluno_id": aluno_id, "nome": nome,
             "status": "FALTA", "confianca": 0,
             "tem_foto": False, "motivo": "Sem foto cadastrada",
         }
 
-    arr_individual = _url_para_array(url_foto)
+    arr_individual = _url_para_array(foto_url)
     if arr_individual is None:
         return {
             "aluno_id": aluno_id, "nome": nome,
@@ -237,7 +237,7 @@ def _modo_configuracao():
         return
 
     total_alunos = len(alunos)
-    com_foto = sum(1 for a in alunos if a.get("url_foto"))
+    com_foto = sum(1 for a in alunos if a.get("foto_url"))
     sem_foto = total_alunos - com_foto
 
     ja_lancadas = _presencas_ja_lancadas(str(data_aula), [a["id"] for a in alunos])

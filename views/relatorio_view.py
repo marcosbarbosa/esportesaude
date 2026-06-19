@@ -484,13 +484,13 @@ def gerar_pdf_auditoria_core(falhas, contagem_falhas, turma_aud):
         y0 = pdf.get_y()
 
         # ── célula FOTO — tenta embutir a imagem real ─────────────────────────
-        url_foto = str(f.get("url_foto") or "").strip()
-        tem_foto = url_foto.startswith("http")
+        foto_url = str(f.get("foto_url") or "").strip()
+        tem_foto = foto_url.startswith("http")
         foto_embutida = False
         tmp_foto = None
 
         if tem_foto:
-            tmp_foto = _baixar_foto(url_foto)
+            tmp_foto = _baixar_foto(foto_url)
             if tmp_foto:
                 try:
                     # borda da célula
@@ -2697,7 +2697,7 @@ def tela_relatorio():
                 # Nomes de coluna reais na tabela `alunos` do Supabase
                 # CPF e RG são verificados em conjunto: basta um dos dois estar preenchido
                 checks = {
-                    "url_foto":            "📸 Foto",
+                    "foto_url":            "📸 Foto",
                     "url_rg":              "🪪 Documento Oficial",
                     "data_nascimento":     "🎂 Nasc.",
                     "whatsapp":            "📱 WhatsApp",
@@ -2741,7 +2741,7 @@ def tela_relatorio():
                                     "Turma": r["turma"],
                                     "Pendências": ", ".join(missing),
                                     "id_aluno": str(r.get("id", "")).split(".")[0],
-                                    "url_foto": r.get("url_foto") or "",
+                                    "foto_url": r.get("foto_url") or "",
                                     "dict_aluno": r.to_dict(),
                                 }
                             )
@@ -2768,7 +2768,7 @@ def tela_relatorio():
 
                     # Exportação Excel — espelha exatamente o grid na tela
                     def _foto_label(row):
-                        url = str(row.get("url_foto") or "").strip()
+                        url = str(row.get("foto_url") or "").strip()
                         return "Sim" if url.startswith("http") else "Nao"
 
                     _DSEM = ["seg","ter","qua","qui","sex","sáb","dom"]
@@ -2870,7 +2870,7 @@ def tela_relatorio():
                                 [1, 2.2, 1.6, 3.8, 1.4, 1.6], vertical_alignment="center"
                             )
                             # Foto do aluno
-                            _foto = f.get("url_foto", "")
+                            _foto = f.get("foto_url", "")
                             if _foto and str(_foto).startswith("http"):
                                 try:
                                     c0.image(_foto, width="stretch")

@@ -92,7 +92,7 @@ def aprovar_inscricao_aluno(pre_cadastro_id, turma_selecionada):
             "whatsapp": al.get("whatsapp", ""), "email": al.get("email", ""), "cpf": al.get("cpf", ""), "rg": al.get("rg", ""),
             "endereco": al.get("endereco", ""), "bairro": al.get("bairro", ""), "cep": al.get("cep", ""), "contato_emergencia": al.get("contato_emergencia", ""),
             "problemas_saude": al.get("problemas_saude", ""), "medicamentos": al.get("medicamentos", ""), "restricoes_fisicas": al.get("restricoes_fisicas", ""),
-            "url_foto": al.get("url_foto"), "url_rg": al.get("url_rg"), "url_receituario": al.get("url_receituario"), "url_atestado_medico": al.get("url_atestado_medico"), "status": "Ativo",
+            "foto_url": al.get("foto_url"), "url_rg": al.get("url_rg"), "url_receituario": al.get("url_receituario"), "url_atestado_medico": al.get("url_atestado_medico"), "status": "Ativo",
         }
         supabase.from_("alunos").insert(novo_aluno).execute()
         supabase.from_("pre_cadastros").update({"status": "Aprovado"}).eq("id", pre_cadastro_id).execute()
@@ -160,9 +160,9 @@ def atualizar_perfil_aluno_dict(aluno_id, dados_atualizados):
         return True, "Perfil atualizado no banco de dados."
     except Exception as e: return False, str(e)
 
-def atualizar_perfil_aluno(aluno_id, nome, data_nasc, peso, altura, whats, email, url_foto, url_rg=None, url_rec=None, url_ate=None):
+def atualizar_perfil_aluno(aluno_id, nome, data_nasc, peso, altura, whats, email, foto_url, url_rg=None, url_rec=None, url_ate=None):
     try:
-        dados = {"nome": nome.upper().strip(), "peso": peso, "altura": altura, "whatsapp": whats, "email": email, "url_foto": url_foto, "url_rg": url_rg, "url_receituario": url_rec, "url_atestado_medico": url_ate, "data_nascimento": str(data_nasc) if data_nasc else None}
+        dados = {"nome": nome.upper().strip(), "peso": peso, "altura": altura, "whatsapp": whats, "email": email, "foto_url": foto_url, "url_rg": url_rg, "url_receituario": url_rec, "url_atestado_medico": url_ate, "data_nascimento": str(data_nasc) if data_nasc else None}
         supabase.from_("alunos").update(dados).eq("id", str(aluno_id)).execute()
         return True, "Atualizado."
     except Exception as e: return False, str(e)
@@ -175,13 +175,13 @@ def atualizar_turma_aluno(aluno_id, nova_turma):
 
 def atualizar_aluno_completo(aluno_id, nome, turma, data_nasc, url_f):
     try:
-        supabase.from_("alunos").update({"nome": nome.upper().strip(), "turma": turma, "data_nascimento": str(data_nasc) if data_nasc else None, "url_foto": url_f}).eq("id", str(aluno_id)).execute()
+        supabase.from_("alunos").update({"nome": nome.upper().strip(), "turma": turma, "data_nascimento": str(data_nasc) if data_nasc else None, "foto_url": url_f}).eq("id", str(aluno_id)).execute()
         return True
     except: return False
 
 def cadastrar_novo_aluno(nome, turma, data_nasc=None, peso=0.0, altura=0.0, whats="", email="", url_f=None):
     try:
-        supabase.from_("alunos").insert({"nome": nome.upper().strip(), "turma": turma, "data_nascimento": str(data_nasc) if data_nasc else None, "peso": peso, "altura": altura, "whatsapp": whats, "email": email, "url_foto": url_f, "status": "Ativo"}).execute()
+        supabase.from_("alunos").insert({"nome": nome.upper().strip(), "turma": turma, "data_nascimento": str(data_nasc) if data_nasc else None, "peso": peso, "altura": altura, "whatsapp": whats, "email": email, "foto_url": url_f, "status": "Ativo"}).execute()
         return True
     except: return False
 

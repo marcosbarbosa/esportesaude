@@ -445,7 +445,7 @@ def aprovar_inscricao_aluno(pre_cadastro_id, turma_selecionada, forcar=False):
             "renda_familiar": pre.get("renda_familiar", ""),
             "interesse_voluntariado": pre.get("interesse_voluntariado", ""),
             "areas_voluntariado": pre.get("areas_voluntariado", ""),
-            "url_foto": pre.get("url_foto"),
+            "foto_url": pre.get("foto_url"),
             "url_rg": pre.get("url_rg"),
             "url_receituario": pre.get("url_receituario"),
             "url_atestado_medico": pre.get("url_atestado_medico"),
@@ -1034,7 +1034,7 @@ def obter_dependencias_lote(ids: list) -> dict:
 
 
 _ALUNOS_TURMA_COLS = (
-    "id, nome, turma, turma_id, status, foto_url, url_foto, data_nascimento, "
+    "id, nome, turma, turma_id, status, foto_url, data_nascimento, "
     "peso, altura, sexo, telefone, whatsapp, cpf, rg, created_at, "
     "atestado_bloqueado, avaliacao_pendente, nota_risco_atual, cor_alerta_atual, "
     "risco_borg, tags_saude, obs_atestado_bloqueio, obs_avaliacao_pendente"
@@ -1061,7 +1061,7 @@ def get_alunos_sem_autorizacao_imagem() -> pd.DataFrame:
     try:
         res = (
             supabase.from_("alunos")
-            .select("id,nome,url_foto,data_nascimento,turma,status,termo_imagem")
+            .select("id,nome,foto_url,data_nascimento,turma,status,termo_imagem")
             .neq("status", "Inativo")
             .or_("termo_imagem.is.null,termo_imagem.eq.false")
             .order("nome")
@@ -1078,7 +1078,7 @@ def get_alunos_com_atestado_bloqueado() -> pd.DataFrame:
     try:
         res = (
             supabase.from_("alunos")
-            .select("id,nome,url_foto,data_nascimento,turma,status,atestado_bloqueado,obs_atestado_bloqueio")
+            .select("id,nome,foto_url,data_nascimento,turma,status,atestado_bloqueado,obs_atestado_bloqueio")
             .neq("status", "Inativo")
             .eq("atestado_bloqueado", True)
             .order("nome")
@@ -1153,7 +1153,7 @@ def get_alunos_sem_avaliacao() -> pd.DataFrame:
         ids_avaliados = get_ids_alunos_avaliados()
         res = (
             supabase.from_("alunos")
-            .select("id,nome,url_foto,data_nascimento,turma,status,whatsapp,avaliacao_pendente,obs_avaliacao_pendente")
+            .select("id,nome,foto_url,data_nascimento,turma,status,whatsapp,avaliacao_pendente,obs_avaliacao_pendente")
             .neq("status", "Inativo")
             .order("nome")
             .execute()
@@ -1173,7 +1173,7 @@ def get_alunos_com_avaliacao_pendente() -> pd.DataFrame:
     try:
         res = (
             supabase.from_("alunos")
-            .select("id,nome,url_foto,data_nascimento,turma,status,avaliacao_pendente,obs_avaliacao_pendente")
+            .select("id,nome,foto_url,data_nascimento,turma,status,avaliacao_pendente,obs_avaliacao_pendente")
             .neq("status", "Inativo")
             .eq("avaliacao_pendente", True)
             .order("nome")
