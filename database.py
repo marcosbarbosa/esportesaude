@@ -877,8 +877,12 @@ def get_logs_lgpd(limit: int = 300) -> list:
 
 
 def registrar_log_matricula_doc(aluno_id, aluno_nome, docs_faltantes, operador: str = "", turma: str = "", turma_lotada: bool = False) -> bool:
-    """Registra log de matrícula forçada (documentos faltantes e/ou turma lotada)."""
+    """Registra log de matrícula forçada (documentos faltantes e/ou turma lotada).
+    Mantém no máximo 50 entradas — as mais antigas são removidas automaticamente
+    para evitar acúmulo ilimitado na tabela configuracoes_sistema.
+    """
     import json, datetime as _dt
+    _MAX_LOGS = 50
     try:
         ts = _dt.datetime.now().isoformat(timespec="seconds")
         chave = f"matricula_doc_log_{ts}_{aluno_id}"
@@ -894,6 +898,21 @@ def registrar_log_matricula_doc(aluno_id, aluno_nome, docs_faltantes, operador: 
         supabase.table("configuracoes_sistema").upsert(
             {"chave": chave, "valor": valor}, on_conflict="chave"
         ).execute()
+        # Auto-limpeza: remove entradas excedentes (ordena por chave asc = mais antigas primeiro)
+        try:
+            todos = (
+                supabase.table("configuracoes_sistema")
+                .select("chave")
+                .like("chave", "matricula_doc_log_%")
+                .order("chave", desc=False)
+                .execute()
+            )
+            chaves = [r["chave"] for r in (todos.data or [])]
+            if len(chaves) > _MAX_LOGS:
+                for chave_antiga in chaves[:len(chaves) - _MAX_LOGS]:
+                    supabase.table("configuracoes_sistema").delete().eq("chave", chave_antiga).execute()
+        except Exception:
+            pass
         get_logs_matricula_docs.clear()
         return True
     except Exception:
@@ -1014,12 +1033,19 @@ def obter_dependencias_lote(ids: list) -> dict:
     return resultado
 
 
+_ALUNOS_TURMA_COLS = (
+    "id, nome, turma, turma_id, status, foto_url, url_foto, data_nascimento, "
+    "peso, altura, sexo, telefone, whatsapp, cpf, rg, created_at, "
+    "atestado_bloqueado, avaliacao_pendente, nota_risco_atual, cor_alerta_atual, "
+    "risco_borg, tags_saude, obs_atestado_bloqueio, obs_avaliacao_pendente"
+)
+
 @st.cache_data(ttl=120, show_spinner=False)
 def get_alunos_por_turma(turma_nome):
     try:
         res = (
             supabase.from_("alunos")
-            .select("*")
+            .select(_ALUNOS_TURMA_COLS)
             .eq("turma", turma_nome)
             .neq("status", "Inativo")
             .execute()
