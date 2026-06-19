@@ -1329,3 +1329,189 @@ def gerar_pdf_monitoramento_clinico(df, turma_filtro="Todas as Turmas"):
         return pdf.output(dest='S').encode('latin-1')
     except Exception:
         return bytes(pdf.output())
+
+
+# ==============================================================================
+# 🧬 PDF: PATOLOGIAS — ANAMNESE CLÍNICA (A4 Paisagem)
+# Inclui Peso / Altura / IMC e última PA de cada aluno.
+# ==============================================================================
+
+def gerar_pdf_patologias(df, turma_filtro="Todas as Turmas"):
+    """
+    PDF Patologias — Anamnese Clínica (A4 Paisagem, 277 mm úteis).
+    Colunas: ! · Nome · Turma · Patologias · Restrições · Alergias ·
+             Medicamentos · Peso/Alt/IMC · PA/Cls · Ct.Emergência · Borg
+    """
+
+    COLUNAS = [
+        ("!",              5),
+        ("Nome",          40),
+        ("Turma",         18),
+        ("Patologias",    52),
+        ("Restricoes",    23),
+        ("Alergias",      21),
+        ("Medicamentos",  24),
+        ("Peso/Alt/IMC",  18),
+        ("PA / Cls",      18),
+        ("Ct. Emergencia",41),
+        ("Borg",          17),
+    ]
+    # Total: 5+40+18+52+23+21+24+18+18+41+17 = 277 mm
+
+    TOTAL_W = sum(w for _, w in COLUNAS)
+
+    def _linhas(pdf, texto, largura, fonte_sz=7):
+        pdf.set_font("Arial", "", fonte_sz)
+        return max(1, len(pdf.multi_cell(largura, 4.5, texto, split_only=True)))
+
+    def _altura_linha(pdf, valores, fonte_sz=7):
+        max_n = 1
+        for (_, w), txt in zip(COLUNAS, valores):
+            n = _linhas(pdf, txt, w - 1, fonte_sz)
+            if n > max_n:
+                max_n = n
+        return max_n * 4.5
+
+    pdf = FPDF(orientation="L", unit="mm", format="A4")
+    pdf.set_auto_page_break(auto=True, margin=20)
+    pdf.set_margins(10, 10, 10)
+    pdf.add_page()
+
+    _cabecalho_padrao(pdf, subtitulo="Patologias — Anamnese Clinica")
+
+    hoje_str  = datetime.date.today().strftime("%d/%m/%Y")
+    hora_str  = datetime.datetime.now().strftime("%H:%M")
+    n_alertas = int((df.get("🔴", pd.Series()) == "🔴").sum())
+    n_borg7   = int((df.get("Borg/Risco", pd.Series()).fillna(0).astype(int) >= 7).sum())
+
+    pdf.set_font("Arial", "B", 8)
+    pdf.set_text_color(153, 27, 27)
+    pdf.cell(0, 5, limpar_texto(
+        f"CONFIDENCIAL | Emitido: {hoje_str} as {hora_str}"
+        f" | Turma: {turma_filtro} | Alunos: {len(df)}"
+        f" | Alertas: {n_alertas} | Borg>=7: {n_borg7}"
+    ), ln=1)
+    pdf.set_text_color(0, 0, 0)
+    pdf.ln(1)
+
+    # Legenda
+    pdf.set_font("Arial", "", 7)
+    pdf.set_fill_color(254, 226, 226); pdf.cell(4, 3.5, "", border=1, fill=True)
+    pdf.cell(1, 3.5, ""); pdf.cell(40, 3.5, limpar_texto("Alerta clinico"))
+    pdf.set_fill_color(254, 243, 199); pdf.cell(4, 3.5, "", border=1, fill=True)
+    pdf.cell(1, 3.5, ""); pdf.cell(40, 3.5, limpar_texto("Borg >= 7"))
+    pdf.set_fill_color(230, 255, 237); pdf.cell(4, 3.5, "", border=1, fill=True)
+    pdf.cell(1, 3.5, ""); pdf.cell(0, 3.5, limpar_texto("Sem alerta"), ln=1)
+    pdf.ln(1.5)
+
+    # Cabeçalho da tabela
+    pdf.set_font("Arial", "B", 7.5)
+    pdf.set_fill_color(127, 29, 29)
+    pdf.set_text_color(255, 255, 255)
+    for label, w in COLUNAS:
+        pdf.cell(w, 6, limpar_texto(label), border=1, fill=True, align="C")
+    pdf.ln()
+    pdf.set_text_color(0, 0, 0)
+
+    # Linhas de dados
+    zebra = False
+    for _, row in df.iterrows():
+        tem_alerta = str(row.get("🔴", "")) == "🔴"
+        borg_val   = int(row.get("Borg/Risco", 0) or 0)
+        borg_alto  = borg_val >= 7
+
+        # Monta string Peso/Alt/IMC
+        peso_s   = str(row.get("Peso (kg)", "") or "").strip()
+        altura_s = str(row.get("Altura (m)", "") or "").strip()
+        imc_s    = str(row.get("IMC", "") or "").strip()
+        if peso_s not in ("", "—") or altura_s not in ("", "—"):
+            pai_txt = f"{peso_s}kg/{altura_s}m"
+            if imc_s and imc_s != "—":
+                pai_txt += f" IMC:{imc_s.split(' ')[0]}"
+        else:
+            pai_txt = "—"
+
+        # Monta string PA/Cls
+        pa_s  = str(row.get("PA Sis/Dia", "") or "").strip()
+        cls_s = str(row.get("PA Classe", "") or "").strip()
+        pa_txt = f"{pa_s}" if pa_s and pa_s != "—" else "—"
+        if cls_s and cls_s not in ("—", ""):
+            pa_txt += f"/{cls_s}"
+
+        valores = [
+            "!!!" if tem_alerta else "",
+            limpar_texto(str(row.get("Nome", "") or "")),
+            limpar_texto(str(row.get("Turma", "") or "")),
+            limpar_texto(str(row.get("Patologias", "") or "")),
+            limpar_texto(str(row.get("Restrições", "") or "")),
+            limpar_texto(str(row.get("Alergias", "") or "")),
+            limpar_texto(str(row.get("Medicamentos", "") or "")),
+            limpar_texto(pai_txt),
+            limpar_texto(pa_txt),
+            limpar_texto(str(row.get("Ct. Emergência", "") or "")),
+            str(borg_val) if borg_val > 0 else "—",
+        ]
+
+        h_linha = max(_altura_linha(pdf, valores, fonte_sz=7), 4.5)
+
+        if pdf.get_y() + h_linha > pdf.page_break_trigger:
+            pdf.add_page()
+            pdf.set_font("Arial", "B", 7.5)
+            pdf.set_fill_color(127, 29, 29)
+            pdf.set_text_color(255, 255, 255)
+            for label, w in COLUNAS:
+                pdf.cell(w, 6, limpar_texto(label), border=1, fill=True, align="C")
+            pdf.ln()
+            pdf.set_text_color(0, 0, 0)
+            zebra = False
+
+        if tem_alerta:
+            pdf.set_fill_color(254, 226, 226)
+        elif borg_alto:
+            pdf.set_fill_color(254, 243, 199)
+        elif zebra:
+            pdf.set_fill_color(245, 247, 250)
+        else:
+            pdf.set_fill_color(255, 255, 255)
+        zebra = not zebra
+
+        x_ini = pdf.get_x()
+        y_ini = pdf.get_y()
+        for i, ((_, w), texto) in enumerate(zip(COLUNAS, valores)):
+            align = "C" if i in (0, 10) else "L"
+            pdf.set_xy(x_ini, y_ini)
+            pdf.rect(x_ini, y_ini, w, h_linha, style="FD")
+            if align == "C" or len(texto) <= max(1, int(w / 2.2)):
+                pdf.set_xy(x_ini + 1, y_ini + (h_linha - 4) / 2)
+                pdf.set_font("Arial", "", 7)
+                pdf.cell(w - 2, 4, texto[:max(1, int(w / 1.9))], align=align)
+            else:
+                pdf.set_xy(x_ini + 1, y_ini + 0.5)
+                pdf.set_font("Arial", "", 6.5)
+                pdf.multi_cell(w - 2, 4, texto, align="L")
+            x_ini += w
+        pdf.set_xy(pdf.l_margin, y_ini + h_linha)
+
+    # Rodapé
+    pdf.ln(2)
+    pdf.set_draw_color(153, 27, 27)
+    pdf.set_line_width(0.4)
+    pdf.line(pdf.l_margin, pdf.get_y(), pdf.l_margin + TOTAL_W, pdf.get_y())
+    pdf.set_line_width(0.2); pdf.set_draw_color(0, 0, 0)
+    pdf.ln(2)
+    pdf.set_font("Arial", "B", 8)
+    pdf.set_text_color(153, 27, 27)
+    pdf.cell(0, 5, limpar_texto(
+        f"Resumo: {len(df)} alunos | {n_alertas} alertas clinicos | {n_borg7} com Borg >= 7"
+    ), ln=1)
+    pdf.set_text_color(100, 116, 139)
+    pdf.set_font("Arial", "I", 6.5)
+    pdf.cell(0, 4, limpar_texto(
+        "Documento confidencial — uso restrito a equipe tecnica. "
+        "Proibida reproducao ou divulgacao sem autorizacao da coordenacao."
+    ), ln=1)
+
+    try:
+        return pdf.output(dest='S').encode('latin-1')
+    except Exception:
+        return bytes(pdf.output())

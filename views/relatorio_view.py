@@ -18,7 +18,6 @@ from gerador_pdf import (
     criar_prestacao_diaria_pdf,
     criar_prestacao_periodo_pdf,
     criar_pdf_alerta_frequencia,
-    gerar_pdf_monitoramento_clinico,
 )
 
 from database import (
@@ -2174,7 +2173,7 @@ def tela_relatorio():
             "🔎 Auditoria",
             "🏆 Prestação Pedagógica",
             "🧪 Avaliações",
-            "🏥 Monitoramento",
+            "🧬 Patologias",
             "🩺 Coleta PA em Lote",
         ]
     )
@@ -3062,10 +3061,11 @@ def tela_relatorio():
         renderizar_aba_sem_avaliacao()
 
     # ==============================================================================
-    # --- ABA 7: MONITORAMENTO CLÍNICO (B.I. DA SAÚDE) ---
+    # --- ABA 7: PATOLOGIAS / ANAMNESE CLÍNICA ---
     # ==============================================================================
     with tab_clinico:
-        _renderizar_monitoramento_clinico()
+        from views.patologias_clinicas_view import renderizar_aba_patologias
+        renderizar_aba_patologias()
 
     with tab_pa_lote:
         tela_relatorio_pa_lote()

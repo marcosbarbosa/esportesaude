@@ -1,1 +1,2 @@
 - [Aproveitamento cache bug](aproveitamento-cache.md) — após merge de duplicata, limpar CRM caches no prontuário ou dados velhos aparecem na ficha.
+- [Patologias module extraction](patologias-module.md) — anamnese clínica extraída para views/patologias_clinicas_view.py; renderizar_aba_patologias() compartilhada entre Portal do Aluno e Relatórios & BI via import local.

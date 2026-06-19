@@ -340,8 +340,9 @@ def renderizar_dashboard():
             icon="👉",
         )
 
-    tab_alunos, tab_cracha, tab_novo_cad, tab_triagem, tab_ag, tab_med, tab_novos, tab_inativos, tab_pa = st.tabs([
+    tab_alunos, tab_patologias, tab_cracha, tab_novo_cad, tab_triagem, tab_ag, tab_med, tab_novos, tab_inativos, tab_pa = st.tabs([
         "👥 Alunos",
+        "🧬 Patologias",
         "🪪 Cara-crachá",
         "📝 NOVO Aluno",
         "🆕 TRIAGEM",
@@ -1142,6 +1143,11 @@ def renderizar_dashboard():
                         "<div class='linha-divisoria'></div>", unsafe_allow_html=True
                     )
 
+
+    # --- ABA: PATOLOGIAS / ANAMNESE CLÍNICA ---
+    with tab_patologias:
+        from views.patologias_clinicas_view import renderizar_aba_patologias
+        renderizar_aba_patologias()
 
     # --- ABA: CARA-CRACHÁ ---
     with tab_cracha:
