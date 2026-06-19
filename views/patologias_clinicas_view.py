@@ -192,12 +192,6 @@ def renderizar_aba_patologias():
             "Nome":           str(r.get("nome", "")),
             "Turma":          str(r.get("turma") or "")[:3].strip(),
             "Borg/Risco":     borg_atual,
-            "Patologias":     patologias[:120],
-            "Restrições":     restricoes[:80],
-            "Alergias":       alergias[:60],
-            "Incômodos":      incomodos[:60],
-            "Medicamentos":   medicament[:80],
-            "Ct. Emergência": str(r.get("contato_emergencia", "") or "")[:100],
             "Peso (kg)":      peso_fmt,
             "Altura (m)":     altura_fmt,
             "IMC":            imc_fmt,
@@ -205,6 +199,12 @@ def renderizar_aba_patologias():
             "PA Classe":      pa_cls,
             "Data PA":        pa_dat,
             "Pulso (bpm)":    str(int(pul)) if pul else "—",
+            "Patologias":     patologias[:120],
+            "Restrições":     restricoes[:80],
+            "Alergias":       alergias[:60],
+            "Incômodos":      incomodos[:60],
+            "Medicamentos":   medicament[:80],
+            "Ct. Emergência": str(r.get("contato_emergencia", "") or "")[:100],
         })
 
     df_monitor = pd.DataFrame(registros)
@@ -244,6 +244,14 @@ def renderizar_aba_patologias():
             "Borg / Risco (0–10)", min_value=0, max_value=10, step=1, width="small",
             help="0 = sem risco  ·  10 = emergência",
         ),
+        "Peso (kg)":      st.column_config.TextColumn("Peso (kg)", disabled=True, width="small"),
+        "Altura (m)":     st.column_config.TextColumn("Altura (m)", disabled=True, width="small"),
+        "IMC":            st.column_config.TextColumn("IMC", disabled=True, width="medium",
+                              help="IMC calculado a partir do peso e altura cadastrados na ficha"),
+        "PA Sis/Dia":     st.column_config.TextColumn("PA Sis/Dia (mmHg)", disabled=True, width="small"),
+        "PA Classe":      st.column_config.TextColumn("Classif. PA", disabled=True, width="small"),
+        "Data PA":        st.column_config.TextColumn("Data PA", disabled=True, width="small"),
+        "Pulso (bpm)":    st.column_config.TextColumn("Pulso (bpm)", disabled=True, width="small"),
         "Patologias":     st.column_config.TextColumn("Patologias / Saúde", disabled=True, width="large"),
         "Restrições":     st.column_config.TextColumn("Restrições Físicas", disabled=True, width="medium"),
         "Alergias":       st.column_config.TextColumn("Alergias", disabled=True, width="medium"),
@@ -253,18 +261,18 @@ def renderizar_aba_patologias():
             "🚨 Ct. Emergência", disabled=True, width="medium",
             help="Contato de emergência cadastrado na ficha do aluno",
         ),
-        "Peso (kg)":      st.column_config.TextColumn("Peso (kg)", disabled=True, width="small"),
-        "Altura (m)":     st.column_config.TextColumn("Altura (m)", disabled=True, width="small"),
-        "IMC":            st.column_config.TextColumn("IMC", disabled=True, width="medium",
-                              help="IMC calculado a partir do peso e altura cadastrados na ficha"),
-        "PA Sis/Dia":     st.column_config.TextColumn("PA Sis/Dia (mmHg)", disabled=True, width="small"),
-        "PA Classe":      st.column_config.TextColumn("Classif. PA", disabled=True, width="small"),
-        "Data PA":        st.column_config.TextColumn("Data PA", disabled=True, width="small"),
-        "Pulso (bpm)":    st.column_config.TextColumn("Pulso (bpm)", disabled=True, width="small"),
     }
+
+    _col_order = [
+        "Foto", "🔴", "Nome", "Turma", "Borg/Risco",
+        "Peso (kg)", "Altura (m)", "IMC",
+        "PA Sis/Dia", "PA Classe", "Data PA", "Pulso (bpm)",
+        "Patologias", "Restrições", "Alergias", "Incômodos", "Medicamentos", "Ct. Emergência",
+    ]
 
     df_editado = st.data_editor(
         df_monitor, column_config=col_config,
+        column_order=_col_order,
         use_container_width=True, hide_index=True,
         key="data_editor_pat", num_rows="fixed",
     )
@@ -369,10 +377,6 @@ def renderizar_aba_patologias():
             f"<td style='padding:3px 4px;border:1px solid #CBD5E1;font-size:9.5px;'>{_row.get('Turma','')}</td>"
             f"<td style='text-align:center;padding:3px 4px;border:1px solid #CBD5E1;font-size:10px;"
             f"font-weight:700;color:{'#991B1B' if _borg7 else '#0A2540'};'>{_borg_txt}</td>"
-            f"<td style='padding:3px 5px;border:1px solid #CBD5E1;font-size:9.5px;'>{_row.get('Patologias','')}</td>"
-            f"<td style='padding:3px 4px;border:1px solid #CBD5E1;font-size:9.5px;'>{_row.get('Restrições','')}</td>"
-            f"<td style='padding:3px 4px;border:1px solid #CBD5E1;font-size:9.5px;'>{_row.get('Alergias','')}</td>"
-            f"<td style='padding:3px 4px;border:1px solid #CBD5E1;font-size:9.5px;'>{_row.get('Medicamentos','')}</td>"
             f"<td style='padding:3px 4px;border:1px solid #CBD5E1;font-size:9px;text-align:center;'>"
             f"  <span style='font-weight:600;'>{_row.get('Peso (kg)','—')} kg</span><br>"
             f"  <span style='color:#475569;'>{_row.get('Altura (m)','—')} m</span><br>"
@@ -381,6 +385,10 @@ def renderizar_aba_patologias():
             f"<td style='padding:3px 4px;border:1px solid #CBD5E1;font-size:9.5px;text-align:center;"
             f"font-weight:600;color:{_pa_cor};'>{_row.get('PA Sis/Dia','—')}<br>"
             f"<span style='font-size:8px;'>{_pa_cls}</span></td>"
+            f"<td style='padding:3px 5px;border:1px solid #CBD5E1;font-size:9.5px;'>{_row.get('Patologias','')}</td>"
+            f"<td style='padding:3px 4px;border:1px solid #CBD5E1;font-size:9.5px;'>{_row.get('Restrições','')}</td>"
+            f"<td style='padding:3px 4px;border:1px solid #CBD5E1;font-size:9.5px;'>{_row.get('Alergias','')}</td>"
+            f"<td style='padding:3px 4px;border:1px solid #CBD5E1;font-size:9.5px;'>{_row.get('Medicamentos','')}</td>"
             f"<td style='padding:3px 4px;border:1px solid #CBD5E1;font-size:9.5px;'>{_ct_html}</td>"
             f"</tr>"
         )
@@ -418,12 +426,12 @@ def renderizar_aba_patologias():
             <th style="padding:4px 5px;font-size:9px;border:1px solid #991B1B;text-align:left;width:10%;">Nome</th>
             <th style="padding:4px 4px;font-size:9px;border:1px solid #991B1B;width:4%;">Turma</th>
             <th style="padding:4px 3px;font-size:9px;border:1px solid #991B1B;width:3%;">Borg</th>
-            <th style="padding:4px 5px;font-size:9px;border:1px solid #991B1B;text-align:left;width:14%;">Patologias / Saúde</th>
-            <th style="padding:4px 4px;font-size:9px;border:1px solid #991B1B;text-align:left;width:9%;">Restrições</th>
-            <th style="padding:4px 4px;font-size:9px;border:1px solid #991B1B;text-align:left;width:6%;">Alergias</th>
-            <th style="padding:4px 4px;font-size:9px;border:1px solid #991B1B;text-align:left;width:9%;">Medicamentos</th>
             <th style="padding:4px 4px;font-size:9px;border:1px solid #991B1B;text-align:center;width:9%;">Peso / Alt / IMC</th>
             <th style="padding:4px 4px;font-size:9px;border:1px solid #991B1B;text-align:center;width:7%;">PA / Classe</th>
+            <th style="padding:4px 5px;font-size:9px;border:1px solid #991B1B;text-align:left;width:13%;">Patologias / Saúde</th>
+            <th style="padding:4px 4px;font-size:9px;border:1px solid #991B1B;text-align:left;width:8%;">Restrições</th>
+            <th style="padding:4px 4px;font-size:9px;border:1px solid #991B1B;text-align:left;width:5%;">Alergias</th>
+            <th style="padding:4px 4px;font-size:9px;border:1px solid #991B1B;text-align:left;width:8%;">Medicamentos</th>
             <th style="padding:4px 4px;font-size:9px;border:1px solid #991B1B;text-align:left;width:13%;">🚨 Ct. Emergência</th>
           </tr>
         </thead>

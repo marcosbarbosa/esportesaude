@@ -1348,17 +1348,18 @@ def gerar_pdf_patologias(df, turma_filtro="Todas as Turmas"):
     COLUNAS = [
         ("Foto",           9,  "Foto"),
         ("!",              5,  "🔴"),
-        ("Nome",          37,  "Nome"),
+        ("Nome",          35,  "Nome"),
         ("Turma",          8,  "Turma"),
         ("Borg",           9,  "Borg/Risco"),
-        ("Patologias",    46,  "Patologias"),
+        ("Peso/Alt/IMC",  18,  None),
+        ("PA / Cls",      16,  None),
+        ("Patologias",    48,  "Patologias"),
         ("Restricoes",    21,  "Restrições"),
         ("Alergias",      17,  "Alergias"),
         ("Medicamentos",  22,  "Medicamentos"),
-        ("Peso/Alt/IMC",  18,  None),
-        ("PA / Cls",      16,  None),
         ("Ct. Emergencia",69,  "Ct. Emergência"),
     ]
+    # Total: 9+5+35+8+9+18+16+48+21+17+22+69 = 277 mm
 
     TOTAL_W = sum(w for _, w, _ in COLUNAS)
     # Índice da coluna Foto (posição 0) para tratamento especial
@@ -1505,12 +1506,12 @@ def gerar_pdf_patologias(df, turma_filtro="Todas as Turmas"):
             limpar_texto(str(row.get("Nome", "") or "")),             # Nome
             limpar_texto(str(row.get("Turma", "") or "")),            # Turma
             str(borg_val) if borg_val > 0 else "-",                  # Borg
+            limpar_texto(pai_txt),                                    # Peso/Alt/IMC
+            limpar_texto(pa_txt),                                     # PA/Cls
             limpar_texto(str(row.get("Patologias", "") or "")),       # Patologias
             limpar_texto(str(row.get("Restrições", "") or "")),       # Restrições
             limpar_texto(str(row.get("Alergias", "") or "")),         # Alergias
             limpar_texto(str(row.get("Medicamentos", "") or "")),     # Medicamentos
-            limpar_texto(pai_txt),                                    # Peso/Alt/IMC
-            limpar_texto(pa_txt),                                     # PA/Cls
             limpar_texto(str(row.get("Ct. Emergência", "") or "")),   # Ct. Emergência
         ]
 
@@ -1552,8 +1553,8 @@ def gerar_pdf_patologias(df, turma_filtro="Todas as Turmas"):
 
         # ── Demais colunas ────────────────────────────────────────────────
         for ci, ((_, w, _), texto) in enumerate(zip(COLUNAS[1:], textos)):
-            # ci=0→!, ci=1→Nome, ci=2→Turma, ci=3→Borg
-            centrar = ci in (0, 3)   # ! e Borg centralizados
+            # ci=0→!, ci=1→Nome, ci=2→Turma, ci=3→Borg, ci=4→Peso/Alt/IMC, ci=5→PA/Cls
+            centrar = ci in (0, 3, 4, 5)   # !, Borg, Peso/Alt/IMC e PA/Cls centralizados
             pdf.set_xy(x_ini, y_ini)
             pdf.set_fill_color(fill_r, fill_g, fill_b)
             pdf.rect(x_ini, y_ini, w, h_linha, style="FD")
