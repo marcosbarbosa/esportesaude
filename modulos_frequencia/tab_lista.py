@@ -8,6 +8,46 @@ import streamlit as st
 import pandas as pd
 from database import alternar_presenca, excluir_aluno_completo
 
+_CSS_LISTA = """
+<style>
+.freq-avatar {
+    display: block;
+    width: 42px !important; height: 42px !important;
+    min-width: 42px; min-height: 42px;
+    max-width: 42px; max-height: 42px;
+    aspect-ratio: 1 / 1;
+    border-radius: 50%;
+    object-fit: cover;
+    object-position: center center;
+    flex-shrink: 0;
+    box-shadow: 0 0 0 2.5px #3B82F6, 0 2px 8px rgba(59,130,246,0.25);
+    transition: transform 0.25s cubic-bezier(0.34,1.56,0.64,1), box-shadow 0.25s ease;
+    cursor: zoom-in;
+    position: relative;
+    z-index: 50;
+}
+.freq-avatar:hover {
+    transform: scale(3.5);
+    box-shadow: 0 0 0 2.5px #3B82F6, 0 12px 36px rgba(0,0,0,0.5);
+    z-index: 99999 !important;
+    position: relative;
+}
+.freq-initials {
+    display: flex; align-items: center; justify-content: center;
+    width: 42px; height: 42px;
+    min-width: 42px; min-height: 42px;
+    aspect-ratio: 1 / 1;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #3B82F6, #06B6D4);
+    color: #fff;
+    font-weight: 900;
+    font-size: 16px;
+    box-shadow: 0 0 0 2px #BFDBFE;
+    flex-shrink: 0;
+}
+</style>
+"""
+
 def toggle_presence_btn(aluno_id, data_aula, atual_status, nome_aluno):
     if alternar_presenca(aluno_id, data_aula, not atual_status): 
         st.toast(f"✅ {nome_aluno} ATUALIZADO.")
@@ -17,6 +57,8 @@ def toggle_presence_btn(aluno_id, data_aula, atual_status, nome_aluno):
 def renderizar_aba_frequencia(df_alunos, data_aula, turma_selecionada, presencas_turma_geral, is_global_search, chave_unica):
     if df_alunos.empty: 
         return
+
+    st.markdown(_CSS_LISTA, unsafe_allow_html=True)
 
     # 🔐 IDENTIFICAÇÃO DO USUÁRIO
     usuario_email = st.session_state.get('email_usuario', '').lower().strip()
@@ -37,15 +79,20 @@ def renderizar_aba_frequencia(df_alunos, data_aula, turma_selecionada, presencas
 
                 with st.container(border=False):
                     # Ajuste da largura das colunas conforme permissão
-                    layout_cols = [1.5, 5, 1.5, 1.5] if eh_admin else [1.5, 6.5, 1.5]
+                    layout_cols = [1, 5, 1.2, 1.2] if eh_admin else [1, 6.5, 1.2]
                     c_img, c_btn, c_ed, *c_del = st.columns(layout_cols, gap="small", vertical_alignment="center")
 
                     with c_img:
-                        u_f = row.get("foto_url")
-                        if pd.notna(u_v := u_f) and str(u_v).strip(): 
-                            st.markdown(f'<img src="{u_v}" class="zoom-avatar">', unsafe_allow_html=True)
-                        else: 
-                            st.markdown('👤')
+                        u_f = str(row.get("foto_url") or "").strip()
+                        inic = "".join(p[0].upper() for p in str(row["nome"]).split()[:2] if p)
+                        if u_f.startswith("http"):
+                            st.markdown(
+                                f'<img src="{u_f}" class="freq-avatar" '
+                                f'onerror="this.outerHTML=\'<div class=freq-initials>{inic}</div>\'">',
+                                unsafe_allow_html=True
+                            )
+                        else:
+                            st.markdown(f'<div class="freq-initials">{inic}</div>', unsafe_allow_html=True)
 
                     with c_btn:
                         st.markdown(f'<div id="b_{row["id"]}">', unsafe_allow_html=True)

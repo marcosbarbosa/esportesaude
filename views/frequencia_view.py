@@ -142,8 +142,41 @@ def carregar_css_global():
     st.markdown(
         """
         <style>
-            .zoom-avatar { width: 34px; height: 34px; border-radius: 50%; object-fit: cover; transition: transform 0.3s ease; cursor: zoom-in; position: relative; z-index: 50; }
-            .zoom-avatar:hover { transform: scale(10.0); z-index: 99999 !important; box-shadow: 0px 20px 40px rgba(0,0,0,0.6); position: relative; }
+            .zoom-avatar {
+                display: block;
+                width: 42px !important; height: 42px !important;
+                min-width: 42px; min-height: 42px;
+                max-width: 42px; max-height: 42px;
+                aspect-ratio: 1 / 1;
+                border-radius: 50%;
+                object-fit: cover;
+                object-position: center center;
+                flex-shrink: 0;
+                box-shadow: 0 0 0 2.5px #3B82F6, 0 2px 8px rgba(59,130,246,0.25);
+                transition: transform 0.25s cubic-bezier(0.34,1.56,0.64,1), box-shadow 0.25s ease;
+                cursor: zoom-in;
+                position: relative;
+                z-index: 50;
+            }
+            .zoom-avatar:hover {
+                transform: scale(3.5);
+                box-shadow: 0 0 0 2.5px #3B82F6, 0 12px 36px rgba(0,0,0,0.5);
+                z-index: 99999 !important;
+                position: relative;
+            }
+            .zoom-avatar-initials {
+                display: flex; align-items: center; justify-content: center;
+                width: 42px; height: 42px;
+                min-width: 42px; min-height: 42px;
+                aspect-ratio: 1 / 1;
+                border-radius: 50%;
+                background: linear-gradient(135deg, #3B82F6, #06B6D4);
+                color: #fff;
+                font-weight: 900;
+                font-size: 16px;
+                box-shadow: 0 0 0 2px #BFDBFE;
+                flex-shrink: 0;
+            }
             div[data-baseweb="select"] > div { border: 2px solid #1E88E5 !important; border-radius: 8px !important; background-color: #F8FAFC !important; font-weight: 800 !important; font-size: 16px !important; color: #0A2540 !important; }
         </style>
     """,
