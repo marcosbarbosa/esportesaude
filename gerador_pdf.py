@@ -1510,23 +1510,28 @@ def gerar_pdf_patologias(df, turma_filtro="Todas as Turmas"):
         foto_url   = str(row.get("Foto", "") or "").strip()
         foto_path  = foto_cache.get(foto_url) if foto_url.startswith("http") else None
 
-        # Peso / Altura / IMC
+        # Peso / Altura / IMC  (3 linhas: "63.0 kg / 1.55 m / 25.0 Sobrepeso")
         peso_s   = str(row.get("Peso (kg)", "") or "").strip().replace("—", "-")
         altura_s = str(row.get("Altura (m)", "") or "").strip().replace("—", "-")
-        imc_s    = str(row.get("IMC", "") or "").strip().replace("—", "-")
-        if peso_s not in ("", "-") or altura_s not in ("", "-"):
-            pai_txt = f"{peso_s}kg/{altura_s}m"
-            if imc_s and imc_s not in ("-", ""):
-                pai_txt += f" IMC:{imc_s.split()[0]}"
-        else:
-            pai_txt = "-"
+        imc_s    = str(row.get("IMC", "") or "").strip()          # ex: "25.0 — Sobrepeso"
+        _linhas_pai = []
+        if peso_s not in ("", "-"):
+            _linhas_pai.append(f"{peso_s} kg")
+        if altura_s not in ("", "-"):
+            _linhas_pai.append(f"{altura_s} m")
+        if imc_s and imc_s not in ("-", "—"):
+            # substitui em-dash por hífen para latin-1
+            imc_clean = imc_s.replace("—", "-").replace("–", "-")
+            _linhas_pai.append(imc_clean)
+        pai_txt = "\n".join(_linhas_pai) if _linhas_pai else "-"
 
-        # PA / Classe
+        # PA / Classe  (2 linhas: "131/87 / Est.1")
         pa_s  = str(row.get("PA Sis/Dia", "") or "").strip().replace("—", "-")
         cls_s = str(row.get("PA Classe",  "") or "").strip().replace("—", "-")
-        pa_txt = pa_s if pa_s and pa_s not in ("-", "") else "-"
-        if cls_s and cls_s not in ("-", ""):
-            pa_txt += f"/{cls_s}"
+        if pa_s and pa_s not in ("-", ""):
+            pa_txt = pa_s + (f"\n{cls_s}" if cls_s and cls_s not in ("-", "") else "")
+        else:
+            pa_txt = "-"
 
         # Textos para as colunas NÃO-foto (mesma ordem que COLUNAS[1:])
         textos = [
@@ -1582,14 +1587,24 @@ def gerar_pdf_patologias(df, turma_filtro="Todas as Turmas"):
         # ── Demais colunas ────────────────────────────────────────────────
         for ci, ((_, w, _), texto) in enumerate(zip(COLUNAS[1:], textos)):
             # ci=0→!, ci=1→Nome, ci=2→Turma, ci=3→Borg, ci=4→Peso/Alt/IMC, ci=5→PA/Cls
-            centrar = ci in (0, 3, 4, 5)   # !, Borg, Peso/Alt/IMC e PA/Cls centralizados
+            centrar   = ci in (0, 3, 4, 5)   # !, Borg, Peso/Alt/IMC e PA/Cls centralizados
+            multiline = "\n" in texto
             pdf.set_xy(x_ini, y_ini)
             pdf.set_fill_color(fill_r, fill_g, fill_b)
             pdf.rect(x_ini, y_ini, w, h_linha, style="FD")
-            if centrar or len(texto) <= max(1, int(w / 2.2)):
+            if multiline:
+                # multi_cell para conteúdo em linhas (Peso/Alt/IMC, PA/Cls)
+                n_linhas  = texto.count("\n") + 1
+                h_lin     = max(3.5, h_linha / n_linhas)
+                pdf.set_font("Arial", "", 6.5)
+                pdf.set_xy(x_ini + 1, y_ini + (h_linha - h_lin * n_linhas) / 2)
+                pdf.multi_cell(w - 2, h_lin, texto,
+                               align="C" if centrar else "L")
+            elif centrar or len(texto) <= max(1, int(w / 2.2)):
                 pdf.set_xy(x_ini + 1, y_ini + (h_linha - 4) / 2)
                 pdf.set_font("Arial", "", 7)
-                pdf.cell(w - 2, 4, texto[:max(1, int(w / 1.9))], align="C" if centrar else "L")
+                pdf.cell(w - 2, 4, texto[:max(1, int(w / 1.9))],
+                         align="C" if centrar else "L")
             else:
                 pdf.set_xy(x_ini + 1, y_ini + 0.5)
                 pdf.set_font("Arial", "", 6.5)
