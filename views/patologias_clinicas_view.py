@@ -299,7 +299,7 @@ def renderizar_aba_patologias():
             try:
                 from gerador_pdf import gerar_pdf_patologias
                 _pdf_pat = gerar_pdf_patologias(
-                    df_editado.drop(columns=["id", "Foto"], errors="ignore"),
+                    df_editado.drop(columns=["id"], errors="ignore"),
                     turma_filtro=turma_filtro,
                 )
                 st.download_button(

@@ -74,15 +74,13 @@ def baixar_imagem_supabase(url):
         import httpx
         with httpx.Client(timeout=20, follow_redirects=True) as client:
             r = client.get(url.strip())
-            print(f"[foto_pdf] GET {url[:80]} → {r.status_code}", flush=True)
             if r.status_code == 200:
                 img = Image.open(io.BytesIO(r.content)).convert("RGB")
                 tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".jpg")
                 img.save(tmp.name, format="JPEG", quality=85)
                 return tmp.name
-            return None
-    except Exception as exc:
-        print(f"[foto_pdf] ERRO ao baixar {url[:80]}: {exc}", flush=True)
+    except Exception:
+        pass
     return None
 
 
