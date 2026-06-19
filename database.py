@@ -2064,7 +2064,7 @@ def bi_resumo_studio():
         taxa = 0.0
     try:
         r_f15 = (supabase.from_("frequencia").select("aluno_id")
-                 .gte("data_aula", c15).eq("status", "PRESENTE").limit(5000).execute())
+                 .gte("data_aula", c15).eq("status", "PRESENTE").limit(2000).execute())
         ids_com_pres = {r["aluno_id"] for r in (r_f15.data or [])}
         sem_pres_15  = len(ids_ativos - ids_com_pres)
     except Exception:
@@ -2433,7 +2433,7 @@ def get_ultima_presenca_batch(ids: tuple) -> dict:
             .in_("aluno_id", [str(i) for i in ids])
             .eq("status", "PRESENTE")
             .order("data_aula", desc=True)
-            .limit(5000)
+            .limit(2000)
             .execute()
         )
         if not res.data:
@@ -2870,7 +2870,7 @@ def get_ultima_pa_todos() -> dict:
             .select("aluno_id, sistolica, diastolica, pulso, classificacao, data, hora")
             .order("data", desc=True)
             .order("hora", desc=True)
-            .limit(5000)
+            .limit(500)
             .execute()
         )
         resultado: dict = {}
