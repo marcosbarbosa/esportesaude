@@ -1420,22 +1420,22 @@ def gerar_pdf_patologias(df, turma_filtro="Todas as Turmas"):
         borg_val   = int(row.get("Borg/Risco", 0) or 0)
         borg_alto  = borg_val >= 7
 
-        # Monta string Peso/Alt/IMC
-        peso_s   = str(row.get("Peso (kg)", "") or "").strip()
-        altura_s = str(row.get("Altura (m)", "") or "").strip()
-        imc_s    = str(row.get("IMC", "") or "").strip()
-        if peso_s not in ("", "—") or altura_s not in ("", "—"):
+        # Monta string Peso/Alt/IMC (somente ASCII para FPDF)
+        peso_s   = str(row.get("Peso (kg)", "") or "").strip().replace("—", "-")
+        altura_s = str(row.get("Altura (m)", "") or "").strip().replace("—", "-")
+        imc_s    = str(row.get("IMC", "") or "").strip().replace("—", "-")
+        if peso_s not in ("", "-") or altura_s not in ("", "-"):
             pai_txt = f"{peso_s}kg/{altura_s}m"
-            if imc_s and imc_s != "—":
+            if imc_s and imc_s not in ("-", ""):
                 pai_txt += f" IMC:{imc_s.split(' ')[0]}"
         else:
-            pai_txt = "—"
+            pai_txt = "-"
 
-        # Monta string PA/Cls
-        pa_s  = str(row.get("PA Sis/Dia", "") or "").strip()
-        cls_s = str(row.get("PA Classe", "") or "").strip()
-        pa_txt = f"{pa_s}" if pa_s and pa_s != "—" else "—"
-        if cls_s and cls_s not in ("—", ""):
+        # Monta string PA/Cls (somente ASCII para FPDF)
+        pa_s  = str(row.get("PA Sis/Dia", "") or "").strip().replace("—", "-")
+        cls_s = str(row.get("PA Classe", "") or "").strip().replace("—", "-")
+        pa_txt = pa_s if pa_s and pa_s not in ("-", "") else "-"
+        if cls_s and cls_s not in ("-", ""):
             pa_txt += f"/{cls_s}"
 
         valores = [
@@ -1449,7 +1449,7 @@ def gerar_pdf_patologias(df, turma_filtro="Todas as Turmas"):
             limpar_texto(pai_txt),
             limpar_texto(pa_txt),
             limpar_texto(str(row.get("Ct. Emergência", "") or "")),
-            str(borg_val) if borg_val > 0 else "—",
+            str(borg_val) if borg_val > 0 else "-",
         ]
 
         h_linha = max(_altura_linha(pdf, valores, fonte_sz=7), 4.5)
