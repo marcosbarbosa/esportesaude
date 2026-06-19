@@ -340,7 +340,9 @@ def renderizar_dashboard():
             icon="👉",
         )
 
-    tab_novo_cad, tab_triagem, tab_ag, tab_med, tab_novos, tab_inativos, tab_pa = st.tabs([
+    tab_alunos, tab_cracha, tab_novo_cad, tab_triagem, tab_ag, tab_med, tab_novos, tab_inativos, tab_pa = st.tabs([
+        "👥 Alunos",
+        "🪪 Cara-crachá",
         "📝 NOVO Aluno",
         "🆕 TRIAGEM",
         "🗓️ Agenda Med",
@@ -697,447 +699,454 @@ def renderizar_dashboard():
         from views.inscricao_publica_view import tela_inscricao_publica_move_right
         tela_inscricao_publica_move_right(modo_admin=True)
 
-    st.divider()
+    # --- ABA: ALUNOS (DIRETÓRIO GLOBAL) ---
+    with tab_alunos:
 
-    # ==========================================================================
-    # 2. ACTION GRID (DIRETÓRIO GLOBAL) - MOVIDO PARA A BASE
-    # ==========================================================================
-    st.markdown("### 🔍 Diretório de Alunos e Emissão de Dossiês")
+        # ==========================================================================
+        # 2. ACTION GRID (DIRETÓRIO GLOBAL) - MOVIDO PARA A BASE
+        # ==========================================================================
+        st.markdown("### 🔍 Diretório de Alunos e Emissão de Dossiês")
 
-    with st.container(border=True):
-        # Inicializa estado de ordenação por cabeçalho
-        if "dash_sort_col" not in st.session_state:
-            st.session_state["dash_sort_col"] = "nome"
-            st.session_state["dash_sort_asc"] = True
-
-        # ── SELETOR DE PERÍODO ──────────────────────────────────────────────────
-        PERIODOS = {
-            "Mês Atual":   "mes",
-            "30 dias":     "30d",
-            "90 dias":     "90d",
-            "Histórico":   "hist",
-        }
-        periodo_labels = list(PERIODOS.keys())
-        idx_periodo = st.session_state.get("dash_periodo_idx", 1)  # padrão: 30 dias
-
-        pc0, pc1, pc2, pc3, pc4 = st.columns([1.2, 1, 1, 1, 3])
-        pc0.markdown("<span style='font-size:12px;font-weight:700;color:#64748B;'>Período:</span>", unsafe_allow_html=True)
-        for i, (lbl, col_ref) in enumerate(zip(periodo_labels, [pc1, pc2, pc3, pc4])):
-            ativo = (idx_periodo == i)
-            estilo = "primary" if ativo else "secondary"
-            if col_ref.button(lbl, key=f"per_{i}", type=estilo, use_container_width=True):
-                st.session_state["dash_periodo_idx"] = i
-                st.rerun()
-
-        periodo_key = list(PERIODOS.values())[idx_periodo]
-        hoje_ts = pd.Timestamp(datetime.date.today())
-        if periodo_key == "mes":
-            corte = hoje_ts.replace(day=1)
-            label_periodo = hoje_ts.strftime("Mai/%y")   # ex: Mai/26
-        elif periodo_key == "30d":
-            corte = hoje_ts - pd.Timedelta(days=30)
-            label_periodo = "30 dias"
-        elif periodo_key == "90d":
-            corte = hoje_ts - pd.Timedelta(days=90)
-            label_periodo = "90 dias"
-        else:
-            corte = None
-            label_periodo = "Histórico"
-
-        # Recalcula métricas de frequência para o período selecionado
-        if not df_freq_datado.empty and corte is not None:
-            df_periodo = df_freq_datado[df_freq_datado["data_aula"] >= corte].copy()
-        else:
-            df_periodo = df_freq_datado.copy()
-
-        _cols_drop = [c for c in ("total_aulas","total_presencas","taxa_presenca","aluno_id","dias_passados") if c in df_todos_crm.columns]
-        df_base_periodo = df_todos_crm.drop(columns=_cols_drop).copy()
-
-        if not df_periodo.empty:
-            # ── Presenças por aluno no período ────────────────────────────────
-            _pres_p = (
-                df_periodo.groupby("aluno_id")
-                .agg(total_presencas=("status", lambda x: (x == "PRESENTE").sum()))
-                .reset_index()
-            )
-
-            # ── Aulas por TURMA no período (datas distintas) ──────────────────
-            # Mapeia aluno_id → turma para identificar a turma de cada registro
-            _id_to_turma = df_todos_crm.set_index("id")["turma"].to_dict()
-            _df_per = df_periodo.copy()
-            _df_per["_turma"] = _df_per["aluno_id"].map(_id_to_turma)
-            _aulas_turma = (
-                _df_per.dropna(subset=["_turma", "data_aula"])
-                .drop_duplicates(subset=["_turma", "data_aula"])
-                .groupby("_turma")
-                .size()
-                .reset_index(name="total_aulas")
-                .rename(columns={"_turma": "turma"})
-            )
-
-            # ── Monta df_base_periodo ─────────────────────────────────────────
-            df_base_periodo = df_base_periodo.merge(
-                _pres_p, left_on="id", right_on="aluno_id", how="left"
-            )
-            df_base_periodo = df_base_periodo.merge(
-                _aulas_turma, on="turma", how="left"
-            )
-        else:
-            df_base_periodo["total_aulas"]     = 0
-            df_base_periodo["total_presencas"] = 0
-
-        df_base_periodo["total_aulas"]     = df_base_periodo["total_aulas"].fillna(0).astype(int)
-        df_base_periodo["total_presencas"] = df_base_periodo["total_presencas"].fillna(0).astype(int)
-        df_base_periodo["taxa_presenca"]   = (
-            df_base_periodo["total_presencas"] / df_base_periodo["total_aulas"].replace(0, pd.NA) * 100
-        ).fillna(0.0)
-
-        # Risco de evasão: considera 0 presenças no período = sem registro
-        def _risco(row):
-            if row["total_aulas"] == 0:
-                return ("⚫", "#94A3B8", "Sem aula no período")
-            t = row["taxa_presenca"]
-            if t >= 75:
-                return ("🟢", "#10B981", "Regular")
-            elif t >= 50:
-                return ("🟡", "#F59E0B", "Atenção")
-            else:
-                return ("🔴", "#EF4444", "Risco de Evasão")
-
-        df_base_periodo[["_risco_icon","_risco_cor","_risco_label"]] = pd.DataFrame(
-            df_base_periodo.apply(_risco, axis=1).tolist(),
-            index=df_base_periodo.index
-        )
-
-        # ── Dados de PA (última medição por aluno) ────────────────────────────
-        _pa_dict = get_ultima_pa_todos()
-        def _pa_row(row):
-            pa = _pa_dict.get(str(row.get("id", "")), {})
-            sis = pa.get("sis") or 0
-            dia = pa.get("dia") or 0
-            pul = pa.get("pul")
-            cls = pa.get("cls", "")
-            return pd.Series({
-                "_pa_sis":  int(sis) if sis else 0,
-                "_pa_txt":  _pa_compact_txt(sis, dia, pul, cls),
-                "_pa_html": _pa_compact_html(sis, dia, pul, cls),
-                "_pa_cls":  cls,
-                "_pa_pul":  int(pul) if pul else 0,
-            })
-        df_base_periodo = pd.concat(
-            [df_base_periodo, df_base_periodo.apply(_pa_row, axis=1)], axis=1
-        )
-
-        st.markdown("<hr style='margin:8px 0 4px 0;border-color:#E2E8F0;'/>", unsafe_allow_html=True)
-
-        # Controles Superiores
-        c_busca, c_imp, c_pag = st.columns([4, 1, 1], vertical_alignment="bottom")
-
-        # 🚀 BUSCA COM SUGESTÕES EM TEMPO REAL
-        with c_busca:
-            busca, _ = busca_com_sugestoes(
-                df_base_periodo,
-                key="busca_dash",
-                placeholder="🔍 Digite pelo menos 3 letras do nome ou turma…",
-                label="Buscar aluno:",
-                debounce=250,
-                max_sugestoes=8,
-            )
-
-        # Aplicação de Filtros no grid (Gatilho de 3 caracteres)
-        df_grid = df_base_periodo.copy()
-        if busca:
-            busca_limpa = normalizar_fonetica(busca).strip()
-            if len(busca_limpa) >= 3:
-                df_grid = filtrar_alunos_df(df_grid, busca, cols=["nome", "turma"], min_len=3)
-
-        # Aplicação de Ordenação via session_state (cabeçalhos clicáveis)
-        _scol = st.session_state.get("dash_sort_col", "nome")
-        _sasc = st.session_state.get("dash_sort_asc", True)
-        if _scol == "data_nascimento":
-            df_grid["_sort_dn"] = pd.to_datetime(df_grid["data_nascimento"], errors="coerce")
-            df_grid = df_grid.sort_values("_sort_dn", ascending=_sasc, na_position="last")
-            df_grid = df_grid.drop(columns=["_sort_dn"])
-        elif _scol == "_pa_sis":
-            df_grid = df_grid.sort_values("_pa_sis", ascending=_sasc, na_position="last")
-        else:
-            df_grid = df_grid.sort_values(_scol, ascending=_sasc, na_position="last")
-
-        # ── Botão de impressão PDF (lista com ordenação atual) ────────────────
-        _pdf_lista_key = "pdf_lista_grid"
-        if st.session_state.get(_pdf_lista_key):
-            c_imp.download_button(
-                "📥 PDF",
-                data=st.session_state[_pdf_lista_key],
-                file_name=f"Lista_Alunos_{label_periodo.replace(' ', '_')}.pdf",
-                mime="application/pdf",
-                key="dl_lista_pdf",
-                type="primary",
-                use_container_width=True,
-            )
-        else:
-            if c_imp.button("🖨️ Imprimir", key="btn_imp_lista",
-                            use_container_width=True, help="Gerar PDF da lista com a ordenação atual"):
-                with st.spinner("Gerando PDF…"):
-                    st.session_state[_pdf_lista_key] = _gerar_pdf_lista(df_grid, label_periodo)
-                st.rerun()
-
-        # Paginação
-        itens_por_pagina = 15
-        total_pags = max(1, math.ceil(len(df_grid) / itens_por_pagina))
-        pagina = c_pag.number_input(
-            f"Pág. (de {total_pags})",
-            min_value=1,
-            max_value=total_pags,
-            value=1,
-            label_visibility="collapsed",
-        )
-
-        inicio, fim = (pagina - 1) * itens_por_pagina, pagina * itens_por_pagina
-        df_page = df_grid.iloc[inicio:fim]
-
-        # Cabeçalho do Action Grid — botões clicáveis de ordenação
-        def _sort_icon(col_key):
-            if st.session_state.get("dash_sort_col") == col_key:
-                return " ▲" if st.session_state.get("dash_sort_asc", True) else " ▼"
-            return ""
-
-        def _on_sort(col_key):
-            if st.session_state.get("dash_sort_col") == col_key:
-                st.session_state["dash_sort_asc"] = not st.session_state.get("dash_sort_asc", True)
-            else:
-                st.session_state["dash_sort_col"] = col_key
+        with st.container(border=True):
+            # Inicializa estado de ordenação por cabeçalho
+            if "dash_sort_col" not in st.session_state:
+                st.session_state["dash_sort_col"] = "nome"
                 st.session_state["dash_sort_asc"] = True
 
-        st.markdown(
-            "<style>.sort-header button{background:transparent!important;border:none!important;"
-            "font-weight:700!important;color:#0F172A!important;padding:4px 2px!important;"
-            "font-size:13px!important;cursor:pointer!important;width:100%;}"
-            ".sort-header button:hover{color:#1D4ED8!important;}</style>",
-            unsafe_allow_html=True,
-        )
-        with st.container():
-            st.markdown("<div class='sort-header'>", unsafe_allow_html=True)
-            gh0, gh1, gh2, gh3, gh4, gh5, gh6 = st.columns([3, 0.8, 0.8, 0.8, 1.2, 1.5, 2])
-            if gh0.button(f"Aluno / Turma{_sort_icon('nome')}", key="sh_nome", use_container_width=True):
-                _on_sort("nome"); st.rerun()
-            if gh1.button(f"Nasc.{_sort_icon('data_nascimento')}", key="sh_nasc", use_container_width=True):
-                _on_sort("data_nascimento"); st.rerun()
-            if gh2.button(f"Aulas{_sort_icon('total_aulas')}", key="sh_aulas", use_container_width=True):
-                _on_sort("total_aulas"); st.rerun()
-            if gh3.button(f"Pres.{_sort_icon('total_presencas')}", key="sh_pres", use_container_width=True):
-                _on_sort("total_presencas"); st.rerun()
-            if gh4.button(f"Taxa/Risco{_sort_icon('taxa_presenca')}", key="sh_taxa", use_container_width=True):
-                _on_sort("taxa_presenca"); st.rerun()
-            if gh5.button(f"Últ. PA{_sort_icon('_pa_sis')}", key="sh_pa", use_container_width=True):
-                _on_sort("_pa_sis"); st.rerun()
-            gh6.markdown("<div style='text-align:center;font-weight:700;font-size:13px;padding:4px 2px;'>Ações</div>", unsafe_allow_html=True)
-            st.markdown("</div>", unsafe_allow_html=True)
-        st.markdown("<hr style='margin:0 0 6px 0;border-color:#CBD5E1;'/>", unsafe_allow_html=True)
+            # ── SELETOR DE PERÍODO ──────────────────────────────────────────────────
+            PERIODOS = {
+                "Mês Atual":   "mes",
+                "30 dias":     "30d",
+                "90 dias":     "90d",
+                "Histórico":   "hist",
+            }
+            periodo_labels = list(PERIODOS.keys())
+            idx_periodo = st.session_state.get("dash_periodo_idx", 1)  # padrão: 30 dias
 
-        # ======================================================================
-        # 🚀 MÁGICA UX: SE NÃO ENCONTRAR, MOSTRA FORMULÁRIO DE CADASTRO RÁPIDO
-        # ======================================================================
-        if df_page.empty:
-            if busca and len(busca.strip()) >= 3:
-                st.warning(f"🔍 Nenhum aluno encontrado para: **'{busca}'**")
+            pc0, pc1, pc2, pc3, pc4 = st.columns([1.2, 1, 1, 1, 3])
+            pc0.markdown("<span style='font-size:12px;font-weight:700;color:#64748B;'>Período:</span>", unsafe_allow_html=True)
+            for i, (lbl, col_ref) in enumerate(zip(periodo_labels, [pc1, pc2, pc3, pc4])):
+                ativo = (idx_periodo == i)
+                estilo = "primary" if ativo else "secondary"
+                if col_ref.button(lbl, key=f"per_{i}", type=estilo, use_container_width=True):
+                    st.session_state["dash_periodo_idx"] = i
+                    st.rerun()
 
-                with st.container(border=True):
-                    st.markdown(f"<h4 style='color:#1E88E5; margin-bottom: 10px; margin-top: 0;'>✨ Criar Novo Cadastro Rápido</h4>", unsafe_allow_html=True)
-                    st.caption("Preencha apenas a turma para matricular este aluno imediatamente.")
-
-                    with st.form(key="form_quick_cad"):
-                        turmas_df = get_todas_turmas(ativas_apenas=True)
-                        lista_turmas = turmas_df["nome"].tolist() if not turmas_df.empty else ["Nenhuma turma disponível"]
-
-                        c_n, c_t = st.columns([2, 1])
-                        novo_nome = c_n.text_input("Nome do Aluno:", value=busca.upper().strip(), key="qs_nome")
-                        # key estável garante que a seleção persiste mesmo com reruns do st_keyup.
-                        nova_turma = c_t.selectbox("Alocar na Turma:", lista_turmas, key="qs_turma_sel")
-
-                        if st.form_submit_button("✅ Cadastrar e Matricular", type="primary", use_container_width=True):
-                            if nova_turma == "Nenhuma turma disponível":
-                                st.error("Crie uma turma primeiro no menu 'Turmas'.")
-                            elif len(novo_nome) < 3:
-                                st.error("O nome deve ter pelo menos 3 letras.")
-                            else:
-                                sucesso = cadastrar_novo_aluno(nome=novo_nome, turma=nova_turma)
-                                if sucesso:
-                                    obter_todos_alunos_cache.clear()
-                                    carregar_dados_crm_avaliacoes_senior.clear()
-                                    st.success(f"🎉 {novo_nome} foi matriculado com sucesso na turma {nova_turma}!")
-                                    time.sleep(1.5)
-                                    st.rerun()
-                                else:
-                                    st.error("Erro ao tentar cadastrar no banco de dados.")
+            periodo_key = list(PERIODOS.values())[idx_periodo]
+            hoje_ts = pd.Timestamp(datetime.date.today())
+            if periodo_key == "mes":
+                corte = hoje_ts.replace(day=1)
+                label_periodo = hoje_ts.strftime("Mai/%y")   # ex: Mai/26
+            elif periodo_key == "30d":
+                corte = hoje_ts - pd.Timedelta(days=30)
+                label_periodo = "30 dias"
+            elif periodo_key == "90d":
+                corte = hoje_ts - pd.Timedelta(days=90)
+                label_periodo = "90 dias"
             else:
-                st.info("Nenhum aluno encontrado para este filtro.")
-        else:
-            # Renderização das Linhas do Grid
-            for _, a in df_page.iterrows():
-                c1, c2, c3, c4, c5, c6, c7 = st.columns(
-                    [3, 0.8, 0.8, 0.8, 1.2, 1.5, 2], vertical_alignment="center"
+                corte = None
+                label_periodo = "Histórico"
+
+            # Recalcula métricas de frequência para o período selecionado
+            if not df_freq_datado.empty and corte is not None:
+                df_periodo = df_freq_datado[df_freq_datado["data_aula"] >= corte].copy()
+            else:
+                df_periodo = df_freq_datado.copy()
+
+            _cols_drop = [c for c in ("total_aulas","total_presencas","taxa_presenca","aluno_id","dias_passados") if c in df_todos_crm.columns]
+            df_base_periodo = df_todos_crm.drop(columns=_cols_drop).copy()
+
+            if not df_periodo.empty:
+                # ── Presenças por aluno no período ────────────────────────────────
+                _pres_p = (
+                    df_periodo.groupby("aluno_id")
+                    .agg(total_presencas=("status", lambda x: (x == "PRESENTE").sum()))
+                    .reset_index()
                 )
 
-                # Col 1: Foto + Nome e Turma (MÁGICA DO FLEXBOX)
-                url_foto = a.get('url_foto')
-                if pd.notna(url_foto) and str(url_foto).strip() and str(url_foto).strip().lower() not in ["none", "nan", "null", ""]:
-                    avatar_html = f"<img src='{url_foto}' class='zoom-avatar-dash' alt='Foto'>"
+                # ── Aulas por TURMA no período (datas distintas) ──────────────────
+                # Mapeia aluno_id → turma para identificar a turma de cada registro
+                _id_to_turma = df_todos_crm.set_index("id")["turma"].to_dict()
+                _df_per = df_periodo.copy()
+                _df_per["_turma"] = _df_per["aluno_id"].map(_id_to_turma)
+                _aulas_turma = (
+                    _df_per.dropna(subset=["_turma", "data_aula"])
+                    .drop_duplicates(subset=["_turma", "data_aula"])
+                    .groupby("_turma")
+                    .size()
+                    .reset_index(name="total_aulas")
+                    .rename(columns={"_turma": "turma"})
+                )
+
+                # ── Monta df_base_periodo ─────────────────────────────────────────
+                df_base_periodo = df_base_periodo.merge(
+                    _pres_p, left_on="id", right_on="aluno_id", how="left"
+                )
+                df_base_periodo = df_base_periodo.merge(
+                    _aulas_turma, on="turma", how="left"
+                )
+            else:
+                df_base_periodo["total_aulas"]     = 0
+                df_base_periodo["total_presencas"] = 0
+
+            df_base_periodo["total_aulas"]     = df_base_periodo["total_aulas"].fillna(0).astype(int)
+            df_base_periodo["total_presencas"] = df_base_periodo["total_presencas"].fillna(0).astype(int)
+            df_base_periodo["taxa_presenca"]   = (
+                df_base_periodo["total_presencas"] / df_base_periodo["total_aulas"].replace(0, pd.NA) * 100
+            ).fillna(0.0)
+
+            # Risco de evasão: considera 0 presenças no período = sem registro
+            def _risco(row):
+                if row["total_aulas"] == 0:
+                    return ("⚫", "#94A3B8", "Sem aula no período")
+                t = row["taxa_presenca"]
+                if t >= 75:
+                    return ("🟢", "#10B981", "Regular")
+                elif t >= 50:
+                    return ("🟡", "#F59E0B", "Atenção")
                 else:
-                    avatar_html = "<div class='avatar-placeholder'>👤</div>"
+                    return ("🔴", "#EF4444", "Risco de Evasão")
 
-                c1.markdown(
-                    f"""
-                    <div style='display: flex; align-items: center; gap: 12px;'>
-                        {avatar_html}
-                        <div style='line-height:1.3;'>
-                            <strong style='font-size:14px; color:#0F172A;'>{a['nome']}</strong><br>
-                            <span style='font-size:12px;color:#64748B;'>{a['turma']}</span>
-                        </div>
-                    </div>
-                    """,
-                    unsafe_allow_html=True,
+            df_base_periodo[["_risco_icon","_risco_cor","_risco_label"]] = pd.DataFrame(
+                df_base_periodo.apply(_risco, axis=1).tolist(),
+                index=df_base_periodo.index
+            )
+
+            # ── Dados de PA (última medição por aluno) ────────────────────────────
+            _pa_dict = get_ultima_pa_todos()
+            def _pa_row(row):
+                pa = _pa_dict.get(str(row.get("id", "")), {})
+                sis = pa.get("sis") or 0
+                dia = pa.get("dia") or 0
+                pul = pa.get("pul")
+                cls = pa.get("cls", "")
+                return pd.Series({
+                    "_pa_sis":  int(sis) if sis else 0,
+                    "_pa_txt":  _pa_compact_txt(sis, dia, pul, cls),
+                    "_pa_html": _pa_compact_html(sis, dia, pul, cls),
+                    "_pa_cls":  cls,
+                    "_pa_pul":  int(pul) if pul else 0,
+                })
+            df_base_periodo = pd.concat(
+                [df_base_periodo, df_base_periodo.apply(_pa_row, axis=1)], axis=1
+            )
+
+            st.markdown("<hr style='margin:8px 0 4px 0;border-color:#E2E8F0;'/>", unsafe_allow_html=True)
+
+            # Controles Superiores
+            c_busca, c_imp, c_pag = st.columns([4, 1, 1], vertical_alignment="bottom")
+
+            # 🚀 BUSCA COM SUGESTÕES EM TEMPO REAL
+            with c_busca:
+                busca, _ = busca_com_sugestoes(
+                    df_base_periodo,
+                    key="busca_dash",
+                    placeholder="🔍 Digite pelo menos 3 letras do nome ou turma…",
+                    label="Buscar aluno:",
+                    debounce=250,
+                    max_sugestoes=8,
                 )
 
-                # Col 2: Nascimento
-                _dn = a.get("data_nascimento")
-                try:
-                    _dn_fmt = pd.to_datetime(_dn).strftime("%d/%m/%Y") if pd.notna(_dn) and _dn else "—"
-                except Exception:
-                    _dn_fmt = "—"
-                c2.markdown(
-                    f"<div style='text-align:center; font-size:12px; color:#64748B;'>{_dn_fmt}</div>",
-                    unsafe_allow_html=True,
-                )
+            # Aplicação de Filtros no grid (Gatilho de 3 caracteres)
+            df_grid = df_base_periodo.copy()
+            if busca:
+                busca_limpa = normalizar_fonetica(busca).strip()
+                if len(busca_limpa) >= 3:
+                    df_grid = filtrar_alunos_df(df_grid, busca, cols=["nome", "turma"], min_len=3)
 
-                # Col 3 e 4: Métricas do período selecionado
-                _aulas = int(a.get("total_aulas", 0))
-                _pres  = int(a.get("total_presencas", 0))
-                _cor_aulas = "#475569" if _aulas > 0 else "#CBD5E1"
-                _cor_pres  = "#10B981" if _pres  > 0 else "#CBD5E1"
-                c3.markdown(
-                    f"<div style='text-align:center; font-size:14px; font-weight:600; color:{_cor_aulas};'>{_aulas}</div>",
-                    unsafe_allow_html=True,
-                )
-                c4.markdown(
-                    f"<div style='text-align:center; font-size:15px; font-weight:900; color:{_cor_pres};'>{_pres}</div>",
-                    unsafe_allow_html=True,
-                )
+            # Aplicação de Ordenação via session_state (cabeçalhos clicáveis)
+            _scol = st.session_state.get("dash_sort_col", "nome")
+            _sasc = st.session_state.get("dash_sort_asc", True)
+            if _scol == "data_nascimento":
+                df_grid["_sort_dn"] = pd.to_datetime(df_grid["data_nascimento"], errors="coerce")
+                df_grid = df_grid.sort_values("_sort_dn", ascending=_sasc, na_position="last")
+                df_grid = df_grid.drop(columns=["_sort_dn"])
+            elif _scol == "_pa_sis":
+                df_grid = df_grid.sort_values("_pa_sis", ascending=_sasc, na_position="last")
+            else:
+                df_grid = df_grid.sort_values(_scol, ascending=_sasc, na_position="last")
 
-                # Col 5: Taxa % + badge de risco de evasão
-                taxa         = float(a.get("taxa_presenca", 0.0))
-                risco_icon   = a.get("_risco_icon",  "⚫")
-                risco_cor    = a.get("_risco_cor",   "#94A3B8")
-                risco_label  = a.get("_risco_label", "Sem dados")
-                _aulas_linha = int(a.get("total_aulas", 0))
-                if _aulas_linha == 0:
-                    taxa_txt = "—"
-                    barra_w  = 0
+            # ── Botão de impressão PDF (lista com ordenação atual) ────────────────
+            _pdf_lista_key = "pdf_lista_grid"
+            if st.session_state.get(_pdf_lista_key):
+                c_imp.download_button(
+                    "📥 PDF",
+                    data=st.session_state[_pdf_lista_key],
+                    file_name=f"Lista_Alunos_{label_periodo.replace(' ', '_')}.pdf",
+                    mime="application/pdf",
+                    key="dl_lista_pdf",
+                    type="primary",
+                    use_container_width=True,
+                )
+            else:
+                if c_imp.button("🖨️ Imprimir", key="btn_imp_lista",
+                                use_container_width=True, help="Gerar PDF da lista com a ordenação atual"):
+                    with st.spinner("Gerando PDF…"):
+                        st.session_state[_pdf_lista_key] = _gerar_pdf_lista(df_grid, label_periodo)
+                    st.rerun()
+
+            # Paginação
+            itens_por_pagina = 15
+            total_pags = max(1, math.ceil(len(df_grid) / itens_por_pagina))
+            pagina = c_pag.number_input(
+                f"Pág. (de {total_pags})",
+                min_value=1,
+                max_value=total_pags,
+                value=1,
+                label_visibility="collapsed",
+            )
+
+            inicio, fim = (pagina - 1) * itens_por_pagina, pagina * itens_por_pagina
+            df_page = df_grid.iloc[inicio:fim]
+
+            # Cabeçalho do Action Grid — botões clicáveis de ordenação
+            def _sort_icon(col_key):
+                if st.session_state.get("dash_sort_col") == col_key:
+                    return " ▲" if st.session_state.get("dash_sort_asc", True) else " ▼"
+                return ""
+
+            def _on_sort(col_key):
+                if st.session_state.get("dash_sort_col") == col_key:
+                    st.session_state["dash_sort_asc"] = not st.session_state.get("dash_sort_asc", True)
                 else:
-                    taxa_txt = f"{taxa:.1f}%"
-                    barra_w  = min(int(taxa), 100)
-                c5.markdown(
-                    f"""
-                <div style='text-align:center;'>
-                  <span style='font-size:13px;font-weight:800;color:{risco_cor};'>{taxa_txt}</span>
-                  <span style='font-size:11px;margin-left:4px;' title='{risco_label}'>{risco_icon}</span>
-                </div>
-                <div style='width:90%;margin:2px auto 0;background:#E2E8F0;border-radius:4px;height:5px;'>
-                  <div style='width:{barra_w}%;background:{risco_cor};height:100%;border-radius:4px;'></div>
-                </div>
-                <div style='text-align:center;font-size:9px;color:{risco_cor};margin-top:1px;font-weight:600;'>{risco_label}</div>
-                """,
-                    unsafe_allow_html=True,
-                )
+                    st.session_state["dash_sort_col"] = col_key
+                    st.session_state["dash_sort_asc"] = True
 
-                # Col 6: Última PA compacta
-                c6.markdown(
-                    str(a.get("_pa_html", "<span style='color:#CBD5E1;font-size:12px;'>—</span>")),
-                    unsafe_allow_html=True,
-                )
+            st.markdown(
+                "<style>.sort-header button{background:transparent!important;border:none!important;"
+                "font-weight:700!important;color:#0F172A!important;padding:4px 2px!important;"
+                "font-size:13px!important;cursor:pointer!important;width:100%;}"
+                ".sort-header button:hover{color:#1D4ED8!important;}</style>",
+                unsafe_allow_html=True,
+            )
+            with st.container():
+                st.markdown("<div class='sort-header'>", unsafe_allow_html=True)
+                gh0, gh1, gh2, gh3, gh4, gh5, gh6 = st.columns([3, 0.8, 0.8, 0.8, 1.2, 1.5, 2])
+                if gh0.button(f"Aluno / Turma{_sort_icon('nome')}", key="sh_nome", use_container_width=True):
+                    _on_sort("nome"); st.rerun()
+                if gh1.button(f"Nasc.{_sort_icon('data_nascimento')}", key="sh_nasc", use_container_width=True):
+                    _on_sort("data_nascimento"); st.rerun()
+                if gh2.button(f"Aulas{_sort_icon('total_aulas')}", key="sh_aulas", use_container_width=True):
+                    _on_sort("total_aulas"); st.rerun()
+                if gh3.button(f"Pres.{_sort_icon('total_presencas')}", key="sh_pres", use_container_width=True):
+                    _on_sort("total_presencas"); st.rerun()
+                if gh4.button(f"Taxa/Risco{_sort_icon('taxa_presenca')}", key="sh_taxa", use_container_width=True):
+                    _on_sort("taxa_presenca"); st.rerun()
+                if gh5.button(f"Últ. PA{_sort_icon('_pa_sis')}", key="sh_pa", use_container_width=True):
+                    _on_sort("_pa_sis"); st.rerun()
+                gh6.markdown("<div style='text-align:center;font-weight:700;font-size:13px;padding:4px 2px;'>Ações</div>", unsafe_allow_html=True)
+                st.markdown("</div>", unsafe_allow_html=True)
+            st.markdown("<hr style='margin:0 0 6px 0;border-color:#CBD5E1;'/>", unsafe_allow_html=True)
 
-                # Col 7: Botões de Ação Direta
-                with c7:
-                    st.markdown('<div class="btn-compact">', unsafe_allow_html=True)
-                    cb1, cb2, cb3 = st.columns(3, gap="small")
+            # ======================================================================
+            # 🚀 MÁGICA UX: SE NÃO ENCONTRAR, MOSTRA FORMULÁRIO DE CADASTRO RÁPIDO
+            # ======================================================================
+            if df_page.empty:
+                if busca and len(busca.strip()) >= 3:
+                    st.warning(f"🔍 Nenhum aluno encontrado para: **'{busca}'**")
 
-                    if cb1.button(
-                        "🩺 Abrir", key=f"abr_{a['id']}", use_container_width=True
-                    ):
-                        st.session_state.aluno_prontuario = a.to_dict()
-                        st.rerun()
+                    with st.container(border=True):
+                        st.markdown(f"<h4 style='color:#1E88E5; margin-bottom: 10px; margin-top: 0;'>✨ Criar Novo Cadastro Rápido</h4>", unsafe_allow_html=True)
+                        st.caption("Preencha apenas a turma para matricular este aluno imediatamente.")
 
-                    pdf_key = f"pdf_grid_{a['id']}"
-                    word_key = f"word_grid_{a['id']}"
+                        with st.form(key="form_quick_cad"):
+                            turmas_df = get_todas_turmas(ativas_apenas=True)
+                            lista_turmas = turmas_df["nome"].tolist() if not turmas_df.empty else ["Nenhuma turma disponível"]
 
-                    if st.session_state.get(pdf_key):
-                        cb2.download_button(
-                            "📥 PDF",
-                            data=st.session_state[pdf_key],
-                            file_name=f"Dossie_{a['nome'][:15]}.pdf",
-                            mime="application/pdf",
-                            key=f"dl_grid_{a['id']}",
-                            type="primary",
-                            use_container_width=True,
-                        )
+                            c_n, c_t = st.columns([2, 1])
+                            novo_nome = c_n.text_input("Nome do Aluno:", value=busca.upper().strip(), key="qs_nome")
+                            # key estável garante que a seleção persiste mesmo com reruns do st_keyup.
+                            nova_turma = c_t.selectbox("Alocar na Turma:", lista_turmas, key="qs_turma_sel")
+
+                            if st.form_submit_button("✅ Cadastrar e Matricular", type="primary", use_container_width=True):
+                                if nova_turma == "Nenhuma turma disponível":
+                                    st.error("Crie uma turma primeiro no menu 'Turmas'.")
+                                elif len(novo_nome) < 3:
+                                    st.error("O nome deve ter pelo menos 3 letras.")
+                                else:
+                                    sucesso = cadastrar_novo_aluno(nome=novo_nome, turma=nova_turma)
+                                    if sucesso:
+                                        obter_todos_alunos_cache.clear()
+                                        carregar_dados_crm_avaliacoes_senior.clear()
+                                        st.success(f"🎉 {novo_nome} foi matriculado com sucesso na turma {nova_turma}!")
+                                        time.sleep(1.5)
+                                        st.rerun()
+                                    else:
+                                        st.error("Erro ao tentar cadastrar no banco de dados.")
+                else:
+                    st.info("Nenhum aluno encontrado para este filtro.")
+            else:
+                # Renderização das Linhas do Grid
+                for _, a in df_page.iterrows():
+                    c1, c2, c3, c4, c5, c6, c7 = st.columns(
+                        [3, 0.8, 0.8, 0.8, 1.2, 1.5, 2], vertical_alignment="center"
+                    )
+
+                    # Col 1: Foto + Nome e Turma (MÁGICA DO FLEXBOX)
+                    url_foto = a.get('url_foto')
+                    if pd.notna(url_foto) and str(url_foto).strip() and str(url_foto).strip().lower() not in ["none", "nan", "null", ""]:
+                        avatar_html = f"<img src='{url_foto}' class='zoom-avatar-dash' alt='Foto'>"
                     else:
-                        if cb2.button(
-                            "🖨️ PDF",
-                            key=f"dos_{a['id']}",
-                            use_container_width=True,
-                            type="primary",
+                        avatar_html = "<div class='avatar-placeholder'>👤</div>"
+
+                    c1.markdown(
+                        f"""
+                        <div style='display: flex; align-items: center; gap: 12px;'>
+                            {avatar_html}
+                            <div style='line-height:1.3;'>
+                                <strong style='font-size:14px; color:#0F172A;'>{a['nome']}</strong><br>
+                                <span style='font-size:12px;color:#64748B;'>{a['turma']}</span>
+                            </div>
+                        </div>
+                        """,
+                        unsafe_allow_html=True,
+                    )
+
+                    # Col 2: Nascimento
+                    _dn = a.get("data_nascimento")
+                    try:
+                        _dn_fmt = pd.to_datetime(_dn).strftime("%d/%m/%Y") if pd.notna(_dn) and _dn else "—"
+                    except Exception:
+                        _dn_fmt = "—"
+                    c2.markdown(
+                        f"<div style='text-align:center; font-size:12px; color:#64748B;'>{_dn_fmt}</div>",
+                        unsafe_allow_html=True,
+                    )
+
+                    # Col 3 e 4: Métricas do período selecionado
+                    _aulas = int(a.get("total_aulas", 0))
+                    _pres  = int(a.get("total_presencas", 0))
+                    _cor_aulas = "#475569" if _aulas > 0 else "#CBD5E1"
+                    _cor_pres  = "#10B981" if _pres  > 0 else "#CBD5E1"
+                    c3.markdown(
+                        f"<div style='text-align:center; font-size:14px; font-weight:600; color:{_cor_aulas};'>{_aulas}</div>",
+                        unsafe_allow_html=True,
+                    )
+                    c4.markdown(
+                        f"<div style='text-align:center; font-size:15px; font-weight:900; color:{_cor_pres};'>{_pres}</div>",
+                        unsafe_allow_html=True,
+                    )
+
+                    # Col 5: Taxa % + badge de risco de evasão
+                    taxa         = float(a.get("taxa_presenca", 0.0))
+                    risco_icon   = a.get("_risco_icon",  "⚫")
+                    risco_cor    = a.get("_risco_cor",   "#94A3B8")
+                    risco_label  = a.get("_risco_label", "Sem dados")
+                    _aulas_linha = int(a.get("total_aulas", 0))
+                    if _aulas_linha == 0:
+                        taxa_txt = "—"
+                        barra_w  = 0
+                    else:
+                        taxa_txt = f"{taxa:.1f}%"
+                        barra_w  = min(int(taxa), 100)
+                    c5.markdown(
+                        f"""
+                    <div style='text-align:center;'>
+                      <span style='font-size:13px;font-weight:800;color:{risco_cor};'>{taxa_txt}</span>
+                      <span style='font-size:11px;margin-left:4px;' title='{risco_label}'>{risco_icon}</span>
+                    </div>
+                    <div style='width:90%;margin:2px auto 0;background:#E2E8F0;border-radius:4px;height:5px;'>
+                      <div style='width:{barra_w}%;background:{risco_cor};height:100%;border-radius:4px;'></div>
+                    </div>
+                    <div style='text-align:center;font-size:9px;color:{risco_cor};margin-top:1px;font-weight:600;'>{risco_label}</div>
+                    """,
+                        unsafe_allow_html=True,
+                    )
+
+                    # Col 6: Última PA compacta
+                    c6.markdown(
+                        str(a.get("_pa_html", "<span style='color:#CBD5E1;font-size:12px;'>—</span>")),
+                        unsafe_allow_html=True,
+                    )
+
+                    # Col 7: Botões de Ação Direta
+                    with c7:
+                        st.markdown('<div class="btn-compact">', unsafe_allow_html=True)
+                        cb1, cb2, cb3 = st.columns(3, gap="small")
+
+                        if cb1.button(
+                            "🩺 Abrir", key=f"abr_{a['id']}", use_container_width=True
                         ):
-                            with st.spinner("⏳"):
-                                from gerador_pdf import criar_documento_aluno_pdf
-                                estats = get_estatisticas_frequencia_aluno(a["id"])
-                                historico = get_historico_aulas_aluno(a["id"])
-                                avals = get_avaliacoes_aluno(a["id"])
-                                st.session_state[pdf_key] = criar_documento_aluno_pdf(
-                                    a.to_dict(), avals, historico, estats
-                                )
+                            st.session_state.aluno_prontuario = a.to_dict()
                             st.rerun()
 
-                    word_err_key = f"word_err_{a['id']}"
-                    if st.session_state.get(word_err_key):
-                        cb3.error(st.session_state.pop(word_err_key))
-                    elif st.session_state.get(word_key):
-                        cb3.download_button(
-                            "📥 Word",
-                            data=st.session_state[word_key],
-                            file_name=f"Dossie_{a['nome'][:15]}.docx",
-                            mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                            key=f"dl_word_{a['id']}",
-                            use_container_width=True,
-                        )
-                    else:
-                        if cb3.button(
-                            "📘 Word",
-                            key=f"wrd_{a['id']}",
-                            use_container_width=True,
-                        ):
-                            with st.spinner("Gerando Word…"):
-                                try:
-                                    from gerador_word import criar_documento_aluno_word
+                        pdf_key = f"pdf_grid_{a['id']}"
+                        word_key = f"word_grid_{a['id']}"
+
+                        if st.session_state.get(pdf_key):
+                            cb2.download_button(
+                                "📥 PDF",
+                                data=st.session_state[pdf_key],
+                                file_name=f"Dossie_{a['nome'][:15]}.pdf",
+                                mime="application/pdf",
+                                key=f"dl_grid_{a['id']}",
+                                type="primary",
+                                use_container_width=True,
+                            )
+                        else:
+                            if cb2.button(
+                                "🖨️ PDF",
+                                key=f"dos_{a['id']}",
+                                use_container_width=True,
+                                type="primary",
+                            ):
+                                with st.spinner("⏳"):
+                                    from gerador_pdf import criar_documento_aluno_pdf
                                     estats = get_estatisticas_frequencia_aluno(a["id"])
                                     historico = get_historico_aulas_aluno(a["id"])
                                     avals = get_avaliacoes_aluno(a["id"])
-                                    _wb = criar_documento_aluno_word(
+                                    st.session_state[pdf_key] = criar_documento_aluno_pdf(
                                         a.to_dict(), avals, historico, estats
                                     )
-                                    if _wb:
-                                        st.session_state[word_key] = _wb
-                                    else:
-                                        st.session_state[word_err_key] = "Falha: gerador retornou vazio."
-                                except Exception as _e:
-                                    import traceback
-                                    st.session_state[word_err_key] = f"Erro: {_e}"
-                            st.rerun()
+                                st.rerun()
 
-                    st.markdown("</div>", unsafe_allow_html=True)
+                        word_err_key = f"word_err_{a['id']}"
+                        if st.session_state.get(word_err_key):
+                            cb3.error(st.session_state.pop(word_err_key))
+                        elif st.session_state.get(word_key):
+                            cb3.download_button(
+                                "📥 Word",
+                                data=st.session_state[word_key],
+                                file_name=f"Dossie_{a['nome'][:15]}.docx",
+                                mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                                key=f"dl_word_{a['id']}",
+                                use_container_width=True,
+                            )
+                        else:
+                            if cb3.button(
+                                "📘 Word",
+                                key=f"wrd_{a['id']}",
+                                use_container_width=True,
+                            ):
+                                with st.spinner("Gerando Word…"):
+                                    try:
+                                        from gerador_word import criar_documento_aluno_word
+                                        estats = get_estatisticas_frequencia_aluno(a["id"])
+                                        historico = get_historico_aulas_aluno(a["id"])
+                                        avals = get_avaliacoes_aluno(a["id"])
+                                        _wb = criar_documento_aluno_word(
+                                            a.to_dict(), avals, historico, estats
+                                        )
+                                        if _wb:
+                                            st.session_state[word_key] = _wb
+                                        else:
+                                            st.session_state[word_err_key] = "Falha: gerador retornou vazio."
+                                    except Exception as _e:
+                                        import traceback
+                                        st.session_state[word_err_key] = f"Erro: {_e}"
+                                st.rerun()
 
-                st.markdown(
-                    "<div class='linha-divisoria'></div>", unsafe_allow_html=True
-                )
+                        st.markdown("</div>", unsafe_allow_html=True)
+
+                    st.markdown(
+                        "<div class='linha-divisoria'></div>", unsafe_allow_html=True
+                    )
+
+
+    # --- ABA: CARA-CRACHÁ ---
+    with tab_cracha:
+        from views.relatorio_identificacao_view import renderizar_aba_caracracha
+        renderizar_aba_caracracha()
 
     # --- ABA: PRESSÃO ARTERIAL ---
     with tab_pa:

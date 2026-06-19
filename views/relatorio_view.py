@@ -13,7 +13,6 @@ import plotly.express as px
 import io
 import os
 import re
-from views.relatorio_identificacao_view import renderizar_aba_caracracha
 from views.relatorio_pa_lote_view import tela_relatorio_pa_lote
 from gerador_pdf import (
     criar_prestacao_diaria_pdf,
@@ -2168,11 +2167,10 @@ def tela_relatorio():
         unsafe_allow_html=True,
     )
 
-    tab_diario, tab_f, tab_id, tab_a, tab_w, tab_sem_av, tab_clinico, tab_pa_lote = st.tabs(
+    tab_diario, tab_f, tab_a, tab_w, tab_sem_av, tab_clinico, tab_pa_lote = st.tabs(
         [
             "📋 Lista Frequência Oficial",
             "📊 Plan. Frequência",
-            "🪪 Cara-Crachá",
             "🔎 Auditoria",
             "🏆 Prestação Pedagógica",
             "🧪 Avaliações",
@@ -2667,12 +2665,6 @@ def tela_relatorio():
                     **{"text-align": "center"},
                 )
                 st.dataframe(df_st, use_container_width=True, hide_index=True)
-    # ==============================================================================
-    # --- ABA 1.5: RELATÓRIO CARA-CRACHÁ ---
-    # ==============================================================================
-    with tab_id:
-        renderizar_aba_caracracha()
-
     # ==============================================================================
     # --- ABA 2: AUDITORIA COM PDF NATIVO E GRID INTERATIVO ---
     # ==============================================================================
