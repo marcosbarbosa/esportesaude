@@ -1,0 +1,59 @@
+-- =============================================================================
+-- BLOCO 3 — REMOVER aluno_nome DE registros_pa (dado redundante)
+-- =============================================================================
+-- aluno_nome é redundante — o nome já existe em alunos.nome.
+-- Antes: verifique que nenhuma view/relatório depende exclusivamente desta coluna.
+--
+-- Passo 1: verificar quantos registros têm aluno_nome preenchido
+SELECT COUNT(*) AS total,
+       COUNT(aluno_nome) AS com_nome
+FROM registros_pa;
+
+-- Passo 2: remover a coluna
+-- (só execute se confirmar que o sistema não exibe aluno_nome diretamente)
+ALTER TABLE registros_pa DROP COLUMN IF EXISTS aluno_nome;
+
+
+-- =============================================================================
+-- BLOCO 4 — COLUNA nome_fonetica EM alunos (opcional — busca fonética)
+-- =============================================================================
+-- Se ainda não existe, cria a coluna para habilitar busca server-side fonética.
+-- Após criar, o sistema detecta automaticamente e ativa o filtro no banco.
+
+ALTER TABLE alunos ADD COLUMN IF NOT EXISTS nome_fonetica TEXT;
+
+-- Índice para ILIKE rápido na busca fonética
+CREATE INDEX IF NOT EXISTS idx_alunos_nome_fonetica
+    ON alunos (nome_fonetica text_pattern_ops);
+
+-- Preencher com valor inicial (o sistema faz o backfill completo pela interface,
+-- mas este SQL preenche a versão simples — apenas minúsculas sem acento)
+UPDATE alunos
+SET nome_fonetica = lower(
+    translate(nome,
+        'áàãâäéèêëíìîïóòõôöúùûüçÁÀÃÂÄÉÈÊËÍÌÎÏÓÒÕÔÖÚÙÛÜÇ',
+        'aaaaaeeeeiiiioooooouuuucAAAAEEEEIIIIOOOOOUUUUC'
+    )
+)
+WHERE nome_fonetica IS NULL;
+
+
+-- =============================================================================
+-- BLOCO 5 — LIMPEZA PONTUAL (executar uma vez se necessário)
+-- =============================================================================
+-- Remove logs de auditoria acumulados (já feito pelo agente em 19/06/2026,
+-- mas útil se voltarem a acumular antes do fix de auto-limpeza ser ativado):
+
+DELETE FROM configuracoes_sistema
+WHERE chave LIKE 'matricula_doc_log_%'
+  AND chave NOT IN (
+      SELECT chave FROM configuracoes_sistema
+      WHERE chave LIKE 'matricula_doc_log_%'
+      ORDER BY chave DESC
+      LIMIT 50
+  );
+
+-- Verificar resultado:
+SELECT COUNT(*) AS logs_restantes
+FROM configuracoes_sistema
+WHERE chave LIKE 'matricula_doc_log_%';
