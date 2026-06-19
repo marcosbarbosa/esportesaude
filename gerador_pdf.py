@@ -64,6 +64,33 @@ def baixar_imagem_temp(url):
     return None
 
 
+def baixar_imagem_supabase(url):
+    """
+    Baixa imagem via cliente Supabase Storage (contorna restrição DNS do sandbox Replit).
+    URL pública esperada: https://<ref>.supabase.co/storage/v1/object/public/<bucket>/<path>
+    """
+    if not url or not isinstance(url, str):
+        return None
+    try:
+        from urllib.parse import urlparse
+        from database import supabase as _supa
+        parsed = urlparse(url.strip())
+        # path: /storage/v1/object/public/<bucket>/<filepath...>
+        parts = parsed.path.lstrip("/").split("/")
+        # esperado: storage / v1 / object / public / <bucket> / <file...>
+        if len(parts) < 6 or parts[3] != "public":
+            return None
+        bucket   = parts[4]
+        filepath = "/".join(parts[5:])
+        data = _supa.storage.from_(bucket).download(filepath)
+        img = Image.open(io.BytesIO(data)).convert("RGB")
+        tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".jpg")
+        img.save(tmp.name, format="JPEG", quality=85)
+        return tmp.name
+    except Exception:
+        return None
+
+
 def limpar_texto(texto):
     if not texto:
         return ""
@@ -1396,7 +1423,8 @@ def gerar_pdf_patologias(df, turma_filtro="Todas as Turmas"):
         for u in urls_unicas:
             u = str(u).strip()
             if u.startswith("http") and u not in foto_cache:
-                foto_cache[u] = baixar_imagem_temp(u)
+                # Tenta via Storage Supabase (contorna DNS sandbox); fallback: requests
+                foto_cache[u] = baixar_imagem_supabase(u) or baixar_imagem_temp(u)
 
     # ── Cabeçalho específico para paisagem A4 (297 mm) ────────────────────
     def _cab_paisagem(pdf):
