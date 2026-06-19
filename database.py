@@ -2951,30 +2951,119 @@ def get_registros_pa_turma(turma: str, data: str) -> list:
 # ==============================================================================
 
 _TAGS_PADRAO_SEED = [
-    {"nome": "Hipertensão/Cardiopatia", "icone": "🫀", "cor": "#DC2626",
+    # ── Ordem 1-8: tags originais (nomes e dicas atualizados) ─────────────────
+    {"nome": "Hipertensão/Cardiopatia (inclui Arritmia)", "icone": "🫀", "cor": "#DC2626",
      "tipo_alerta": "error", "ordem": 1,
-     "dica_treino": "Evitar isometria e manobra de Valsalva. Monitorar PA antes/durante/após. Preferir aeróbico de baixa-moderada intensidade. Evitar ambientes muito quentes."},
-    {"nome": "Artrose/Artrite", "icone": "🦴", "cor": "#D97706",
+     "dica_treino": (
+         "EVITAR: isometria prolongada (pranchas, rosca estática), manobra de Valsalva "
+         "(suster a respiração), exercícios com a cabeça abaixo da linha do coração. "
+         "EXECUTAR: aeróbico contínuo de baixa-moderada intensidade, treino de força "
+         "dinâmico com respiração fluída e pausas adequadas. "
+         "Monitorar PA antes/durante/após a sessão."
+     )},
+    {"nome": "Artrose/Artrite/Condromalácia", "icone": "🦴", "cor": "#D97706",
      "tipo_alerta": "warning", "ordem": 2,
-     "dica_treino": "Evitar alto impacto e torção articular. Focar em mobilidade e fortalecimento periarticular. Avaliar escala de dor (Borg) a cada sessão."},
-    {"nome": "Diabetes Mellitus Tipo II", "icone": "🩸", "cor": "#7C3AED",
+     "dica_treino": (
+         "EVITAR: alto impacto (saltos, corrida intensa), agachamentos profundos que "
+         "gerem dor articular. "
+         "EXECUTAR: baixo impacto (bicicleta, hidroginástica), fortalecimento isométrico "
+         "leve, mobilidade articular dentro da amplitude sem dor. "
+         "Avaliar escala de dor (Borg) a cada sessão."
+     )},
+    {"nome": "Diabetes Mellitus Tipo II / Pré-diabetes", "icone": "🩸", "cor": "#7C3AED",
      "tipo_alerta": "warning", "ordem": 3,
-     "dica_treino": "Verificar glicemia antes/após o treino. Ter fonte de açúcar de rápida absorção disponível. Evitar exercício em jejum prolongado. Atenção a sinais de hipoglicemia (tontura, suor frio)."},
+     "dica_treino": (
+         "EVITAR: treinar em jejum prolongado, exercícios em ambientes de calor extremo "
+         "(risco de hipoglicemia/desidratação). "
+         "EXECUTAR: aeróbico combinado com treino de resistência (melhora captação de "
+         "glicose), foco em grandes grupos musculares. "
+         "Verificar glicemia antes/após. Ter fonte de açúcar de absorção rápida acessível."
+     )},
     {"nome": "Câncer (tratamento/remissão)", "icone": "🎗️", "cor": "#DB2777",
      "tipo_alerta": "error", "ordem": 4,
-     "dica_treino": "Respeitar fadiga oncológica. Exercícios leves a moderados conforme tolerância. Evitar impacto em áreas irradiadas. Exigir liberação médica atualizada."},
+     "dica_treino": (
+         "EVITAR: exercícios exaustivos (Borg alto) em dias de fadiga pós-tratamento, "
+         "ambientes com aglomeração se imunidade baixa. "
+         "EXECUTAR: exercícios leves a moderados para manutenção de massa magra, "
+         "alongamento e técnicas de relaxamento. "
+         "Exigir liberação médica atualizada."
+     )},
     {"nome": "Osteoporose", "icone": "🦴", "cor": "#B45309",
      "tipo_alerta": "warning", "ordem": 5,
-     "dica_treino": "Estimular massa óssea com impacto leve (caminhada, step baixo). Evitar flexão intensa de tronco. Foco em equilíbrio e força para prevenção de quedas."},
+     "dica_treino": (
+         "EVITAR: flexão extrema da coluna (abdominais tradicionais pesados), torções "
+         "bruscas, atividades com risco de queda. "
+         "EXECUTAR: exercícios de sustentação de peso (musculação, cargas leves a "
+         "moderadas), treino de equilíbrio e propriocepção."
+     )},
     {"nome": "DPOC/Asma", "icone": "🫁", "cor": "#0369A1",
      "tipo_alerta": "warning", "ordem": 6,
-     "dica_treino": "Monitorar saturação de O₂ e dispneia. Progressão lenta de intensidade. Evitar ambientes frios ou empoeirados. Manter broncodilatador acessível."},
+     "dica_treino": (
+         "EVITAR: ambientes muito frios ou secos, alta intensidade contínua sem pausas. "
+         "EXECUTAR: exercícios com controle respiratório (inspiração pelo nariz, "
+         "expiração pela boca), treino intervalado com foco na recuperação. "
+         "Monitorar saturação de O2 e dispneia. Manter broncodilatador acessível."
+     )},
     {"nome": "Obesidade Grau II/III", "icone": "⚖️", "cor": "#92400E",
      "tipo_alerta": "warning", "ordem": 7,
-     "dica_treino": "Priorizar baixo impacto articular (bicicleta, caminhada). Progressão gradual de carga e duração. Monitorar FC e temperatura corporal."},
+     "dica_treino": (
+         "EVITAR: alto impacto articular (corrida intensa, saltos). "
+         "EXECUTAR: baixo impacto (bicicleta, caminhada, hidroginástica), progressão "
+         "gradual de carga e duração. "
+         "Monitorar FC e temperatura corporal durante toda a sessão."
+     )},
     {"nome": "Alzheimer/Demência", "icone": "🧠", "cor": "#6B7280",
      "tipo_alerta": "warning", "ordem": 8,
-     "dica_treino": "Garantir supervisão próxima durante toda a sessão. Exercícios de coordenação simples. Ambiente seguro, rotinas previsíveis e comunicação calma."},
+     "dica_treino": (
+         "EVITAR: ambientes desconhecidos sem supervisão, exercícios complexos de alta "
+         "coordenação sem adaptação. "
+         "EXECUTAR: exercícios de coordenação simples, rotinas previsíveis e "
+         "comunicação calma. "
+         "Garantir supervisão próxima durante toda a sessão."
+     )},
+    # ── Ordem 9-13: novas tags ─────────────────────────────────────────────────
+    {"nome": "Hipotireoidismo / Hashimoto", "icone": "🦋", "cor": "#EA580C",
+     "tipo_alerta": "warning", "ordem": 9,
+     "dica_treino": (
+         "EVITAR: excesso de volume de treino que agrave a fadiga crônica. "
+         "EXECUTAR: treino de força moderado (estimula o metabolismo) e aeróbico "
+         "constante de intensidade controlada. "
+         "Respeitar os sinais de fadiga e ajustar carga conforme disposição do dia."
+     )},
+    {"nome": "Fibromialgia", "icone": "⚡", "cor": "#8B5CF6",
+     "tipo_alerta": "warning", "ordem": 10,
+     "dica_treino": (
+         "EVITAR: treinos longos de alta intensidade, excesso de carga excêntrica "
+         "(gera muita dor muscular tardia). "
+         "EXECUTAR: aeróbico de baixa intensidade, alongamentos suaves, hidroterapia. "
+         "Iniciar com volumes baixos e progredir lentamente respeitando os limites de dor."
+     )},
+    {"nome": "Ansiedade / Depressão", "icone": "🌱", "cor": "#16A34A",
+     "tipo_alerta": "info", "ordem": 11,
+     "dica_treino": (
+         "EVITAR: ambientes extremamente competitivos que causem estresse. "
+         "EXECUTAR: atividades rítmicas e lúdicas, caminhadas, respiração consciente, "
+         "exercícios em grupo para estímulo social. "
+         "Promover regularidade e o vínculo com a turma."
+     )},
+    {"nome": "AVC Controlado", "icone": "⚠️", "cor": "#991B1B",
+     "tipo_alerta": "error", "ordem": 12,
+     "dica_treino": (
+         "EVITAR: esforços repentinos, picos de pressão (isometria prolongada), "
+         "desequilíbrios sem suporte disponível. "
+         "EXECUTAR: exercícios focados em simetria, coordenação motora e atividades "
+         "da vida diária (AVD) adaptadas. "
+         "Sempre com supervisão próxima e monitoramento de PA."
+     )},
+    {"nome": "Autismo", "icone": "🧩", "cor": "#6366F1",
+     "tipo_alerta": "info", "ordem": 13,
+     "dica_treino": (
+         "EVITAR: poluição sonora ou visual excessiva (hipersensibilidade), rotinas "
+         "imprevisíveis sem aviso prévio. "
+         "EXECUTAR: exercícios estruturados e previsíveis, foco em coordenação e "
+         "integração sensorial. "
+         "Comunicar mudanças com antecedência e manter ambiente calmo e organizado."
+     )},
 ]
 
 
@@ -3028,5 +3117,32 @@ def seed_tags_clinicas_padrao() -> tuple:
         supabase.table("tags_clinicas_sistema").insert(_TAGS_PADRAO_SEED).execute()
         get_tags_clinicas.clear()
         return True, "OK"
+    except Exception as e:
+        return False, str(e)
+
+
+def sincronizar_tags_clinicas() -> tuple:
+    """Upsert de todas as tags do seed — insere novas e atualiza as existentes por nome.
+
+    Seguro para executar múltiplas vezes: usa o campo 'nome' como chave de
+    identificação para evitar duplicatas. Tags que não estão no seed não são
+    removidas (preserva customizações feitas pelo operador).
+    """
+    try:
+        existentes = supabase.table("tags_clinicas_sistema").select("id, nome").execute()
+        mapa = {r["nome"]: r["id"] for r in (existentes.data or [])}
+        inseridos, atualizados = 0, 0
+        for tag in _TAGS_PADRAO_SEED:
+            payload = {k: v for k, v in tag.items()}
+            payload.setdefault("ativo", True)
+            nome = payload["nome"]
+            if nome in mapa:
+                supabase.table("tags_clinicas_sistema").update(payload).eq("id", mapa[nome]).execute()
+                atualizados += 1
+            else:
+                supabase.table("tags_clinicas_sistema").insert(payload).execute()
+                inseridos += 1
+        get_tags_clinicas.clear()
+        return True, f"{inseridos} inserida(s), {atualizados} atualizada(s)."
     except Exception as e:
         return False, str(e)

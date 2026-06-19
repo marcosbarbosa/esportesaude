@@ -18,10 +18,21 @@ from utils.busca_aluno import filtrar_alunos_df as _faf_pat
 
 # ── Palavras-chave que disparam alerta clínico ────────────────────────────────
 _PALAVRAS_ALERTA = [
+    # ── Cardiovascular / Neurológico ──────────────────────────────────────────
     "cirurgia", "cardiaco", "cardíaco", "pressao", "pressão", "infarto",
     "marcapasso", "insuficiencia", "coagulação", "anticoagulante",
-    "diabetes", "epilepsia", "parkinson", "alzheimer", "acidente vascular",
-    "avc", "trombose", "hemofilia", "quimioterapia", "radioterapia",
+    "arritmia", "avc", "acidente vascular", "trombose", "hemofilia",
+    # ── Metabólico / Oncológico ───────────────────────────────────────────────
+    "diabetes", "quimioterapia", "radioterapia", "cancer", "câncer",
+    # ── Neurológico / Cognitivo ───────────────────────────────────────────────
+    "epilepsia", "parkinson", "alzheimer", "autismo",
+    # ── Respiratório ─────────────────────────────────────────────────────────
+    "dpoc", "asma", "bronco",
+    # ── Musculoesquelético ────────────────────────────────────────────────────
+    "osteoporose", "artrose", "artrite", "condromalacia", "condromalácia",
+    "fibromialgia",
+    # ── Endócrino ────────────────────────────────────────────────────────────
+    "hipotireoidismo", "hashimoto",
 ]
 
 _PA_CLS_PT = {
