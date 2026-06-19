@@ -1003,35 +1003,40 @@ def render_aba_perfil(aluno):
             use_container_width=True,
         )
 
-        # ── Tags Clínicas de Saúde (topo da ficha — primeiro campo visível) ───
+        # ── Tags Clínicas de Saúde (topo da ficha — carregadas do banco) ───────
         st.markdown("#### 🏥 Condições Clínicas de Saúde")
-        _TAGS_CLINICAS = ["Hipertensão/Cardiopatia", "Artrose/Artrite"]
-        _TAGS_REGRAS = {
-            "Hipertensão/Cardiopatia": {
-                "icone": "🫀", "cor": "#DC2626", "fundo": "#FEF2F2",
-                "dica": "🔴 Evitar isometria e manobra de Valsalva. Exige monitoramento de PA.",
-                "tipo": "error",
-            },
-            "Artrose/Artrite": {
-                "icone": "🦴", "cor": "#D97706", "fundo": "#FFFBEB",
-                "dica": "🟡 Evitar alto impacto. Focar em mobilidade e avaliar escala de dor (Borg).",
-                "tipo": "warning",
-            },
-        }
+        try:
+            from database import get_tags_clinicas as _gtc
+            _tags_db = _gtc()
+        except Exception:
+            _tags_db = []
+        # Fallback hardcoded se tabela ainda não existir
+        if not _tags_db:
+            _tags_db = [
+                {"nome": "Hipertensão/Cardiopatia", "icone": "🫀", "cor": "#DC2626",
+                 "tipo_alerta": "error",
+                 "dica_treino": "🔴 Evitar isometria e manobra de Valsalva. Exige monitoramento de PA."},
+                {"nome": "Artrose/Artrite", "icone": "🦴", "cor": "#D97706",
+                 "tipo_alerta": "warning",
+                 "dica_treino": "🟡 Evitar alto impacto. Focar em mobilidade e avaliar escala de dor (Borg)."},
+            ]
+        _TAGS_CLINICAS = [t["nome"] for t in _tags_db]
+        _TAGS_MAP = {t["nome"]: t for t in _tags_db}
+
         _tags_raw = aluno.get("tags_saude") or ""
         _tags_atuais = [t.strip() for t in str(_tags_raw).split(",") if t.strip() in _TAGS_CLINICAS]
         tags_ed = st.multiselect(
             "🏷️ Selecionar condição clínica do aluno (badge aparece no Tablet de Chamada):",
             options=_TAGS_CLINICAS,
             default=_tags_atuais,
-            help="Marque as condições de saúde. O professor verá o alerta automaticamente durante a chamada. Salve com o botão 💾 acima ou abaixo.",
+            help="Marque as condições de saúde. O professor verá o alerta durante a chamada. Salve com 💾 acima ou abaixo.",
         )
         if tags_ed:
             _badges_html = " ".join(
-                f"<span style='background:{_TAGS_REGRAS[t]['cor']};color:white;"
+                f"<span style='background:{_TAGS_MAP[t]['cor']};color:white;"
                 f"padding:3px 12px;border-radius:12px;font-size:12px;font-weight:700;"
-                f"margin-right:6px;'>{_TAGS_REGRAS[t]['icone']} {t}</span>"
-                for t in tags_ed if t in _TAGS_REGRAS
+                f"margin-right:6px;'>{_TAGS_MAP[t]['icone']} {t}</span>"
+                for t in tags_ed if t in _TAGS_MAP
             )
             st.markdown(
                 f"<div style='background:#F8FAFC;border:1px solid #E2E8F0;"
@@ -1040,12 +1045,15 @@ def render_aba_perfil(aluno):
                 unsafe_allow_html=True,
             )
             for _t in tags_ed:
-                if _t in _TAGS_REGRAS:
-                    _r = _TAGS_REGRAS[_t]
-                    if _r["tipo"] == "error":
-                        st.error(_r["dica"])
+                if _t in _TAGS_MAP:
+                    _r = _TAGS_MAP[_t]
+                    _dica = _r.get("dica_treino") or ""
+                    if _r.get("tipo_alerta") == "error":
+                        st.error(_dica)
+                    elif _r.get("tipo_alerta") == "info":
+                        st.info(_dica)
                     else:
-                        st.warning(_r["dica"])
+                        st.warning(_dica)
         st.markdown("---")
         st.markdown("#### 👤 Dados Pessoais")
 

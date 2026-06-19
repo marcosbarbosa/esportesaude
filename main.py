@@ -2380,7 +2380,7 @@ elif st.session_state.menu_atual in (
             _aba_cfg = st.tabs([
                 "🏫 Turmas", "💬 Mensagens", "🔔 Auto Niver", "🎨 Identidade Visual",
                 "🗄️ Bck Adm", "🔀 Mescla Cad", "📅 Calendário", "📧 Email BI",
-                "👥 Usuários", "🔒 LGPD",
+                "👥 Usuários", "🔒 LGPD", "🏷️ Tags Saúde",
             ])
             with _aba_cfg[0]:
                 from views.turmas_view import tela_gestao_turmas
@@ -2444,6 +2444,10 @@ elif st.session_state.menu_atual in (
                             f"</div>",
                             unsafe_allow_html=True,
                         )
+
+            with _aba_cfg[10]:
+                from views.tags_clinicas_config_view import tela_tags_clinicas_config
+                tela_tags_clinicas_config()
 
 # ── Rodapé Fixo ─────────────────────────────────────────────────────────────
 from utils.identidade import get_config as _gcfg_rodape

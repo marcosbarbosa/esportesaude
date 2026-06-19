@@ -338,14 +338,36 @@ def renderizar_aba_terminal(df_alunos_tab, data_aula, presencas_turma_geral, blo
                     if _aval_pend else ""
                 )
 
-                # 🫀🦴 TAGS DE SAÚDE — badges clínicos no canto direito do avatar
+                # 🏷️ TAGS DE SAÚDE — badges clínicos dinâmicos (carregados do banco)
                 _tags_raw_tab = str(row.get("tags_saude") or "")
                 _tags_tab = [t.strip() for t in _tags_raw_tab.split(",") if t.strip()]
-                _sh = ("<div class='saude-hiper' title='Hipertensão/Cardiopatia — Monitorar PA'>🫀</div>"
-                       if "Hipertensão/Cardiopatia" in _tags_tab else "")
-                _sa = ("<div class='saude-artro' title='Artrose/Artrite — Evitar alto impacto'>🦴</div>"
-                       if "Artrose/Artrite" in _tags_tab else "")
-                saude_html = _sh + _sa
+                saude_html = ""
+                if _tags_tab:
+                    try:
+                        from database import get_tags_clinicas as _gtc_tab
+                        _tags_db_tab = _gtc_tab()
+                    except Exception:
+                        _tags_db_tab = []
+                    if not _tags_db_tab:
+                        _tags_db_tab = [
+                            {"nome": "Hipertensão/Cardiopatia", "icone": "🫀", "cor": "#DC2626"},
+                            {"nome": "Artrose/Artrite", "icone": "🦴", "cor": "#D97706"},
+                        ]
+                    _tags_map_tab = {t["nome"]: t for t in _tags_db_tab}
+                    _tops = [30 + i * 26 for i in range(len(_tags_tab))]
+                    for _i, _tn in enumerate(_tags_tab[:4]):
+                        _td = _tags_map_tab.get(_tn, {})
+                        _cor_t = _td.get("cor", "#6B7280")
+                        _ico_t = _td.get("icone", "🏷️")
+                        _top_t = _tops[_i]
+                        saude_html += (
+                            f"<div style='position:absolute;top:{_top_t}px;right:-6px;"
+                            f"background:#FFF;border:2px solid {_cor_t};border-radius:50%;"
+                            f"width:24px;height:24px;display:flex;align-items:center;"
+                            f"justify-content:center;font-size:11px;z-index:101;"
+                            f"box-shadow:0 2px 5px rgba(0,0,0,0.25);' title='{_tn}'>"
+                            f"{_ico_t}</div>"
+                        )
 
                 # Botão de chamada: bloqueado por admin-lock, atestado médico OU avaliação pendente
                 _botao_bloqueado = bloqueio_ativo or _atestado_bloq or _aval_pend

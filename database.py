@@ -2918,3 +2918,89 @@ def get_registros_pa_turma(turma: str, data: str) -> list:
         return r.data or []
     except Exception:
         return []
+
+
+# ==============================================================================
+# 🏷️ TAGS CLÍNICAS DE SAÚDE — CRUD
+# ==============================================================================
+
+_TAGS_PADRAO_SEED = [
+    {"nome": "Hipertensão/Cardiopatia", "icone": "🫀", "cor": "#DC2626",
+     "tipo_alerta": "error", "ordem": 1,
+     "dica_treino": "Evitar isometria e manobra de Valsalva. Monitorar PA antes/durante/após. Preferir aeróbico de baixa-moderada intensidade. Evitar ambientes muito quentes."},
+    {"nome": "Artrose/Artrite", "icone": "🦴", "cor": "#D97706",
+     "tipo_alerta": "warning", "ordem": 2,
+     "dica_treino": "Evitar alto impacto e torção articular. Focar em mobilidade e fortalecimento periarticular. Avaliar escala de dor (Borg) a cada sessão."},
+    {"nome": "Diabetes Mellitus Tipo II", "icone": "🩸", "cor": "#7C3AED",
+     "tipo_alerta": "warning", "ordem": 3,
+     "dica_treino": "Verificar glicemia antes/após o treino. Ter fonte de açúcar de rápida absorção disponível. Evitar exercício em jejum prolongado. Atenção a sinais de hipoglicemia (tontura, suor frio)."},
+    {"nome": "Câncer (tratamento/remissão)", "icone": "🎗️", "cor": "#DB2777",
+     "tipo_alerta": "error", "ordem": 4,
+     "dica_treino": "Respeitar fadiga oncológica. Exercícios leves a moderados conforme tolerância. Evitar impacto em áreas irradiadas. Exigir liberação médica atualizada."},
+    {"nome": "Osteoporose", "icone": "🦴", "cor": "#B45309",
+     "tipo_alerta": "warning", "ordem": 5,
+     "dica_treino": "Estimular massa óssea com impacto leve (caminhada, step baixo). Evitar flexão intensa de tronco. Foco em equilíbrio e força para prevenção de quedas."},
+    {"nome": "DPOC/Asma", "icone": "🫁", "cor": "#0369A1",
+     "tipo_alerta": "warning", "ordem": 6,
+     "dica_treino": "Monitorar saturação de O₂ e dispneia. Progressão lenta de intensidade. Evitar ambientes frios ou empoeirados. Manter broncodilatador acessível."},
+    {"nome": "Obesidade Grau II/III", "icone": "⚖️", "cor": "#92400E",
+     "tipo_alerta": "warning", "ordem": 7,
+     "dica_treino": "Priorizar baixo impacto articular (bicicleta, caminhada). Progressão gradual de carga e duração. Monitorar FC e temperatura corporal."},
+    {"nome": "Alzheimer/Demência", "icone": "🧠", "cor": "#6B7280",
+     "tipo_alerta": "warning", "ordem": 8,
+     "dica_treino": "Garantir supervisão próxima durante toda a sessão. Exercícios de coordenação simples. Ambiente seguro, rotinas previsíveis e comunicação calma."},
+]
+
+
+@st.cache_data(ttl=60, show_spinner=False)
+def get_tags_clinicas() -> list:
+    """Retorna todas as tags clínicas ativas ordenadas por 'ordem'."""
+    try:
+        r = (
+            supabase.table("tags_clinicas_sistema")
+            .select("*")
+            .eq("ativo", True)
+            .order("ordem")
+            .execute()
+        )
+        return r.data or []
+    except Exception:
+        return []
+
+
+def salvar_tag_clinica(dados: dict) -> tuple:
+    """Insere ou atualiza uma tag clínica. Se 'id' presente → update."""
+    try:
+        tag_id = dados.pop("id", None)
+        if tag_id:
+            supabase.table("tags_clinicas_sistema").update(dados).eq("id", tag_id).execute()
+        else:
+            dados.setdefault("ativo", True)
+            supabase.table("tags_clinicas_sistema").insert(dados).execute()
+        get_tags_clinicas.clear()
+        return True, "OK"
+    except Exception as e:
+        return False, str(e)
+
+
+def excluir_tag_clinica(tag_id: str) -> tuple:
+    """Remove permanentemente uma tag clínica pelo id."""
+    try:
+        supabase.table("tags_clinicas_sistema").delete().eq("id", tag_id).execute()
+        get_tags_clinicas.clear()
+        return True, "OK"
+    except Exception as e:
+        return False, str(e)
+
+
+def seed_tags_clinicas_padrao() -> tuple:
+    """Popula a tabela com as tags padrão se ainda estiver vazia."""
+    try:
+        existentes = supabase.table("tags_clinicas_sistema").select("id").execute()
+        if existentes.data:
+            return False, "Tabela já tem registos."
+        supabase.table("tags_clinicas_sistema").insert(_TAGS_PADRAO_SEED).execute()
+        get_tags_clinicas.clear()
+        return True, "OK"
+    except Exception as e:
+        return False, str(e)
