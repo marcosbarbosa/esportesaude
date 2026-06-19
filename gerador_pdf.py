@@ -1397,12 +1397,53 @@ def gerar_pdf_patologias(df, turma_filtro="Todas as Turmas"):
             if u.startswith("http") and u not in foto_cache:
                 foto_cache[u] = baixar_imagem_temp(u)
 
+    # ── Cabeçalho específico para paisagem A4 (297 mm) ────────────────────
+    def _cab_paisagem(pdf):
+        try:
+            from utils.identidade import get_config as _gci
+            cfg = _gci()
+        except Exception:
+            cfg = {}
+        titulo   = limpar_texto(cfg.get("titulo_projeto", "ESPORTE E SAUDE NA COMUNIDADE - FASE 2"))
+        logo_esq = cfg.get("logo_secundaria", "logo-secretaria.png")
+        logo_dir = cfg.get("logo_principal",  "logo-imbra.png")
+        logo_w   = 28
+        # Logos: margem esq=10, margem dir=10 → página 297 mm
+        for path in [logo_esq, logo_esq.replace(".png",".jpg")]:
+            if path and os.path.exists(path):
+                try: pdf.image(path, x=10, y=5, w=logo_w)
+                except Exception: pass
+                break
+        for path in [logo_dir, logo_dir.replace(".png",".jpg")]:
+            if path and os.path.exists(path):
+                try: pdf.image(path, x=259, y=5, w=logo_w)
+                except Exception: pass
+                break
+        # Título centralizado entre os logos (x=42 a x=257, largura=215)
+        pdf.set_xy(42, 9)
+        pdf.set_font("Arial", "B", 12)
+        pdf.set_text_color(10, 37, 64)
+        pdf.multi_cell(215, 6, titulo, align="C")
+        pdf.set_font("Arial", "", 9)
+        pdf.set_text_color(100, 116, 139)
+        pdf.set_x(42)
+        pdf.multi_cell(215, 5, "Patologias - Anamnese Clinica", align="C")
+        # Linha separadora
+        y_sep = max(pdf.get_y() + 2, 36)
+        pdf.set_draw_color(0, 86, 179)
+        pdf.set_line_width(0.6)
+        pdf.line(10, y_sep, 287, y_sep)
+        pdf.set_draw_color(0, 0, 0)
+        pdf.set_line_width(0.2)
+        pdf.set_text_color(0, 0, 0)
+        pdf.set_y(y_sep + 4)
+
     pdf = FPDF(orientation="L", unit="mm", format="A4")
     pdf.set_auto_page_break(auto=True, margin=20)
     pdf.set_margins(10, 10, 10)
     pdf.add_page()
 
-    _cabecalho_padrao(pdf, subtitulo="Patologias - Anamnese Clinica")
+    _cab_paisagem(pdf)
 
     hoje_str  = datetime.date.today().strftime("%d/%m/%Y")
     hora_str  = datetime.datetime.now().strftime("%H:%M")
