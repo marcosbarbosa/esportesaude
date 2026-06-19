@@ -180,9 +180,10 @@ def renderizar_aba_patologias():
         pa_cls = _PA_CLS_PT.get(cls, cls.capitalize() if cls else "—")
         pa_dat = (pa.get("data") or "")[:10]
 
-        # Borg (sessão)
+        # Borg — padrão vem do banco (risco_borg), override via session_state
         borg_key   = f"borg_pat_{aid}"
-        borg_atual = st.session_state.get(borg_key, 0)
+        borg_db    = int(r.get("risco_borg") or 0)
+        borg_atual = st.session_state.get(borg_key, borg_db)
 
         registros.append({
             "id":             aid,

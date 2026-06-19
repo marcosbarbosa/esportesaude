@@ -1,0 +1,40 @@
+-- Atualização em lote do "Risco Borg Alvo" para a tabela public.alunos
+-- Baseado no diagnóstico clínico de cada aluno para manter o treino seguro.
+
+-- Grupo 1: Risco Cardiovascular, AVC, Asma e Câncer (Borg Alvo Máximo: 4)
+UPDATE public.alunos SET risco_borg = 4 WHERE nome = 'ADRIANA BEATRIZ PERIN';
+UPDATE public.alunos SET risco_borg = 4 WHERE nome = 'ADRIANA MARIA LERRO';
+UPDATE public.alunos SET risco_borg = 4 WHERE nome = 'DARCI RECUPERO';
+UPDATE public.alunos SET risco_borg = 4 WHERE nome = 'DEISY APARECIDA DOMICIANO';
+UPDATE public.alunos SET risco_borg = 4 WHERE nome = 'DORIVAL SFORCINI';
+UPDATE public.alunos SET risco_borg = 4 WHERE nome = 'HAMILTON FERREIRA LEONE';
+UPDATE public.alunos SET risco_borg = 4 WHERE nome = 'ISAURA PIRES BOLONHA';
+UPDATE public.alunos SET risco_borg = 4 WHERE nome = 'JOSÉ SÉRGIO LONGO';
+UPDATE public.alunos SET risco_borg = 4 WHERE nome = 'MARIA DE LOURDES PINHA LEITÃO GONÇALVE';
+UPDATE public.alunos SET risco_borg = 4 WHERE nome = 'MARIA LIGIA DE CASTRO MARINS';
+UPDATE public.alunos SET risco_borg = 4 WHERE nome = 'MARCIA REGINA DE SOUZAZWLLER';
+UPDATE public.alunos SET risco_borg = 4 WHERE nome = 'THEREZINHA NAZARÉ CURY TEIXEIRA ANHAUCI';
+
+-- Grupo 2: Condições Articulares, Osteoporose, Fibromialgia e Autismo (Borg Alvo Máximo: 5)
+UPDATE public.alunos SET risco_borg = 5 WHERE nome = 'ANGELA MARIA FRANCESCON DIAS';
+UPDATE public.alunos SET risco_borg = 5 WHERE nome = 'CARMEN LUCIA SANCHES RODRIGUES DA FONS';
+UPDATE public.alunos SET risco_borg = 5 WHERE nome = 'CRISTINA CESAR PENTEADO EWAD';
+UPDATE public.alunos SET risco_borg = 5 WHERE nome = 'DARCI RAMIL SFORCINI';
+UPDATE public.alunos SET risco_borg = 5 WHERE nome = 'FELIPE PIRES FRACCAROLI DAHER';
+UPDATE public.alunos SET risco_borg = 5 WHERE nome = 'GILVANIA MKM JUSSARA';
+UPDATE public.alunos SET risco_borg = 5 WHERE nome = 'MAGDA MAIA MORAES';
+UPDATE public.alunos SET risco_borg = 5 WHERE nome = 'MARILICE FERNANDES BERTOLINI';
+UPDATE public.alunos SET risco_borg = 5 WHERE nome = 'SILVIA CRISTINA DOS SANTOS MAZZA';
+
+-- Grupo 3: Saudáveis, Pré-Diabéticos, ou Condições Leves (Borg Alvo Máximo: 6)
+UPDATE public.alunos SET risco_borg = 6 WHERE nome = 'ADRIANA SILVA SANTOS';
+UPDATE public.alunos SET risco_borg = 6 WHERE nome = 'ALEXANDRE XAVIER DA SILVA';
+UPDATE public.alunos SET risco_borg = 6 WHERE nome = 'ANA CAROLINA LINS CORREIA DE MELO';
+UPDATE public.alunos SET risco_borg = 6 WHERE nome = 'ANA CAROLINA SANTOS MAZZA';
+UPDATE public.alunos SET risco_borg = 6 WHERE nome = 'APARECIDA EDNA DE SOUZA';
+UPDATE public.alunos SET risco_borg = 6 WHERE nome = 'CRISTINE VILLARES';
+UPDATE public.alunos SET risco_borg = 6 WHERE nome = 'GENILZA SANTOS DAS NEVES';
+UPDATE public.alunos SET risco_borg = 6 WHERE nome = 'JANETE MARIA BARBOSA DE MELO';
+UPDATE public.alunos SET risco_borg = 6 WHERE nome = 'JARBAS SEVERINO DA SILVA';
+UPDATE public.alunos SET risco_borg = 6 WHERE nome = 'LEILA GEORGE NASSAN FOLGOSI';
+UPDATE public.alunos SET risco_borg = 6 WHERE nome = 'MARILENE FRANCISCA ALMEIDA';
