@@ -2938,7 +2938,7 @@ def get_registros_pa_turma(turma: str, data: str) -> list:
             .select("*")
             .eq("turma", turma)
             .eq("data", data)
-            .order("aluno_nome")
+            .order("hora")
             .execute()
         )
         return r.data or []

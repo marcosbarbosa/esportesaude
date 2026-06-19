@@ -105,7 +105,6 @@ def _init_historico(aluno_id):
 
 def salvar_registro(aluno_id, dados):
     k = _chave(aluno_id, "hist")
-    dados["aluno_nome"] = st.session_state.get(f"pa_nome_{aluno_id}", "")
     if _DB_PA_OK:
         dados["aluno_id"] = aluno_id
         dados.setdefault("id", str(uuid.uuid4()))

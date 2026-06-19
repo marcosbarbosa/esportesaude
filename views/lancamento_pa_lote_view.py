@@ -232,7 +232,6 @@ def tela_lancamento_pa_digital():
             payload = {
                 "id":              str(uuid.uuid4()),
                 "aluno_id":        aid,
-                "aluno_nome":      vals["nome"],
                 "data":            cfg.get("data"),
                 "hora":            datetime.datetime.now().strftime("%H:%M"),
                 "sistolica":       sis,
@@ -317,6 +316,13 @@ def _mostrar_historico_turma(turma, data):
 
     registros = get_registros_pa_turma(turma, data)
 
+    # Mapa aluno_id → nome (via cache de alunos da turma, sem query extra)
+    try:
+        _df_al = get_alunos_por_turma(turma)
+        _nomes = dict(zip(_df_al["id"].astype(str), _df_al["nome"])) if not _df_al.empty else {}
+    except Exception:
+        _nomes = {}
+
     if not registros:
         _limpar_checkboxes_pa()
         st.info("Nenhum registro lançado para esta turma e data ainda.")
@@ -351,7 +357,7 @@ def _mostrar_historico_turma(turma, data):
     # de ação abaixo lê os valores corretos no mesmo run.
     for r in registros:
         rid   = str(r.get("id", ""))
-        nome  = r.get("aluno_nome") or "Aluno"
+        nome  = _nomes.get(str(r.get("aluno_id", ""))) or "Aluno"
         sis   = r.get("sistolica", 0)
         dia   = r.get("diastolica", 0)
         pul   = r.get("pulso")
