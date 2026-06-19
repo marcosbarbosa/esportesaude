@@ -66,29 +66,33 @@ def baixar_imagem_temp(url):
 
 def baixar_imagem_supabase(url):
     """
-    Baixa imagem via cliente Supabase Storage (contorna restrição DNS do sandbox Replit).
-    URL pública esperada: https://<ref>.supabase.co/storage/v1/object/public/<bucket>/<path>
+    Baixa imagem via httpx (mesmo stack de rede do supabase-py — contorna restrição DNS do sandbox).
     """
     if not url or not isinstance(url, str):
         return None
     try:
-        from urllib.parse import urlparse
-        from database import supabase as _supa
-        parsed = urlparse(url.strip())
-        # path: /storage/v1/object/public/<bucket>/<filepath...>
-        parts = parsed.path.lstrip("/").split("/")
-        # esperado: storage / v1 / object / public / <bucket> / <file...>
-        if len(parts) < 6 or parts[3] != "public":
-            return None
-        bucket   = parts[4]
-        filepath = "/".join(parts[5:])
-        data = _supa.storage.from_(bucket).download(filepath)
-        img = Image.open(io.BytesIO(data)).convert("RGB")
-        tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".jpg")
-        img.save(tmp.name, format="JPEG", quality=85)
-        return tmp.name
+        import httpx
+        with httpx.Client(timeout=20, follow_redirects=True) as client:
+            r = client.get(url.strip())
+            if r.status_code == 200:
+                img = Image.open(io.BytesIO(r.content)).convert("RGB")
+                tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".jpg")
+                img.save(tmp.name, format="JPEG", quality=85)
+                return tmp.name
     except Exception:
-        return None
+        pass
+    return None
+
+
+# Códigos curtos para legenda de IMC no PDF (cabe em 18mm de coluna)
+_IMC_CODES = {
+    "Baixo peso":    "BP",
+    "Normal":        "N",
+    "Sobrepeso":     "SP",
+    "Obesidade I":   "O1",
+    "Obesidade II":  "O2",
+    "Obesidade III": "O3",
+}
 
 
 def limpar_texto(texto):
@@ -1489,14 +1493,23 @@ def gerar_pdf_patologias(df, turma_filtro="Todas as Turmas"):
     pdf.set_text_color(0, 0, 0)
     pdf.ln(1)
 
-    # Legenda de cores
+    # Legenda de cores + IMC (mesma linha)
     pdf.set_font("Arial", "", 7)
     pdf.set_fill_color(254, 226, 226); pdf.cell(4, 3.5, "", border=1, fill=True)
-    pdf.cell(1, 3.5, ""); pdf.cell(40, 3.5, limpar_texto("Alerta clinico"))
+    pdf.cell(1, 3.5, ""); pdf.cell(30, 3.5, limpar_texto("Alerta clinico"))
     pdf.set_fill_color(254, 243, 199); pdf.cell(4, 3.5, "", border=1, fill=True)
-    pdf.cell(1, 3.5, ""); pdf.cell(40, 3.5, limpar_texto("Borg >= 7"))
+    pdf.cell(1, 3.5, ""); pdf.cell(25, 3.5, limpar_texto("Borg >= 7"))
     pdf.set_fill_color(230, 255, 237); pdf.cell(4, 3.5, "", border=1, fill=True)
-    pdf.cell(1, 3.5, ""); pdf.cell(0, 3.5, limpar_texto("Sem alerta"), ln=1)
+    pdf.cell(1, 3.5, ""); pdf.cell(22, 3.5, limpar_texto("Sem alerta"))
+    # Legenda IMC inline
+    pdf.set_text_color(30, 64, 175)
+    pdf.set_font("Arial", "B", 6.5)
+    pdf.cell(10, 3.5, "IMC:")
+    pdf.set_font("Arial", "", 6.5)
+    pdf.cell(0, 3.5,
+        limpar_texto("BP=Baixo Peso  N=Normal  SP=Sobrepeso  O1=Ob.I  O2=Ob.II  O3=Ob.III"),
+        ln=1)
+    pdf.set_text_color(0, 0, 0)
     pdf.ln(1.5)
 
     _cabecalho_tabela(pdf)
@@ -1510,19 +1523,24 @@ def gerar_pdf_patologias(df, turma_filtro="Todas as Turmas"):
         foto_url   = str(row.get("Foto", "") or "").strip()
         foto_path  = foto_cache.get(foto_url) if foto_url.startswith("http") else None
 
-        # Peso / Altura / IMC  (3 linhas: "63.0 kg / 1.55 m / 25.0 Sobrepeso")
+        # Peso / Altura / IMC  (3 linhas — IMC com código curto ex: "25.0 SP")
+        import re as _re
         peso_s   = str(row.get("Peso (kg)", "") or "").strip().replace("—", "-")
         altura_s = str(row.get("Altura (m)", "") or "").strip().replace("—", "-")
-        imc_s    = str(row.get("IMC", "") or "").strip()          # ex: "25.0 — Sobrepeso"
+        imc_s    = str(row.get("IMC", "") or "").strip()   # ex: "25.0 — Sobrepeso"
         _linhas_pai = []
         if peso_s not in ("", "-"):
             _linhas_pai.append(f"{peso_s} kg")
         if altura_s not in ("", "-"):
             _linhas_pai.append(f"{altura_s} m")
         if imc_s and imc_s not in ("-", "—"):
-            # substitui em-dash por hífen para latin-1
-            imc_clean = imc_s.replace("—", "-").replace("–", "-")
-            _linhas_pai.append(imc_clean)
+            # extrai número e categoria; usa código curto para caber em 18mm
+            _imc_parts = _re.split(r'\s*[—–\-]+\s*', imc_s, maxsplit=1)
+            _imc_num   = _imc_parts[0].strip() if _imc_parts else ""
+            _imc_cat   = _imc_parts[1].strip() if len(_imc_parts) > 1 else ""
+            _imc_code  = _IMC_CODES.get(_imc_cat, _imc_cat[:4] if _imc_cat else "")
+            if _imc_num:
+                _linhas_pai.append(f"{_imc_num} {_imc_code}".strip())
         pai_txt = "\n".join(_linhas_pai) if _linhas_pai else "-"
 
         # PA / Classe  (2 linhas: "131/87 / Est.1")
