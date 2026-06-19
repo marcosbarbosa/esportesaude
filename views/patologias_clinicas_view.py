@@ -278,7 +278,7 @@ def renderizar_aba_patologias():
     )
 
     # ── Botões de ação ────────────────────────────────────────────────────────
-    c_salvar, c_reset, c_pdf, _ = st.columns([2, 1, 2, 1])
+    c_salvar, c_reset, c_pdf, c_novo_pdf = st.columns([2, 1, 2, 1])
     with c_salvar:
         if st.button(
             "💾 Salvar Borg (sessão)", type="primary",
@@ -295,24 +295,42 @@ def renderizar_aba_patologias():
                     del st.session_state[k]
             st.rerun()
     with c_pdf:
-        with st.spinner("Preparando PDF…"):
+        _pdf_pronto = st.session_state.get("pat_pdf_pronto", False)
+        if _pdf_pronto:
+            st.download_button(
+                label="📄 Baixar PDF Anamnese",
+                data=st.session_state.get("pat_pdf_bytes", b""),
+                file_name=f"patologias_anamnese_{datetime.date.today().strftime('%Y%m%d')}.pdf",
+                mime="application/pdf",
+                use_container_width=True,
+                type="primary",
+                key="pat_download_pdf",
+            )
+        elif st.button(
+            "📄 Gerar PDF Anamnese",
+            use_container_width=True,
+            type="primary",
+            key="pat_gerar_pdf",
+        ):
             try:
-                from gerador_pdf import gerar_pdf_patologias
-                _pdf_pat = gerar_pdf_patologias(
-                    df_editado.drop(columns=["id"], errors="ignore"),
-                    turma_filtro=turma_filtro,
-                )
-                st.download_button(
-                    label="📄 Baixar PDF Anamnese",
-                    data=_pdf_pat,
-                    file_name=f"patologias_anamnese_{datetime.date.today().strftime('%Y%m%d')}.pdf",
-                    mime="application/pdf",
-                    use_container_width=True,
-                    type="primary",
-                    key="pat_download_pdf",
-                )
+                with st.spinner("Gerando PDF com fotos…"):
+                    from gerador_pdf import gerar_pdf_patologias
+                    _pdf_bytes = gerar_pdf_patologias(
+                        df_editado.drop(columns=["id"], errors="ignore"),
+                        turma_filtro=turma_filtro,
+                    )
+                st.session_state["pat_pdf_bytes"] = _pdf_bytes
+                st.session_state["pat_pdf_pronto"] = True
             except Exception as _ep:
                 st.error(f"Erro PDF: {_ep}")
+            st.rerun()
+
+    with c_novo_pdf:
+        if st.session_state.get("pat_pdf_pronto"):
+            if st.button("🔁 Novo PDF", use_container_width=True, key="pat_novo_pdf"):
+                st.session_state.pop("pat_pdf_pronto", None)
+                st.session_state.pop("pat_pdf_bytes", None)
+                st.rerun()
 
     # ── Preview HTML ───────────────────────────────────────────────────────────
     st.markdown("---")

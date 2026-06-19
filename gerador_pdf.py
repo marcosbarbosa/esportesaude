@@ -1443,10 +1443,19 @@ def gerar_pdf_patologias(df, turma_filtro="Todas as Turmas"):
 
     foto_cache = {}   # url_completa -> temp_path | None
     if "Foto" in df.columns:
-        for u_raw in df["Foto"].dropna().unique():
-            u_full = _normalizar_foto_url(str(u_raw))
-            if u_full and u_full not in foto_cache:
-                foto_cache[u_full] = baixar_imagem_supabase(u_full) or baixar_imagem_temp(u_full)
+        urls_unicas = [
+            _normalizar_foto_url(str(u))
+            for u in df["Foto"].dropna().unique()
+        ]
+        urls_unicas = [u for u in urls_unicas if u]
+
+        def _dl_foto(u_full: str):
+            return u_full, baixar_imagem_supabase(u_full) or baixar_imagem_temp(u_full)
+
+        from concurrent.futures import ThreadPoolExecutor
+        with ThreadPoolExecutor(max_workers=8) as _pool:
+            for u_full, path in _pool.map(_dl_foto, urls_unicas):
+                foto_cache[u_full] = path
 
     # ── Cabeçalho específico para paisagem A4 (297 mm) ────────────────────
     def _cab_paisagem(pdf):
