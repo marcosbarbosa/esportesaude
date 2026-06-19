@@ -964,6 +964,32 @@ def render_cabecalho_aluno(aluno):
     if st.session_state.get("painel_exclusao_aberto", False):
         _render_painel_exclusao(aluno)
 
+    # 🏷️ Banner Tags Clínicas — visível em TODAS as abas do prontuário
+    _tags_raw_cab = str(aluno.get("tags_saude") or "").strip()
+    _tags_list_cab = [t.strip() for t in _tags_raw_cab.split(",") if t.strip()]
+    if _tags_list_cab:
+        _CORES_CAB = {
+            "Hipertensão/Cardiopatia": ("#DC2626", "🫀"),
+            "Artrose/Artrite": ("#D97706", "🦴"),
+        }
+        _badges_cab = " ".join(
+            f"<span style='background:{_CORES_CAB.get(t,('#6B7280','🏷️'))[0]};"
+            f"color:white;padding:4px 14px;border-radius:14px;font-size:13px;"
+            f"font-weight:700;margin-right:6px;'>"
+            f"{_CORES_CAB.get(t,('#6B7280','🏷️'))[1]} {t}</span>"
+            for t in _tags_list_cab
+        )
+        st.markdown(
+            f"<div style='background:#FFF8F8;border:2px solid #FECACA;padding:10px 16px;"
+            f"border-radius:8px;display:flex;align-items:center;gap:12px;margin-top:10px;'>"
+            f"<span style='font-weight:700;color:#991B1B;font-size:13px;'>⚠️ Condições Clínicas:</span>"
+            f"&nbsp;{_badges_cab}"
+            f"<span style='margin-left:auto;font-size:11px;color:#94A3B8;'>"
+            f"← editar na aba 👤 Perfil e Contato</span></div>",
+            unsafe_allow_html=True,
+        )
+        st.markdown("<div style='margin-bottom:6px;'></div>", unsafe_allow_html=True)
+
 
 def render_aba_perfil(aluno):
     """Componente: Aba de Informações Pessoais (Com Blindagem de Dados)."""
@@ -976,6 +1002,52 @@ def render_aba_perfil(aluno):
             type="primary",
             use_container_width=True,
         )
+
+        # ── Tags Clínicas de Saúde (topo da ficha — primeiro campo visível) ───
+        st.markdown("#### 🏥 Condições Clínicas de Saúde")
+        _TAGS_CLINICAS = ["Hipertensão/Cardiopatia", "Artrose/Artrite"]
+        _TAGS_REGRAS = {
+            "Hipertensão/Cardiopatia": {
+                "icone": "🫀", "cor": "#DC2626", "fundo": "#FEF2F2",
+                "dica": "🔴 Evitar isometria e manobra de Valsalva. Exige monitoramento de PA.",
+                "tipo": "error",
+            },
+            "Artrose/Artrite": {
+                "icone": "🦴", "cor": "#D97706", "fundo": "#FFFBEB",
+                "dica": "🟡 Evitar alto impacto. Focar em mobilidade e avaliar escala de dor (Borg).",
+                "tipo": "warning",
+            },
+        }
+        _tags_raw = aluno.get("tags_saude") or ""
+        _tags_atuais = [t.strip() for t in str(_tags_raw).split(",") if t.strip() in _TAGS_CLINICAS]
+        tags_ed = st.multiselect(
+            "🏷️ Selecionar condição clínica do aluno (badge aparece no Tablet de Chamada):",
+            options=_TAGS_CLINICAS,
+            default=_tags_atuais,
+            help="Marque as condições de saúde. O professor verá o alerta automaticamente durante a chamada. Salve com o botão 💾 acima ou abaixo.",
+        )
+        if tags_ed:
+            _badges_html = " ".join(
+                f"<span style='background:{_TAGS_REGRAS[t]['cor']};color:white;"
+                f"padding:3px 12px;border-radius:12px;font-size:12px;font-weight:700;"
+                f"margin-right:6px;'>{_TAGS_REGRAS[t]['icone']} {t}</span>"
+                for t in tags_ed if t in _TAGS_REGRAS
+            )
+            st.markdown(
+                f"<div style='background:#F8FAFC;border:1px solid #E2E8F0;"
+                f"padding:10px 14px;border-radius:8px;margin-bottom:4px;'>"
+                f"<b>🏥 Card de Saúde:</b>&nbsp; {_badges_html}</div>",
+                unsafe_allow_html=True,
+            )
+            for _t in tags_ed:
+                if _t in _TAGS_REGRAS:
+                    _r = _TAGS_REGRAS[_t]
+                    if _r["tipo"] == "error":
+                        st.error(_r["dica"])
+                    else:
+                        st.warning(_r["dica"])
+        st.markdown("---")
+        st.markdown("#### 👤 Dados Pessoais")
 
         col_n, col_t, col_d = st.columns([2, 1.5, 1])
         n_ed = col_n.text_input(
@@ -1100,49 +1172,6 @@ def render_aba_perfil(aluno):
         )
 
         st.markdown("#### 🏥 Saúde e Alertas")
-
-        # ── Tags Clínicas de Saúde ─────────────────────────────────────────────
-        _TAGS_CLINICAS = ["Hipertensão/Cardiopatia", "Artrose/Artrite"]
-        _TAGS_REGRAS = {
-            "Hipertensão/Cardiopatia": {
-                "icone": "🫀", "cor": "#DC2626", "fundo": "#FEF2F2",
-                "dica": "🔴 Evitar isometria e manobra de Valsalva. Exige monitoramento de PA.",
-                "tipo": "error",
-            },
-            "Artrose/Artrite": {
-                "icone": "🦴", "cor": "#D97706", "fundo": "#FFFBEB",
-                "dica": "🟡 Evitar alto impacto. Focar em mobilidade e avaliar escala de dor (Borg).",
-                "tipo": "warning",
-            },
-        }
-        _tags_raw = aluno.get("tags_saude") or ""
-        _tags_atuais = [t.strip() for t in str(_tags_raw).split(",") if t.strip() in _TAGS_CLINICAS]
-        tags_ed = st.multiselect(
-            "🏷️ Tags Clínicas de Saúde:",
-            options=_TAGS_CLINICAS,
-            default=_tags_atuais,
-            help="Grupos de risco clínico — alertam o professor no Tablet de Chamada.",
-        )
-        if tags_ed:
-            _badges_html = " ".join(
-                f"<span style='background:{_TAGS_REGRAS[t]['cor']};color:white;"
-                f"padding:3px 12px;border-radius:12px;font-size:12px;font-weight:700;"
-                f"margin-right:6px;'>{_TAGS_REGRAS[t]['icone']} {t}</span>"
-                for t in tags_ed if t in _TAGS_REGRAS
-            )
-            st.markdown(
-                f"<div style='background:#F8FAFC;border:1px solid #E2E8F0;"
-                f"padding:10px 14px;border-radius:8px;margin-bottom:6px;'>"
-                f"<b>🏥 Card de Saúde:</b>&nbsp; {_badges_html}</div>",
-                unsafe_allow_html=True,
-            )
-            for _t in tags_ed:
-                if _t in _TAGS_REGRAS:
-                    _r = _TAGS_REGRAS[_t]
-                    if _r["tipo"] == "error":
-                        st.error(_r["dica"])
-                    else:
-                        st.warning(_r["dica"])
 
         _c_em, _c_par = st.columns([3, 2])
         cont_em_ed = _c_em.text_input(
