@@ -1421,14 +1421,32 @@ def gerar_pdf_patologias(df, turma_filtro="Todas as Turmas"):
         pdf.set_text_color(0, 0, 0)
 
     # ── Pré-baixa fotos únicas ──────────────────────────────────────────────
-    foto_cache = {}   # url -> temp_path | None
+    # Base URL do Supabase para montar URLs relativas (ex: "avatars/foto.jpg")
+    try:
+        from database import supabase as _supa_pdf
+        _supa_base = getattr(_supa_pdf, "supabase_url", "") or ""
+    except Exception:
+        _supa_base = ""
+    _BUCKET_PREFIX = "/storage/v1/object/public/"
+
+    def _normalizar_foto_url(raw: str) -> str:
+        """Garante URL completa; se for caminho relativo, monta com base do Supabase."""
+        raw = str(raw or "").strip()
+        if not raw:
+            return ""
+        if raw.startswith("http"):
+            return raw
+        # caminho relativo: ex "fotos-alunos/photo.jpg" ou "photo.jpg"
+        if _supa_base:
+            return f"{_supa_base.rstrip('/')}{_BUCKET_PREFIX}{raw.lstrip('/')}"
+        return ""
+
+    foto_cache = {}   # url_completa -> temp_path | None
     if "Foto" in df.columns:
-        urls_unicas = df["Foto"].dropna().unique()
-        for u in urls_unicas:
-            u = str(u).strip()
-            if u.startswith("http") and u not in foto_cache:
-                # Tenta via Storage Supabase (contorna DNS sandbox); fallback: requests
-                foto_cache[u] = baixar_imagem_supabase(u) or baixar_imagem_temp(u)
+        for u_raw in df["Foto"].dropna().unique():
+            u_full = _normalizar_foto_url(str(u_raw))
+            if u_full and u_full not in foto_cache:
+                foto_cache[u_full] = baixar_imagem_supabase(u_full) or baixar_imagem_temp(u_full)
 
     # ── Cabeçalho específico para paisagem A4 (297 mm) ────────────────────
     def _cab_paisagem(pdf):
@@ -1520,8 +1538,8 @@ def gerar_pdf_patologias(df, turma_filtro="Todas as Turmas"):
         tem_alerta = str(row.get("🔴", "")) == "🔴"
         borg_val   = int(row.get("Borg/Risco", 0) or 0)
         borg_alto  = borg_val >= 7
-        foto_url   = str(row.get("Foto", "") or "").strip()
-        foto_path  = foto_cache.get(foto_url) if foto_url.startswith("http") else None
+        foto_url  = _normalizar_foto_url(str(row.get("Foto", "") or ""))
+        foto_path = foto_cache.get(foto_url) if foto_url else None
 
         # Peso / Altura / IMC  (3 linhas — IMC com código curto ex: "25.0 SP")
         import re as _re

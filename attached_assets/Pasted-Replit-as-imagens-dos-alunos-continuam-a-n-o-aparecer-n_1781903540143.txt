@@ -1,0 +1,46 @@
+Replit, as imagens dos alunos continuam a não aparecer na coluna 'Foto' do PDF 'Patologias - Anamnese Clínica' (função gerar_pdf_patologias). O problema está na lógica de pré-download das imagens, especificamente no bloco que verifica as URLs.
+
+A condição u.startswith('http') está a falhar porque muitas vezes os caminhos das fotos vindos do banco de dados (Supabase) não incluem o domínio completo (ex: vêm como 'avatars/foto.jpg').
+
+Ação Necessária:
+
+Por favor, atualiza o arquivo gerador_pdf.py com as seguintes correções:
+
+Normalização de URLs no loop de cache:
+Na função gerar_pdf_patologias, antes de verificar startswith('http'), cria uma lógica para construir a URL completa se o valor for um caminho relativo. Precisarás de usar as variáveis de ambiente do Supabase (SUPABASE_URL ou uma constante definida no projeto) para montar a URL pública do Storage.
+
+Exemplo de lógica:
+
+Python
+base_url = os.environ.get("SUPABASE_URL", "") # Ou como for definido no seu projeto
+bucket_path = "/storage/v1/object/public/" # Ajuste conforme seu bucket
+
+for u in urls_unicas:
+    u = str(u).strip()
+    if not u: continue
+
+    # Normaliza a URL
+    url_completa = u
+    if not u.startswith('http'):
+        if base_url:
+             # Garante que não há barras duplas
+             url_completa = f"{base_url.rstrip('/')}{bucket_path}{u.lstrip('/')}"
+        else:
+             continue # Não consegue montar a URL
+
+    if url_completa not in foto_cache:
+         foto_cache[url_completa] = baixar_imagem_supabase(url_completa) or baixar_imagem_temp(url_completa)
+Ajuste na iteração do DataFrame:
+Quando for renderizar a linha no loop for _, row in df.iterrows():, certifica-te de que aplicas a mesma lógica de normalização à variável foto_url antes de procurar no dicionário foto_cache.
+
+Exemplo de lógica:
+
+Python
+foto_url_original = str(row.get("Foto", "") or "").strip()
+foto_url = foto_url_original
+if foto_url_original and not foto_url_original.startswith('http'):
+     if base_url:
+          foto_url = f"{base_url.rstrip('/')}{bucket_path}{foto_url_original.lstrip('/')}"
+
+foto_path = foto_cache.get(foto_url)
+Por favor, integra estas alterações de forma limpa no código existente e fornece o código atualizado.
