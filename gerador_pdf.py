@@ -1339,45 +1339,70 @@ def gerar_pdf_monitoramento_clinico(df, turma_filtro="Todas as Turmas"):
 def gerar_pdf_patologias(df, turma_filtro="Todas as Turmas"):
     """
     PDF Patologias — Anamnese Clínica (A4 Paisagem, 277 mm úteis).
-    Colunas: ! · Nome · Turma · Patologias · Restrições · Alergias ·
-             Medicamentos · Peso/Alt/IMC · PA/Cls · Ct.Emergência · Borg
+    Colunas: Foto · ! · Nome · Turma · Borg · Patologias · Restrições ·
+             Alergias · Medicamentos · Peso/Alt/IMC · PA/Cls · Ct.Emergência
     """
 
+    # (col_label, width_mm, col_key_or_None)
+    # width total: 9+5+37+8+9+46+21+17+22+18+16+69 = 277 mm
     COLUNAS = [
-        ("!",              5),
-        ("Nome",          40),
-        ("Turma",         18),
-        ("Patologias",    52),
-        ("Restricoes",    23),
-        ("Alergias",      21),
-        ("Medicamentos",  24),
-        ("Peso/Alt/IMC",  18),
-        ("PA / Cls",      18),
-        ("Ct. Emergencia",41),
-        ("Borg",          17),
+        ("Foto",           9,  "Foto"),
+        ("!",              5,  "🔴"),
+        ("Nome",          37,  "Nome"),
+        ("Turma",          8,  "Turma"),
+        ("Borg",           9,  "Borg/Risco"),
+        ("Patologias",    46,  "Patologias"),
+        ("Restricoes",    21,  "Restrições"),
+        ("Alergias",      17,  "Alergias"),
+        ("Medicamentos",  22,  "Medicamentos"),
+        ("Peso/Alt/IMC",  18,  None),
+        ("PA / Cls",      16,  None),
+        ("Ct. Emergencia",69,  "Ct. Emergência"),
     ]
-    # Total: 5+40+18+52+23+21+24+18+18+41+17 = 277 mm
 
-    TOTAL_W = sum(w for _, w in COLUNAS)
+    TOTAL_W = sum(w for _, w, _ in COLUNAS)
+    # Índice da coluna Foto (posição 0) para tratamento especial
+    FOTO_IDX = 0
+    FOTO_W   = COLUNAS[FOTO_IDX][1]   # 9 mm
+    MIN_H    = 9.5                     # altura mínima de linha (acomoda foto 8x8)
 
     def _linhas(pdf, texto, largura, fonte_sz=7):
         pdf.set_font("Arial", "", fonte_sz)
         return max(1, len(pdf.multi_cell(largura, 4.5, texto, split_only=True)))
 
-    def _altura_linha(pdf, valores, fonte_sz=7):
+    def _altura_linha(pdf, textos_sem_foto, fonte_sz=7):
+        """textos_sem_foto já exclui a coluna Foto."""
         max_n = 1
-        for (_, w), txt in zip(COLUNAS, valores):
+        for (_, w, _), txt in zip(COLUNAS[1:], textos_sem_foto):
             n = _linhas(pdf, txt, w - 1, fonte_sz)
             if n > max_n:
                 max_n = n
-        return max_n * 4.5
+        return max(max_n * 4.5, MIN_H)
+
+    def _cabecalho_tabela(pdf):
+        pdf.set_font("Arial", "B", 7.5)
+        pdf.set_fill_color(127, 29, 29)
+        pdf.set_text_color(255, 255, 255)
+        for label, w, _ in COLUNAS:
+            pdf.cell(w, 6, limpar_texto(label), border=1, fill=True, align="C")
+        pdf.ln()
+        pdf.set_text_color(0, 0, 0)
+
+    # ── Pré-baixa fotos únicas ──────────────────────────────────────────────
+    foto_cache = {}   # url -> temp_path | None
+    if "Foto" in df.columns:
+        urls_unicas = df["Foto"].dropna().unique()
+        for u in urls_unicas:
+            u = str(u).strip()
+            if u.startswith("http") and u not in foto_cache:
+                foto_cache[u] = baixar_imagem_temp(u)
 
     pdf = FPDF(orientation="L", unit="mm", format="A4")
     pdf.set_auto_page_break(auto=True, margin=20)
     pdf.set_margins(10, 10, 10)
     pdf.add_page()
 
-    _cabecalho_padrao(pdf, subtitulo="Patologias — Anamnese Clinica")
+    _cabecalho_padrao(pdf, subtitulo="Patologias - Anamnese Clinica")
 
     hoje_str  = datetime.date.today().strftime("%d/%m/%Y")
     hora_str  = datetime.datetime.now().strftime("%H:%M")
@@ -1394,7 +1419,7 @@ def gerar_pdf_patologias(df, turma_filtro="Todas as Turmas"):
     pdf.set_text_color(0, 0, 0)
     pdf.ln(1)
 
-    # Legenda
+    # Legenda de cores
     pdf.set_font("Arial", "", 7)
     pdf.set_fill_color(254, 226, 226); pdf.cell(4, 3.5, "", border=1, fill=True)
     pdf.cell(1, 3.5, ""); pdf.cell(40, 3.5, limpar_texto("Alerta clinico"))
@@ -1404,95 +1429,106 @@ def gerar_pdf_patologias(df, turma_filtro="Todas as Turmas"):
     pdf.cell(1, 3.5, ""); pdf.cell(0, 3.5, limpar_texto("Sem alerta"), ln=1)
     pdf.ln(1.5)
 
-    # Cabeçalho da tabela
-    pdf.set_font("Arial", "B", 7.5)
-    pdf.set_fill_color(127, 29, 29)
-    pdf.set_text_color(255, 255, 255)
-    for label, w in COLUNAS:
-        pdf.cell(w, 6, limpar_texto(label), border=1, fill=True, align="C")
-    pdf.ln()
-    pdf.set_text_color(0, 0, 0)
+    _cabecalho_tabela(pdf)
 
-    # Linhas de dados
+    # ── Linhas de dados ────────────────────────────────────────────────────
     zebra = False
     for _, row in df.iterrows():
         tem_alerta = str(row.get("🔴", "")) == "🔴"
         borg_val   = int(row.get("Borg/Risco", 0) or 0)
         borg_alto  = borg_val >= 7
+        foto_url   = str(row.get("Foto", "") or "").strip()
+        foto_path  = foto_cache.get(foto_url) if foto_url.startswith("http") else None
 
-        # Monta string Peso/Alt/IMC (somente ASCII para FPDF)
+        # Peso / Altura / IMC
         peso_s   = str(row.get("Peso (kg)", "") or "").strip().replace("—", "-")
         altura_s = str(row.get("Altura (m)", "") or "").strip().replace("—", "-")
         imc_s    = str(row.get("IMC", "") or "").strip().replace("—", "-")
         if peso_s not in ("", "-") or altura_s not in ("", "-"):
             pai_txt = f"{peso_s}kg/{altura_s}m"
             if imc_s and imc_s not in ("-", ""):
-                pai_txt += f" IMC:{imc_s.split(' ')[0]}"
+                pai_txt += f" IMC:{imc_s.split()[0]}"
         else:
             pai_txt = "-"
 
-        # Monta string PA/Cls (somente ASCII para FPDF)
+        # PA / Classe
         pa_s  = str(row.get("PA Sis/Dia", "") or "").strip().replace("—", "-")
-        cls_s = str(row.get("PA Classe", "") or "").strip().replace("—", "-")
+        cls_s = str(row.get("PA Classe",  "") or "").strip().replace("—", "-")
         pa_txt = pa_s if pa_s and pa_s not in ("-", "") else "-"
         if cls_s and cls_s not in ("-", ""):
             pa_txt += f"/{cls_s}"
 
-        valores = [
-            "!!!" if tem_alerta else "",
-            limpar_texto(str(row.get("Nome", "") or "")),
-            limpar_texto(str(row.get("Turma", "") or "")),
-            limpar_texto(str(row.get("Patologias", "") or "")),
-            limpar_texto(str(row.get("Restrições", "") or "")),
-            limpar_texto(str(row.get("Alergias", "") or "")),
-            limpar_texto(str(row.get("Medicamentos", "") or "")),
-            limpar_texto(pai_txt),
-            limpar_texto(pa_txt),
-            limpar_texto(str(row.get("Ct. Emergência", "") or "")),
-            str(borg_val) if borg_val > 0 else "-",
+        # Textos para as colunas NÃO-foto (mesma ordem que COLUNAS[1:])
+        textos = [
+            "!!!" if tem_alerta else "",                              # !
+            limpar_texto(str(row.get("Nome", "") or "")),             # Nome
+            limpar_texto(str(row.get("Turma", "") or "")),            # Turma
+            str(borg_val) if borg_val > 0 else "-",                  # Borg
+            limpar_texto(str(row.get("Patologias", "") or "")),       # Patologias
+            limpar_texto(str(row.get("Restrições", "") or "")),       # Restrições
+            limpar_texto(str(row.get("Alergias", "") or "")),         # Alergias
+            limpar_texto(str(row.get("Medicamentos", "") or "")),     # Medicamentos
+            limpar_texto(pai_txt),                                    # Peso/Alt/IMC
+            limpar_texto(pa_txt),                                     # PA/Cls
+            limpar_texto(str(row.get("Ct. Emergência", "") or "")),   # Ct. Emergência
         ]
 
-        h_linha = max(_altura_linha(pdf, valores, fonte_sz=7), 4.5)
+        h_linha = _altura_linha(pdf, textos)
 
+        # Quebra de página
         if pdf.get_y() + h_linha > pdf.page_break_trigger:
             pdf.add_page()
-            pdf.set_font("Arial", "B", 7.5)
-            pdf.set_fill_color(127, 29, 29)
-            pdf.set_text_color(255, 255, 255)
-            for label, w in COLUNAS:
-                pdf.cell(w, 6, limpar_texto(label), border=1, fill=True, align="C")
-            pdf.ln()
-            pdf.set_text_color(0, 0, 0)
+            _cabecalho_tabela(pdf)
             zebra = False
 
+        # Cor de fundo da linha
         if tem_alerta:
-            pdf.set_fill_color(254, 226, 226)
+            fill_r, fill_g, fill_b = 254, 226, 226
         elif borg_alto:
-            pdf.set_fill_color(254, 243, 199)
+            fill_r, fill_g, fill_b = 254, 243, 199
         elif zebra:
-            pdf.set_fill_color(245, 247, 250)
+            fill_r, fill_g, fill_b = 245, 247, 250
         else:
-            pdf.set_fill_color(255, 255, 255)
+            fill_r, fill_g, fill_b = 255, 255, 255
         zebra = not zebra
+        pdf.set_fill_color(fill_r, fill_g, fill_b)
 
-        x_ini = pdf.get_x()
+        x_ini = pdf.l_margin
         y_ini = pdf.get_y()
-        for i, ((_, w), texto) in enumerate(zip(COLUNAS, valores)):
-            align = "C" if i in (0, 10) else "L"
+
+        # ── Coluna Foto (índice 0) — tratamento especial ──────────────────
+        pdf.set_xy(x_ini, y_ini)
+        pdf.rect(x_ini, y_ini, FOTO_W, h_linha, style="FD")
+        if foto_path:
+            try:
+                img_sz = min(FOTO_W - 1.5, h_linha - 1.5)
+                ix = x_ini + (FOTO_W - img_sz) / 2
+                iy = y_ini + (h_linha - img_sz) / 2
+                pdf.image(foto_path, x=ix, y=iy, w=img_sz, h=img_sz)
+            except Exception:
+                pass
+        x_ini += FOTO_W
+
+        # ── Demais colunas ────────────────────────────────────────────────
+        for ci, ((_, w, _), texto) in enumerate(zip(COLUNAS[1:], textos)):
+            # ci=0→!, ci=1→Nome, ci=2→Turma, ci=3→Borg
+            centrar = ci in (0, 3)   # ! e Borg centralizados
             pdf.set_xy(x_ini, y_ini)
+            pdf.set_fill_color(fill_r, fill_g, fill_b)
             pdf.rect(x_ini, y_ini, w, h_linha, style="FD")
-            if align == "C" or len(texto) <= max(1, int(w / 2.2)):
+            if centrar or len(texto) <= max(1, int(w / 2.2)):
                 pdf.set_xy(x_ini + 1, y_ini + (h_linha - 4) / 2)
                 pdf.set_font("Arial", "", 7)
-                pdf.cell(w - 2, 4, texto[:max(1, int(w / 1.9))], align=align)
+                pdf.cell(w - 2, 4, texto[:max(1, int(w / 1.9))], align="C" if centrar else "L")
             else:
                 pdf.set_xy(x_ini + 1, y_ini + 0.5)
                 pdf.set_font("Arial", "", 6.5)
                 pdf.multi_cell(w - 2, 4, texto, align="L")
             x_ini += w
+
         pdf.set_xy(pdf.l_margin, y_ini + h_linha)
 
-    # Rodapé
+    # ── Rodapé do relatório ────────────────────────────────────────────────
     pdf.ln(2)
     pdf.set_draw_color(153, 27, 27)
     pdf.set_line_width(0.4)
@@ -1507,9 +1543,17 @@ def gerar_pdf_patologias(df, turma_filtro="Todas as Turmas"):
     pdf.set_text_color(100, 116, 139)
     pdf.set_font("Arial", "I", 6.5)
     pdf.cell(0, 4, limpar_texto(
-        "Documento confidencial — uso restrito a equipe tecnica. "
+        "Documento confidencial - uso restrito a equipe tecnica. "
         "Proibida reproducao ou divulgacao sem autorizacao da coordenacao."
     ), ln=1)
+
+    # Limpa arquivos temporários de fotos
+    for tmp in foto_cache.values():
+        if tmp:
+            try:
+                os.remove(tmp)
+            except Exception:
+                pass
 
     try:
         return pdf.output(dest='S').encode('latin-1')
