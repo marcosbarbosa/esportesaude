@@ -754,7 +754,7 @@ def tela_impressao_ficha():
                             [0.55, 3.45, 1], vertical_alignment="center"
                         )
                         with c_foto:
-                            url_foto = str(row.get("url_foto") or "").strip()
+                            url_foto = str(row.get("foto_url") or "").strip()
                             if url_foto.startswith("http"):
                                 foto_html = (
                                     f'<img src="{url_foto}" '

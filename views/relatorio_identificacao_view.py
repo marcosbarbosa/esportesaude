@@ -39,7 +39,7 @@ def _prefetch_fotos(df, max_workers=12):
     Usa ThreadPoolExecutor para downloads paralelos.
     """
     urls = [
-        str(u) for u in df["url_foto"].dropna().unique()
+        str(u) for u in df["foto_url"].dropna().unique()
         if str(u).strip() and str(u) != "nan"
     ]
     resultado = {}
@@ -169,7 +169,7 @@ def _linhas_html(df, campos_sel, opcoes_campos, fotos_b64=None):
     sz  = _FOTO_SIZE
     tr = ""
     for _, row in df.iterrows():
-        foto_url = str(row.get("url_foto") or "").strip()
+        foto_url = str(row.get("foto_url") or "").strip()
         tem_foto = bool(foto_url and foto_url not in ("nan", "None"))
 
         if fotos_b64 is not None:

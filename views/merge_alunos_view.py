@@ -59,7 +59,7 @@ GRUPOS_CAMPOS = {
         ("anamnese_incomodo_atividade",   "Incômodos na Atividade Física"),
     ],
     "📸 Foto de Perfil": [
-        ("url_foto", "Foto de Perfil (URL)"),
+        ("foto_url", "Foto de Perfil (URL)"),
     ],
 }
 
@@ -461,7 +461,7 @@ def tela_merge_alunos():
                         unsafe_allow_html=True
                     )
                 with c_fonte:
-                    if campo_db == "url_foto" and _tem_valor(fonte_v):
+                    if campo_db == "foto_url" and _tem_valor(fonte_v):
                         try:
                             st.image(fonte_v, width=60)
                         except Exception:
@@ -474,7 +474,7 @@ def tela_merge_alunos():
                             unsafe_allow_html=True
                         )
                 with c_receptor:
-                    if campo_db == "url_foto" and _tem_valor(receptor_v):
+                    if campo_db == "foto_url" and _tem_valor(receptor_v):
                         try:
                             st.image(receptor_v, width=60)
                         except Exception:

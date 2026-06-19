@@ -1,2 +1,4 @@
 - [Aproveitamento cache bug](aproveitamento-cache.md) — após merge de duplicata, limpar CRM caches no prontuário ou dados velhos aparecem na ficha.
 - [Patologias module extraction](patologias-module.md) — anamnese clínica extraída para views/patologias_clinicas_view.py; renderizar_aba_patologias() compartilhada entre Portal do Aluno e Relatórios & BI via import local.
+- [foto_url rename coverage](foto-url-rename.md) — coluna renomeada url_foto→foto_url; 14 arquivos corrigidos; bi_individual_view.py mantém fallback duplo (seguro).
+- [Email BI multi-schedule](email-bi-multischedule.md) — sistema completo já implementado; só falta criar tabela email_bi_schedules no Supabase (SQL exibido automaticamente na tela Email BI).

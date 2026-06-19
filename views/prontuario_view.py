@@ -136,9 +136,9 @@ def rotacionar_foto_salva(aluno, url_atual, angulo):
 
                 nova_url, erro = upload_midia_diagnostico(img_bytes, f"rot_{uuid.uuid4().hex[:6]}.jpg", "image/jpeg")
                 if nova_url:
-                    sucesso, msg = atualizar_perfil_aluno_dict_seguro(aluno["id"], {"url_foto": nova_url})
+                    sucesso, msg = atualizar_perfil_aluno_dict_seguro(aluno["id"], {"foto_url": nova_url})
                     if sucesso:
-                        st.session_state.aluno_prontuario["url_foto"] = nova_url
+                        st.session_state.aluno_prontuario["foto_url"] = nova_url
                         st.toast("Foto corrigida com sucesso!", icon="✅")
                         time.sleep(1)
                         st.rerun()
@@ -482,7 +482,7 @@ def renderizar_ficha():
                     st.error(_msg)
     st.markdown("<div style='margin-bottom:10px;'></div>", unsafe_allow_html=True)
 
-    u_v = aluno.get("url_foto")
+    u_v = aluno.get("foto_url")
     cp_f, cp_i, cp_pdf = st.columns([1, 4.5, 1.5], vertical_alignment="center")
 
     with cp_f:
@@ -605,7 +605,7 @@ def renderizar_ficha():
                 st.markdown("#### 📸 Foto de Perfil")
 
                 # 🚀 INJEÇÃO DE UX EXTREMA: Painel de Rotação de Foto Salva
-                url_atual_foto = aluno.get("url_foto")
+                url_atual_foto = aluno.get("foto_url")
                 if pd.notna(url_atual_foto) and str(url_atual_foto).strip() and str(url_atual_foto).strip().lower() not in ["none", "nan", "null"]:
                     with st.container(border=True):
                         st.markdown("**A foto atual está deitada?** Corrija aqui com 1 clique:")
@@ -692,7 +692,7 @@ def renderizar_ficha():
                             dados_salvar = {
                                 "nome": n_ed.upper().strip(), "turma": t_ed_salvar, "data_nascimento": str(d_ed),
                                 "peso": float(p_ed), "altura": float(a_ed), "whatsapp": w_ed, "email": e_ed,
-                                "url_foto": nova_url, "cpf": cpf_ed, "rg": rg_ed, "endereco": end_ed,
+                                "foto_url": nova_url, "cpf": cpf_ed, "rg": rg_ed, "endereco": end_ed,
                                 "bairro": bai_ed, "cep": cep_ed, "contato_emergencia": cont_em_ed,
                                 "problemas_saude": prob_ed, "medicamentos": meds_ed, "restricoes_fisicas": rest_ed,
                             }

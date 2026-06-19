@@ -71,7 +71,7 @@ _GRUPOS_APROVEITAMENTO = [
         ("areas_voluntariado",    "areas_voluntariado",    "Áreas de Voluntariado"),
     ]),
     ("📎 Documentos Digitais", [
-        ("url_foto",           "url_foto",           "Foto de Perfil"),
+        ("foto_url",           "foto_url",           "Foto de Perfil"),
         ("url_rg",             "url_rg",             "Imagem do RG"),
         ("url_receituario",    "url_receituario",    "Receituário Médico"),
         ("url_atestado_medico","url_atestado_medico","Atestado Médico"),

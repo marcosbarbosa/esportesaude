@@ -154,7 +154,7 @@ def gerar_cartaz_word_core(df_mes, titulo, subtitulo="", mensagem_cartaz=""):
         p = cell.paragraphs[0]
         p.alignment = WD_ALIGN_PARAGRAPH.CENTER
 
-        img_bytes = processar_imagem_para_redondo_word(r.get("url_foto"))
+        img_bytes = processar_imagem_para_redondo_word(r.get("foto_url"))
         if img_bytes:
             run_img = p.add_run()
             run_img.add_picture(io.BytesIO(img_bytes), width=Inches(1.2))
@@ -201,7 +201,7 @@ def gerar_cartaz_pdf_core(df_mes, titulo, subtitulo="", mensagem_cartaz=""):
         aluno_esq = registros.iloc[i]
         nome_esq = str(aluno_esq["nome"]).upper().strip()
         dia_esq = f"{int(aluno_esq['dia']):02d}/{int(aluno_esq['mes']):02d}"
-        b64_img_esq = processar_imagem_para_redondo_b64(aluno_esq.get("url_foto"))
+        b64_img_esq = processar_imagem_para_redondo_b64(aluno_esq.get("foto_url"))
 
         foto_html_esq = f'<img src="data:image/png;base64,{b64_img_esq}" class="foto-perfil">' if b64_img_esq else '<div class="no-foto"></div>'
 
@@ -223,7 +223,7 @@ def gerar_cartaz_pdf_core(df_mes, titulo, subtitulo="", mensagem_cartaz=""):
             aluno_dir = registros.iloc[i + 1]
             nome_dir = str(aluno_dir["nome"]).upper().strip()
             dia_dir = f"{int(aluno_dir['dia']):02d}/{int(aluno_dir['mes']):02d}"
-            b64_img_dir = processar_imagem_para_redondo_b64(aluno_dir.get("url_foto"))
+            b64_img_dir = processar_imagem_para_redondo_b64(aluno_dir.get("foto_url"))
 
             foto_html_dir = f'<img src="data:image/png;base64,{b64_img_dir}" class="foto-perfil">' if b64_img_dir else '<div class="no-foto"></div>'
 
@@ -565,8 +565,8 @@ def renderizar_aba_niver():
                 [1, 3, 2, 0.7, 1.4, 0.7], vertical_alignment="center"
             )
             with c_av:
-                if pd.notna(r.get("url_foto")) and str(r.get("url_foto")).strip() != "":
-                    st.markdown(f'<img src="{r["url_foto"]}" class="zoom-niver">', unsafe_allow_html=True)
+                if str(r.get("foto_url") or "").strip().startswith("http"):
+                    st.markdown(f'<img src="{r["foto_url"]}" class="zoom-niver">', unsafe_allow_html=True)
                 else:
                     st.markdown("👤", unsafe_allow_html=True)
 

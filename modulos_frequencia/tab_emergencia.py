@@ -212,8 +212,8 @@ def renderizar_aba_emergencia(df_alunos_tab, turma_selecionada):
             c_img, c_info, c_acao, c_ficha = st.columns([1.2, 4.5, 1.8, 1.5], vertical_alignment="center")
 
             # Avatar
-            foto = row.get("url_foto", "")
-            if pd.notna(foto) and str(foto).strip() != "" and str(foto).strip().lower() not in ["none", "nan", "null"]:
+            foto = str(row.get("foto_url") or "").strip()
+            if foto.startswith("http"):
                 c_img.markdown(f'<img src="{foto}" class="zoom-avatar-em">', unsafe_allow_html=True)
             else:
                 c_img.markdown('<div class="em-avatar-placeholder">👤</div>', unsafe_allow_html=True)

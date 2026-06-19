@@ -441,7 +441,7 @@ def tela_inscricao_publica_move_right(modo_admin=False):
                             "horario_preferencial": hora_pref,
                             "horario_preferencial_2": hora_pref_2,
                             "termo_imagem": termo,
-                            "url_foto": url_foto,
+                            "foto_url": url_foto,
                             "url_rg": url_rg,
                             "url_receituario": url_receita,
                             "url_atestado_medico": url_atestado,

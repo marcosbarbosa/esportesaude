@@ -165,7 +165,7 @@ def rotacionar_imagem_supabase(aluno_id, url_atual, angulo):
         )
         if nova_url:
             sucesso, msg = atualizar_perfil_aluno_dict_seguro(
-                aluno_id, {"url_foto": nova_url}
+                aluno_id, {"foto_url": nova_url}
             )
             return (True, nova_url) if sucesso else (False, f"Erro BD: {msg}")
         return False, f"Erro Upload: {erro}"
@@ -842,7 +842,7 @@ def render_cabecalho_aluno(aluno):
 
     st.markdown("<div style='margin-bottom:10px;'></div>", unsafe_allow_html=True)
 
-    u_v = aluno.get("url_foto")
+    u_v = aluno.get("foto_url")
     cp_f, cp_i, cp_pdf, cp_word = st.columns(
         [1.2, 4.3, 0.9, 0.9], vertical_alignment="center"
     )
@@ -864,7 +864,7 @@ def render_cabecalho_aluno(aluno):
                 with st.spinner("🔄"):
                     ok, url = rotacionar_imagem_supabase(aluno["id"], u_v, 90)
                     if ok:
-                        st.session_state.aluno_prontuario["url_foto"] = url
+                        st.session_state.aluno_prontuario["foto_url"] = url
                         st.rerun()
             if c_dir.button(
                 "↻", key="rot_dir", help="Girar direita", use_container_width=True
@@ -872,7 +872,7 @@ def render_cabecalho_aluno(aluno):
                 with st.spinner("🔄"):
                     ok, url = rotacionar_imagem_supabase(aluno["id"], u_v, -90)
                     if ok:
-                        st.session_state.aluno_prontuario["url_foto"] = url
+                        st.session_state.aluno_prontuario["foto_url"] = url
                         st.rerun()
         else:
             st.markdown(
@@ -1234,7 +1234,7 @@ def render_aba_perfil(aluno):
 
         if btn_save_top or btn_save_bot:
             with st.spinner("A guardar perfil..."):
-                nova_url, upload_ok = aluno.get("url_foto"), True
+                nova_url, upload_ok = aluno.get("foto_url"), True
                 if foto_nova:
                     img_b, f_n, f_t = processar_foto_perfil(foto_nova.getvalue())
                     if img_b:
@@ -1255,7 +1255,7 @@ def render_aba_perfil(aluno):
                         "altura": blindar_float(a_ed),
                         "whatsapp": w_ed,
                         "email": e_ed,
-                        "url_foto": nova_url,
+                        "foto_url": nova_url,
                         "cpf": cpf_ed,
                         "rg": rg_ed,
                         "endereco": end_ed,
