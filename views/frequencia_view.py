@@ -144,9 +144,9 @@ def carregar_css_global():
         <style>
             .zoom-avatar {
                 display: block;
-                width: 42px !important; height: 42px !important;
-                min-width: 42px; min-height: 42px;
-                max-width: 42px; max-height: 42px;
+                width: 63px !important; height: 63px !important;
+                min-width: 63px; min-height: 63px;
+                max-width: 63px; max-height: 63px;
                 aspect-ratio: 1 / 1;
                 border-radius: 50%;
                 object-fit: cover;
