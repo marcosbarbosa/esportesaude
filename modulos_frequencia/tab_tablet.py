@@ -68,9 +68,9 @@ def renderizar_aba_terminal(df_alunos_tab, data_aula, presencas_turma_geral, blo
         left: 50% !important;
         transform: translateX(-50%) !important;
         width: 140% !important;
-        height: 105px !important;
-        min-height: 105px !important;
-        max-height: 105px !important;
+        height: 185px !important;
+        min-height: 185px !important;
+        max-height: 185px !important;
         z-index: 9999 !important;
         opacity: 0 !important;
         background: transparent !important;
@@ -83,7 +83,7 @@ def renderizar_aba_terminal(df_alunos_tab, data_aula, presencas_turma_geral, blo
         display: flex;
         flex-direction: column;
         align-items: center;
-        height: 110px;
+        height: 200px;
         padding-top: 4px;
         pointer-events: none;
     }
@@ -92,13 +92,13 @@ def renderizar_aba_terminal(df_alunos_tab, data_aula, presencas_turma_geral, blo
     .avatar-visual {
         position: relative;
         margin-top: 4px;
-        width: 44px;
-        height: 44px;
+        width: 150px;
+        height: 150px;
         border-radius: 50%;
-        border: 2.5px solid #E2E8F0;
+        border: 3px solid #E2E8F0;
         background-color: #F8FAFC;
         display: flex; align-items: center; justify-content: center;
-        transition: transform 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275), border-color 0.3s, box-shadow 0.3s;
+        transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275), border-color 0.3s, box-shadow 0.3s;
     }
 
     .img-container {
@@ -108,87 +108,87 @@ def renderizar_aba_terminal(df_alunos_tab, data_aula, presencas_turma_geral, blo
         overflow: hidden;
     }
     .img-container img { width: 100%; height: 100%; object-fit: cover; object-position: center center; }
-    .avatar-visual-text { font-size: 8px; font-weight: 900; color: #94A3B8; text-transform: uppercase; text-align: center; padding: 3px; line-height: 1.1; }
+    .avatar-visual-text { font-size: 22px; font-weight: 900; color: #94A3B8; text-transform: uppercase; text-align: center; padding: 3px; line-height: 1.1; }
 
     /* 🔒 CADEADO VISUAL */
     .lock-badge {
         position: absolute;
-        top: -4px; right: -4px;
+        top: -8px; right: -8px;
         background: #FEE2E2;
-        border: 1.5px solid #EF4444;
+        border: 2px solid #EF4444;
         border-radius: 50%;
-        width: 16px; height: 16px;
+        width: 26px; height: 26px;
         display: flex; align-items: center; justify-content: center;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.15);
-        font-size: 8px;
+        box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+        font-size: 13px;
         z-index: 100;
     }
 
     /* 🚫 LGPD */
     .lgpd-proibido {
         position: absolute;
-        top: -4px; left: -4px;
+        top: -8px; left: -8px;
         background: #1E293B;
-        border: 1.5px solid #F59E0B;
+        border: 2px solid #F59E0B;
         border-radius: 50%;
-        width: 15px; height: 15px;
+        width: 26px; height: 26px;
         display: flex; align-items: center; justify-content: center;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.3);
-        font-size: 8px;
+        box-shadow: 0 2px 6px rgba(0,0,0,0.35);
+        font-size: 13px;
         z-index: 100;
     }
 
     /* 🏥 ATESTADO */
     .atestado-alerta {
         position: absolute;
-        bottom: -4px; left: -4px;
+        bottom: -8px; left: -8px;
         background: #FFF7ED;
-        border: 1.5px solid #F97316;
+        border: 2px solid #F97316;
         border-radius: 50%;
-        width: 15px; height: 15px;
+        width: 26px; height: 26px;
         display: flex; align-items: center; justify-content: center;
-        box-shadow: 0 2px 4px rgba(249,115,22,0.4);
-        font-size: 8px;
+        box-shadow: 0 2px 6px rgba(249,115,22,0.45);
+        font-size: 13px;
         z-index: 100;
     }
 
     /* DISTINTIVO DE STATUS */
     .badge-status {
         position: absolute;
-        top: 36px;
+        top: 142px;
         left: 50%;
         transform: translateX(-50%);
-        width: 18px; height: 18px;
+        width: 28px; height: 28px;
         border-radius: 50%;
         display: flex; align-items: center; justify-content: center;
-        font-weight: 900; font-size: 10px;
-        border: 1.5px solid white;
-        transition: transform 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275), background 0.3s;
-        box-shadow: 0 1px 3px rgba(0,0,0,0.15);
+        font-weight: 900; font-size: 14px;
+        border: 2px solid white;
+        transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275), background 0.3s;
+        box-shadow: 0 2px 6px rgba(0,0,0,0.2);
         z-index: 60;
     }
 
     /* NOME DO ALUNO */
     .nome-aluno {
         position: absolute;
-        top: 58px;
+        top: 176px;
         left: 0;
         width: 100%;
         text-align: center;
-        font-size: 9px; font-weight: 900; color: #1E293B;
+        font-size: 11px; font-weight: 900; color: #1E293B;
         text-transform: uppercase; line-height: 1.2;
         transition: all 0.4s ease-out;
         overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
     }
 
-    /* 🚀 ZOOM NO HOVER */
+    /* 🚀 ZOOM NO HOVER — apenas 40% maior para destacar o hover */
     [data-testid="stColumn"]:has(.celula-tablet):hover .avatar-visual {
-        transform: scale(3.5) !important;
-        box-shadow: 0 0 0 2.5px #3B82F6, 0 12px 36px rgba(0,0,0,0.5);
+        transform: scale(1.4) !important;
+        box-shadow: 0 0 0 3px #3B82F6, 0 16px 48px rgba(0,0,0,0.55);
         z-index: 99999;
     }
     [data-testid="stColumn"]:has(.celula-tablet):hover .badge-status {
-        transform: translateX(-50%) translateY(22px) scale(1.4) !important;
+        transform: translateX(-50%) translateY(40px) scale(1.2) !important;
     }
     [data-testid="stColumn"]:has(.celula-tablet):hover .nome-aluno {
         transform: translateY(12px);
@@ -203,20 +203,20 @@ def renderizar_aba_terminal(df_alunos_tab, data_aula, presencas_turma_geral, blo
         transition: filter 0.4s ease;
     }
 
-    .status-presente .avatar-visual { border-color: #22C55E !important; box-shadow: 0 0 8px rgba(34,197,94,0.35); }
+    .status-presente .avatar-visual { border-color: #22C55E !important; box-shadow: 0 0 12px rgba(34,197,94,0.4); }
     .status-presente .badge-status { background: #22C55E !important; color: white !important; }
     .status-presente .img-container, .status-presente .avatar-visual-text {
         filter: brightness(1) grayscale(0%);
         transition: filter 0.4s ease;
     }
     [data-testid="stColumn"]:has(.celula-tablet):hover .status-presente .avatar-visual {
-        box-shadow: 0 0 0 2.5px #22C55E, 0 12px 36px rgba(34,197,94,0.55) !important;
+        box-shadow: 0 0 0 3px #22C55E, 0 16px 48px rgba(34,197,94,0.6) !important;
     }
 
-    .status-justificada .avatar-visual { border-color: #F59E0B !important; box-shadow: 0 0 8px rgba(245,158,11,0.3); }
+    .status-justificada .avatar-visual { border-color: #F59E0B !important; box-shadow: 0 0 12px rgba(245,158,11,0.35); }
     .status-justificada .badge-status { background: #F59E0B !important; color: white !important; }
     .status-justificada .img-container, .status-justificada .avatar-visual-text { filter: brightness(0.95) sepia(0.3) hue-rotate(-15deg); transition: filter 0.4s ease; }
-    [data-testid="stColumn"]:has(.celula-tablet):hover .status-justificada .avatar-visual { box-shadow: 0 0 0 2.5px #F59E0B, 0 12px 36px rgba(245,158,11,0.55) !important; }
+    [data-testid="stColumn"]:has(.celula-tablet):hover .status-justificada .avatar-visual { box-shadow: 0 0 0 3px #F59E0B, 0 16px 48px rgba(245,158,11,0.6) !important; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -253,9 +253,9 @@ def renderizar_aba_terminal(df_alunos_tab, data_aula, presencas_turma_geral, blo
     st.markdown("<br><br>", unsafe_allow_html=True)
 
     # ==============================================================================
-    # 🖼️ RENDERIZAÇÃO DOS ALUNOS (10 COLUNAS)
+    # 🖼️ RENDERIZAÇÃO DOS ALUNOS (6 COLUNAS — fotos 150px)
     # ==============================================================================
-    COLS = 10
+    COLS = 6
 
     for i in range(0, total_alunos, COLS):
         cols = st.columns(COLS, gap="small")
@@ -296,11 +296,11 @@ def renderizar_aba_terminal(df_alunos_tab, data_aula, presencas_turma_geral, blo
                 # 🧪 AVALIAÇÃO PENDENTE — badge inferior direito + bloqueia chamada
                 _aval_pend = bool(row.get("avaliacao_pendente"))
                 aval_pend_html = (
-                    "<div style='position:absolute;bottom:-4px;right:-4px;"
-                    "background:#FEF3C7;border:1.5px solid #F59E0B;border-radius:50%;"
-                    "width:15px;height:15px;display:flex;align-items:center;"
-                    "justify-content:center;box-shadow:0 2px 4px rgba(245,158,11,0.4);"
-                    "font-size:8px;z-index:100;' title='Reavaliação pendente — Participação bloqueada'>⚡</div>"
+                    "<div style='position:absolute;bottom:-8px;right:-8px;"
+                    "background:#FEF3C7;border:2px solid #F59E0B;border-radius:50%;"
+                    "width:24px;height:24px;display:flex;align-items:center;"
+                    "justify-content:center;box-shadow:0 2px 6px rgba(245,158,11,0.45);"
+                    "font-size:13px;z-index:100;' title='Reavaliação pendente — Participação bloqueada'>⚡</div>"
                     if _aval_pend else ""
                 )
 
@@ -320,18 +320,18 @@ def renderizar_aba_terminal(df_alunos_tab, data_aula, presencas_turma_geral, blo
                             {"nome": "Artrose/Artrite", "icone": "🦴", "cor": "#D97706"},
                         ]
                     _tags_map_tab = {t["nome"]: t for t in _tags_db_tab}
-                    _tops = [2 + i * 15 for i in range(len(_tags_tab))]
+                    _tops = [6 + i * 48 for i in range(len(_tags_tab))]
                     for _i, _tn in enumerate(_tags_tab[:3]):
                         _td = _tags_map_tab.get(_tn, {})
                         _cor_t = _td.get("cor", "#6B7280")
                         _ico_t = _td.get("icone", "🏷️")
                         _top_t = _tops[_i]
                         saude_html += (
-                            f"<div style='position:absolute;top:{_top_t}px;right:-5px;"
+                            f"<div style='position:absolute;top:{_top_t}px;right:-8px;"
                             f"background:#FFF;border:1.5px solid {_cor_t};border-radius:50%;"
-                            f"width:14px;height:14px;display:flex;align-items:center;"
-                            f"justify-content:center;font-size:8px;z-index:101;"
-                            f"box-shadow:0 1px 3px rgba(0,0,0,0.2);' title='{_tn}'>"
+                            f"width:22px;height:22px;display:flex;align-items:center;"
+                            f"justify-content:center;font-size:13px;z-index:101;"
+                            f"box-shadow:0 1px 4px rgba(0,0,0,0.2);' title='{_tn}'>"
                             f"{_ico_t}</div>"
                         )
 
@@ -347,14 +347,14 @@ def renderizar_aba_terminal(df_alunos_tab, data_aula, presencas_turma_geral, blo
                     avatar_html = (
                         f'<div class="img-container">'
                         f'<img src="{url_foto}" '
-                        f'onerror="this.parentElement.innerHTML=\'<div style=\\\'display:flex;align-items:center;justify-content:center;width:100%;height:100%;font-weight:900;font-size:14px;color:#fff;background:linear-gradient(135deg,#3B82F6,#06B6D4);\\\'>{inic_tab}</div>\'">'
+                        f'onerror="this.parentElement.innerHTML=\'<div style=\\\'display:flex;align-items:center;justify-content:center;width:100%;height:100%;font-weight:900;font-size:44px;color:#fff;background:linear-gradient(135deg,#3B82F6,#06B6D4);\\\'>{inic_tab}</div>\'">'
                         f'</div>'
                     )
                 else:
                     inic_tab = "".join(p[0].upper() for p in str(row["nome"]).split()[:2] if p)
                     avatar_html = (
                         f'<div style="display:flex;align-items:center;justify-content:center;'
-                        f'width:100%;height:100%;font-weight:900;font-size:14px;color:#fff;'
+                        f'width:100%;height:100%;font-weight:900;font-size:44px;color:#fff;'
                         f'background:linear-gradient(135deg,#3B82F6,#06B6D4);">{inic_tab}</div>'
                     )
 
