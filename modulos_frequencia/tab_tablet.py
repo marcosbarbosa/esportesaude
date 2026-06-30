@@ -1,35 +1,48 @@
 # ==============================================================================
 # 📄 ARQUIVO: modulos_frequencia/tab_tablet.py
-# 🏷️ VERSÃO: 32.1 (PRIME GOLD - Super Zoom & Ciclo de 3 Estados com Atestado)
+# 🏷️ VERSÃO: 32.2 (PRIME GOLD - Super Zoom & Ciclo de 3 Estados com Atestado + Grid 8 Colunas)
 # ⚙️ FUNÇÃO: Grid visual de alunos com suporte a trava de governação de 10 dias.
 # ==============================================================================
+
 import streamlit as st
 import pandas as pd
 from database import alternar_presenca, supabase
+
 
 def atualizar_status_presenca_3_estados(aluno_id, data_aula, novo_status):
     """Motor injetado diretamente para lidar com os 3 estados no Supabase."""
     try:
         if novo_status == "AUSENTE":
             # Apaga o registo se a pessoa faltou sem justificativa
-            supabase.table("frequencia").delete().eq("aluno_id", str(aluno_id)).eq("data_aula", str(data_aula)).execute()
+            supabase.table("frequencia").delete().eq("aluno_id", str(aluno_id)).eq(
+                "data_aula", str(data_aula)
+            ).execute()
             return True
         else:
             # Insere ou atualiza (Upsert) para PRESENTE ou JUSTIFICADA
             payload = {
                 "aluno_id": str(aluno_id),
                 "data_aula": str(data_aula),
-                "status": novo_status
+                "status": novo_status,
             }
-            existe = supabase.table("frequencia").select("id").eq("aluno_id", str(aluno_id)).eq("data_aula", str(data_aula)).execute()
-            if hasattr(existe, 'data') and len(existe.data) > 0:
-                supabase.table("frequencia").update({"status": novo_status}).eq("id", existe.data[0]["id"]).execute()
+            existe = (
+                supabase.table("frequencia")
+                .select("id")
+                .eq("aluno_id", str(aluno_id))
+                .eq("data_aula", str(data_aula))
+                .execute()
+            )
+            if hasattr(existe, "data") and len(existe.data) > 0:
+                supabase.table("frequencia").update({"status": novo_status}).eq(
+                    "id", existe.data[0]["id"]
+                ).execute()
             else:
                 supabase.table("frequencia").insert(payload).execute()
             return True
     except Exception as e:
         print(f"Erro frequencia 3 estados: {e}")
         return False
+
 
 def cycle_presence_btn(aluno_id, data_aula, status_atual, nome_aluno):
     """Gira entre: AUSENTE -> PRESENTE -> JUSTIFICADA -> AUSENTE..."""
@@ -48,18 +61,31 @@ def cycle_presence_btn(aluno_id, data_aula, status_atual, nome_aluno):
     else:
         st.toast("🚨 Erro crítico de rede.", icon="🚨")
 
+
 # 🚀 NOVA ASSINATURA: Agora recebe a variável bloqueio_ativo
-def renderizar_aba_terminal(df_alunos_tab, data_aula, presencas_turma_geral, bloqueio_ativo=False):
+def renderizar_aba_terminal(
+    df_alunos_tab, data_aula, presencas_turma_geral, bloqueio_ativo=False
+):
     if df_alunos_tab.empty:
         st.warning("Selecione uma turma para carregar os alunos.")
         return
 
     # O CSS encostado na margem esquerda para evitar formatação de código do Markdown
-    st.markdown("""
+    st.markdown(
+        """
 <style>
     /* 🛡️ QUARENTENA CSS: Isolado apenas para a aba Tablet */
     [data-testid="stColumn"]:has(.celula-tablet) {
         position: relative !important;
+    }
+
+    /* 🔧 Ajuste fino de espaçamento para comportar até 8 colunas sem mexer na foto (150px) */
+    [data-testid="stHorizontalBlock"]:has(.celula-tablet) {
+        gap: 0.15rem !important;
+    }
+    [data-testid="stColumn"]:has(.celula-tablet) {
+        padding-left: 0.10rem !important;
+        padding-right: 0.10rem !important;
     }
 
     [data-testid="stColumn"]:has(.celula-tablet) div[data-testid="stButton"] button {
@@ -215,10 +241,17 @@ def renderizar_aba_terminal(df_alunos_tab, data_aula, presencas_turma_geral, blo
 
     .status-justificada .avatar-visual { border-color: #F59E0B !important; box-shadow: 0 0 12px rgba(245,158,11,0.35); }
     .status-justificada .badge-status { background: #F59E0B !important; color: white !important; }
-    .status-justificada .img-container, .status-justificada .avatar-visual-text { filter: brightness(0.95) sepia(0.3) hue-rotate(-15deg); transition: filter 0.4s ease; }
-    [data-testid="stColumn"]:has(.celula-tablet):hover .status-justificada .avatar-visual { box-shadow: 0 0 0 3px #F59E0B, 0 16px 48px rgba(245,158,11,0.6) !important; }
+    .status-justificada .img-container, .status-justificada .avatar-visual-text {
+        filter: brightness(0.95) sepia(0.3) hue-rotate(-15deg);
+        transition: filter 0.4s ease;
+    }
+    [data-testid="stColumn"]:has(.celula-tablet):hover .status-justificada .avatar-visual {
+        box-shadow: 0 0 0 3px #F59E0B, 0 16px 48px rgba(245,158,11,0.6) !important;
+    }
 </style>
-""", unsafe_allow_html=True)
+""",
+        unsafe_allow_html=True,
+    )
 
     # 📊 LÓGICA DA BARRA DE PROGRESSO (ATUALIZADA PARA 3 ESTADOS)
     total_alunos = len(df_alunos_tab)
@@ -227,8 +260,10 @@ def renderizar_aba_terminal(df_alunos_tab, data_aula, presencas_turma_geral, blo
     q_justificadas = 0
 
     for status_bd in presencas_turma_geral.values():
-        if status_bd == "JUSTIFICADA": q_justificadas += 1
-        elif status_bd == "PRESENTE" or status_bd is True: q_presentes += 1
+        if status_bd == "JUSTIFICADA":
+            q_justificadas += 1
+        elif status_bd == "PRESENTE" or status_bd is True:
+            q_presentes += 1
 
     # O "Total Apto" remove os atestados da conta! É a proteção do aluno!
     total_aptos = total_alunos - q_justificadas
@@ -240,22 +275,29 @@ def renderizar_aba_terminal(df_alunos_tab, data_aula, presencas_turma_geral, blo
         razao_progresso = 0.0
         percentagem = 0
 
-    bloco_justificativas = f" <span style='font-size:16px; color:#F59E0B;'>| {q_justificadas} ATESTADOS</span>" if q_justificadas > 0 else ""
+    bloco_justificativas = (
+        f" <span style='font-size:16px; color:#F59E0B;'>| {q_justificadas} ATESTADOS</span>"
+        if q_justificadas > 0
+        else ""
+    )
 
-    st.markdown(f"""
+    st.markdown(
+        f"""
 <div style='text-align: center; margin-bottom: 10px;'>
     <h2 style='color: #1E88E5; font-weight: 900; margin-bottom:0;'>{q_presentes} / {total_aptos} PRESENTES {bloco_justificativas}</h2>
     <span style='font-size:13px; color:#64748B;'>*Os atestados médicos não penalizam a barra de presença.</span>
 </div>
-""", unsafe_allow_html=True)
+""",
+        unsafe_allow_html=True,
+    )
 
     st.progress(razao_progresso, text=f"Taxa de Presença Útil: {percentagem}%")
     st.markdown("<br><br>", unsafe_allow_html=True)
 
     # ==============================================================================
-    # 🖼️ RENDERIZAÇÃO DOS ALUNOS (6 COLUNAS — fotos 150px)
+    # 🖼️ RENDERIZAÇÃO DOS ALUNOS (8 COLUNAS — fotos 150px)
     # ==============================================================================
-    COLS = 6
+    COLS = 8
 
     for i in range(0, total_alunos, COLS):
         cols = st.columns(COLS, gap="small")
@@ -281,17 +323,30 @@ def renderizar_aba_terminal(df_alunos_tab, data_aula, presencas_turma_geral, blo
                 url_foto = str(row.get("foto_url") or "").strip()
                 nome_formatado = str(row["nome"])[:16].strip()
 
-                cadeado_html = "<div class='lock-badge'>🔒</div>" if bloqueio_ativo else ""
+                cadeado_html = (
+                    "<div class='lock-badge'>🔒</div>" if bloqueio_ativo else ""
+                )
 
                 # 🚫 LGPD — badge superior esquerdo se não autorizou imagem
                 _termo_img = row.get("termo_imagem")
-                _nao_autoriza = (_termo_img is False) or (_termo_img == 0) or (str(_termo_img).lower() in ["false", "0", ""])
-                lgpd_html = "<div class='lgpd-proibido' title='LGPD: Não autoriza uso de imagem'>🚫</div>" if _nao_autoriza else ""
+                _nao_autoriza = (
+                    (_termo_img is False)
+                    or (_termo_img == 0)
+                    or (str(_termo_img).lower() in ["false", "0", ""])
+                )
+                lgpd_html = (
+                    "<div class='lgpd-proibido' title='LGPD: Não autoriza uso de imagem'>🚫</div>"
+                    if _nao_autoriza
+                    else ""
+                )
 
                 # 🏥 ATESTADO — badge inferior esquerdo + bloqueia chamada
                 _atestado_bloq = bool(row.get("atestado_bloqueado"))
-                atestado_html = ("<div class='atestado-alerta' title='Atestado médico pendente — Participação bloqueada'>🏥</div>"
-                                 if _atestado_bloq else "")
+                atestado_html = (
+                    "<div class='atestado-alerta' title='Atestado médico pendente — Participação bloqueada'>🏥</div>"
+                    if _atestado_bloq
+                    else ""
+                )
 
                 # 🧪 AVALIAÇÃO PENDENTE — badge inferior direito + bloqueia chamada
                 _aval_pend = bool(row.get("avaliacao_pendente"))
@@ -301,7 +356,8 @@ def renderizar_aba_terminal(df_alunos_tab, data_aula, presencas_turma_geral, blo
                     "width:24px;height:24px;display:flex;align-items:center;"
                     "justify-content:center;box-shadow:0 2px 6px rgba(245,158,11,0.45);"
                     "font-size:13px;z-index:100;' title='Reavaliação pendente — Participação bloqueada'>⚡</div>"
-                    if _aval_pend else ""
+                    if _aval_pend
+                    else ""
                 )
 
                 # 🏷️ TAGS DE SAÚDE — badges clínicos dinâmicos (carregados do banco)
@@ -311,13 +367,22 @@ def renderizar_aba_terminal(df_alunos_tab, data_aula, presencas_turma_geral, blo
                 if _tags_tab:
                     try:
                         from database import get_tags_clinicas as _gtc_tab
+
                         _tags_db_tab = _gtc_tab()
                     except Exception:
                         _tags_db_tab = []
                     if not _tags_db_tab:
                         _tags_db_tab = [
-                            {"nome": "Hipertensão/Cardiopatia", "icone": "🫀", "cor": "#DC2626"},
-                            {"nome": "Artrose/Artrite", "icone": "🦴", "cor": "#D97706"},
+                            {
+                                "nome": "Hipertensão/Cardiopatia",
+                                "icone": "🫀",
+                                "cor": "#DC2626",
+                            },
+                            {
+                                "nome": "Artrose/Artrite",
+                                "icone": "🦴",
+                                "cor": "#D97706",
+                            },
                         ]
                     _tags_map_tab = {t["nome"]: t for t in _tags_db_tab}
                     _tops = [6 + i * 48 for i in range(len(_tags_tab))]
@@ -338,34 +403,42 @@ def renderizar_aba_terminal(df_alunos_tab, data_aula, presencas_turma_geral, blo
                 # Botão de chamada: bloqueado por admin-lock, atestado médico OU avaliação pendente
                 _botao_bloqueado = bloqueio_ativo or _atestado_bloq or _aval_pend
                 if not _botao_bloqueado:
-                    if st.button(" ", key=f"tbt_prod_{row['id']}", use_container_width=True):
-                        cycle_presence_btn(row["id"], data_aula, status_atual, row["nome"])
+                    if st.button(
+                        " ", key=f"tbt_prod_{row['id']}", use_container_width=True
+                    ):
+                        cycle_presence_btn(
+                            row["id"], data_aula, status_atual, row["nome"]
+                        )
                         st.rerun()
 
                 if url_foto.startswith("http"):
-                    inic_tab = "".join(p[0].upper() for p in str(row["nome"]).split()[:2] if p)
+                    inic_tab = "".join(
+                        p[0].upper() for p in str(row["nome"]).split()[:2] if p
+                    )
                     avatar_html = (
                         f'<div class="img-container">'
                         f'<img src="{url_foto}" '
-                        f'onerror="this.parentElement.innerHTML=\'<div style=\\\'display:flex;align-items:center;justify-content:center;width:100%;height:100%;font-weight:900;font-size:44px;color:#fff;background:linear-gradient(135deg,#3B82F6,#06B6D4);\\\'>{inic_tab}</div>\'">'
-                        f'</div>'
+                        f"onerror=\"this.parentElement.innerHTML='<div style=\\'display:flex;align-items:center;justify-content:center;width:100%;height:100%;font-weight:900;font-size:44px;color:#fff;background:linear-gradient(135deg,#3B82F6,#06B6D4);\\'>{inic_tab}</div>'\">"
+                        f"</div>"
                     )
                 else:
-                    inic_tab = "".join(p[0].upper() for p in str(row["nome"]).split()[:2] if p)
+                    inic_tab = "".join(
+                        p[0].upper() for p in str(row["nome"]).split()[:2] if p
+                    )
                     avatar_html = (
                         f'<div style="display:flex;align-items:center;justify-content:center;'
-                        f'width:100%;height:100%;font-weight:900;font-size:44px;color:#fff;'
+                        f"width:100%;height:100%;font-weight:900;font-size:44px;color:#fff;"
                         f'background:linear-gradient(135deg,#3B82F6,#06B6D4);">{inic_tab}</div>'
                     )
 
                 cartao_html_seguro = (
                     f'<div class="celula-tablet {status_class}">'
                     f'<div class="avatar-visual">'
-                    f'{avatar_html}{cadeado_html}{lgpd_html}{atestado_html}{aval_pend_html}{saude_html}'
-                    f'</div>'
+                    f"{avatar_html}{cadeado_html}{lgpd_html}{atestado_html}{aval_pend_html}{saude_html}"
+                    f"</div>"
                     f'<div class="badge-status">{indicador}</div>'
                     f'<div class="nome-aluno">{nome_formatado}</div>'
-                    f'</div>'
+                    f"</div>"
                 )
 
                 st.markdown(cartao_html_seguro, unsafe_allow_html=True)
