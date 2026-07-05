@@ -1,9 +1,18 @@
 # ==============================================================================
 # 📄 ARQUIVO: modulos_frequencia/tab_tablet.py
-# 🏷️ VERSÃO: 32.2 (PRIME GOLD - Super Zoom & Ciclo de 3 Estados com Atestado + Grid 8 Colunas)
-# ⚙️ FUNÇÃO: Grid visual de alunos com suporte a trava de governação de 10 dias.
+# 🏷️ VERSÃO: 32.2.1 (PRIME GOLD - Tablet Grid 8 Colunas)
+# 🔢 LINHAS (aprox.): atualizar manualmente após grandes mudanças
+# 🧩 FUNÇÕES PRINCIPAIS:
+#   - atualizar_status_presenca_3_estados(aluno_id, data_aula, novo_status)
+#       Sincroniza no Supabase os três estados de frequência (AUSENTE / PRESENTE / JUSTIFICADA).
+#   - cycle_presence_btn(aluno_id, data_aula, status_atual, nome_aluno)
+#       Gira o ciclo de presença na UI e dispara o motor de atualização, com feedback via toast.
+#   - renderizar_aba_terminal(df_alunos_tab, data_aula, presencas_turma_geral, bloqueio_ativo=False)
+#       Monta a aba Tablet: aplica CSS de grid, calcula barra de presença, renderiza fotos, badges
+#       (LGPD, atestado, avaliação, tags de saúde) e botão invisível de chamada em até 8 colunas.
+# ⚙️ FUNÇÃO GLOBAL DO MÓDULO:
+#   Grid visual de alunos com trava de governação de 10 dias, otimizado para operação rápida em tablet.
 # ==============================================================================
-
 import streamlit as st
 import pandas as pd
 from database import alternar_presenca, supabase
