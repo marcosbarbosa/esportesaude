@@ -138,39 +138,6 @@ def obter_alunos_por_selecao(selecao, mostrar_todos=False):
     return get_alunos_por_turma(selecao)
 
 
-def obter_turmas_mesmo_horario(turma_selecionada, df_turmas_ativas):
-    """Retorna a lista de nomes de turma que compartilham o mesmo horário da
-    turma selecionada (usando a coluna `horario` da tabela `turmas` quando
-    disponível; cai para regex sobre o nome como compatibilidade)."""
-    if df_turmas_ativas is None or df_turmas_ativas.empty:
-        return [turma_selecionada]
-
-    if "horario" in df_turmas_ativas.columns:
-        _linha_sel = df_turmas_ativas[df_turmas_ativas["nome"] == turma_selecionada]
-        if not _linha_sel.empty:
-            _horario_sel = _linha_sel.iloc[0].get("horario")
-            if _horario_sel:
-                _turmas = df_turmas_ativas[
-                    df_turmas_ativas["horario"] == _horario_sel
-                ]["nome"].tolist()
-                if turma_selecionada not in _turmas:
-                    _turmas.append(turma_selecionada)
-                return sorted(_turmas)
-
-    hora_match = re.search(r"(0[789]H|1[012]H)", turma_selecionada)
-    if hora_match:
-        hora_busca = hora_match.group(1)
-        _turmas = [
-            t for t in df_turmas_ativas["nome"].tolist() if hora_busca in t
-        ]
-        if _turmas:
-            if turma_selecionada not in _turmas:
-                _turmas.append(turma_selecionada)
-            return sorted(_turmas)
-
-    return [turma_selecionada]
-
-
 def obter_alunos_por_turmas(lista_turmas):
     """Busca e une (sem duplicar) os alunos de uma ou mais turmas selecionadas."""
     dfs = []
@@ -253,9 +220,7 @@ def tela_frequencia():
     st.markdown("<div style='height: 10px;'></div>", unsafe_allow_html=True)
 
     with st.container(border=True):
-        col_turma, col_data, col_busca = st.columns(
-            [4, 2, 4], vertical_alignment="bottom"
-        )
+        col_data, col_busca = st.columns([3, 5], vertical_alignment="bottom")
 
         with col_data:
             if "_freq_data_alvo" in st.session_state:
@@ -275,10 +240,30 @@ def tela_frequencia():
             else:
                 turmas_combo = ["Nenhuma turma ativa cadastrada"]
 
-        with col_turma:
-            turma_selecionada = st.selectbox("👥 Selecione a Turma:", turmas_combo)
+        st.markdown(
+            "<span style='font-size:13px;color:#64748B;font-weight:700;'>"
+            "👥 Selecione a(s) Turma(s):</span>",
+            unsafe_allow_html=True,
+        )
+        turmas_selecionadas = []
+        _n_por_linha = 4
+        for _i in range(0, len(turmas_combo), _n_por_linha):
+            _linha_turmas = turmas_combo[_i : _i + _n_por_linha]
+            _cols_turmas_chk = st.columns(_n_por_linha)
+            for _idx_t, _nome_t in enumerate(_linha_turmas):
+                _marcado_t = _cols_turmas_chk[_idx_t].checkbox(
+                    _nome_t,
+                    value=(_nome_t == turmas_combo[0]),
+                    key=f"chk_turma_all_{data_aula}_{_nome_t}",
+                )
+                if _marcado_t:
+                    turmas_selecionadas.append(_nome_t)
+        if not turmas_selecionadas:
+            turmas_selecionadas = [turmas_combo[0]]
 
-        chave_unica = f"{data_aula}_{turma_selecionada}"
+        turma_selecionada = turmas_selecionadas[0]
+
+        chave_unica = f"{data_aula}_{'_'.join(turmas_selecionadas)}"
 
         busca_grid = _baw_freq(
             f"bg_{chave_unica}",
@@ -499,29 +484,6 @@ def tela_frequencia():
     else:
         if len(busca_limpa) > 0:
             st.caption("⏳ Digite pelo menos 3 letras para ativar a Busca Global...")
-
-        turmas_mesmo_horario = obter_turmas_mesmo_horario(turma_selecionada, df_turmas_ativas)
-
-        if len(turmas_mesmo_horario) > 1:
-            st.markdown(
-                "<span style='font-size:13px;color:#64748B;font-weight:700;'>"
-                "🌍 Mesclar turmas do mesmo horário nesta chamada:</span>",
-                unsafe_allow_html=True,
-            )
-            _cols_turmas_chk = st.columns(len(turmas_mesmo_horario))
-            turmas_selecionadas = []
-            for _idx_t, _nome_t in enumerate(turmas_mesmo_horario):
-                _marcado_t = _cols_turmas_chk[_idx_t].checkbox(
-                    _nome_t,
-                    value=(_nome_t == turma_selecionada),
-                    key=f"chk_turma_{data_aula}_{_nome_t}",
-                )
-                if _marcado_t:
-                    turmas_selecionadas.append(_nome_t)
-            if not turmas_selecionadas:
-                turmas_selecionadas = [turma_selecionada]
-        else:
-            turmas_selecionadas = [turma_selecionada]
 
         df_alunos = obter_alunos_por_turmas(turmas_selecionadas)
 
