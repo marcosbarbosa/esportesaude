@@ -138,6 +138,51 @@ def obter_alunos_por_selecao(selecao, mostrar_todos=False):
     return get_alunos_por_turma(selecao)
 
 
+def obter_turmas_mesmo_horario(turma_selecionada, df_turmas_ativas):
+    """Retorna a lista de nomes de turma que compartilham o mesmo horário da
+    turma selecionada (usando a coluna `horario` da tabela `turmas` quando
+    disponível; cai para regex sobre o nome como compatibilidade)."""
+    if df_turmas_ativas is None or df_turmas_ativas.empty:
+        return [turma_selecionada]
+
+    if "horario" in df_turmas_ativas.columns:
+        _linha_sel = df_turmas_ativas[df_turmas_ativas["nome"] == turma_selecionada]
+        if not _linha_sel.empty:
+            _horario_sel = _linha_sel.iloc[0].get("horario")
+            if _horario_sel:
+                _turmas = df_turmas_ativas[
+                    df_turmas_ativas["horario"] == _horario_sel
+                ]["nome"].tolist()
+                if turma_selecionada not in _turmas:
+                    _turmas.append(turma_selecionada)
+                return sorted(_turmas)
+
+    hora_match = re.search(r"(0[789]H|1[012]H)", turma_selecionada)
+    if hora_match:
+        hora_busca = hora_match.group(1)
+        _turmas = [
+            t for t in df_turmas_ativas["nome"].tolist() if hora_busca in t
+        ]
+        if _turmas:
+            if turma_selecionada not in _turmas:
+                _turmas.append(turma_selecionada)
+            return sorted(_turmas)
+
+    return [turma_selecionada]
+
+
+def obter_alunos_por_turmas(lista_turmas):
+    """Busca e une (sem duplicar) os alunos de uma ou mais turmas selecionadas."""
+    dfs = []
+    for t in lista_turmas:
+        df_t = get_alunos_por_turma(t)
+        if not df_t.empty:
+            dfs.append(df_t)
+    if not dfs:
+        return pd.DataFrame()
+    return pd.concat(dfs).drop_duplicates(subset=["id"]).reset_index(drop=True)
+
+
 def carregar_css_global():
     st.markdown(
         """
@@ -222,6 +267,7 @@ def tela_frequencia():
         dia_semana = data_aula.weekday()
         if dia_semana in [5, 6]:
             turmas_combo = ["Dia não letivo (Fim de Semana)"]
+            df_turmas_ativas = pd.DataFrame()
         else:
             df_turmas_ativas = get_todas_turmas(ativas_apenas=True)
             if not df_turmas_ativas.empty:
@@ -258,7 +304,6 @@ def tela_frequencia():
     bloqueio_ativo = False
 
     busca_limpa = normalizar_fonetica(busca_grid).strip() if busca_grid else ""
-    mostrar_todos_horario = False
 
     if len(busca_limpa) >= 3:
         df_todos_com_inativos = obter_todos_alunos_com_inativos_cache()
@@ -455,15 +500,30 @@ def tela_frequencia():
         if len(busca_limpa) > 0:
             st.caption("⏳ Digite pelo menos 3 letras para ativar a Busca Global...")
 
-        hora_match = re.search(r"(0[789]H|1[012]H)", turma_selecionada)
-        if hora_match:
-            hora_turma = hora_match.group(1)
-            mostrar_todos_horario = st.checkbox(
-                f"🌍 Exibir TODOS os alunos do horário das {hora_turma} (Misturar turmas de outros dias)",
-                value=False,
-            )
+        turmas_mesmo_horario = obter_turmas_mesmo_horario(turma_selecionada, df_turmas_ativas)
 
-        df_alunos = obter_alunos_por_selecao(turma_selecionada, mostrar_todos_horario)
+        if len(turmas_mesmo_horario) > 1:
+            st.markdown(
+                "<span style='font-size:13px;color:#64748B;font-weight:700;'>"
+                "🌍 Mesclar turmas do mesmo horário nesta chamada:</span>",
+                unsafe_allow_html=True,
+            )
+            _cols_turmas_chk = st.columns(len(turmas_mesmo_horario))
+            turmas_selecionadas = []
+            for _idx_t, _nome_t in enumerate(turmas_mesmo_horario):
+                _marcado_t = _cols_turmas_chk[_idx_t].checkbox(
+                    _nome_t,
+                    value=(_nome_t == turma_selecionada),
+                    key=f"chk_turma_{data_aula}_{_nome_t}",
+                )
+                if _marcado_t:
+                    turmas_selecionadas.append(_nome_t)
+            if not turmas_selecionadas:
+                turmas_selecionadas = [turma_selecionada]
+        else:
+            turmas_selecionadas = [turma_selecionada]
+
+        df_alunos = obter_alunos_por_turmas(turmas_selecionadas)
 
     if not df_alunos.empty and "nome" in df_alunos.columns:
         df_alunos = df_alunos.sort_values(by="nome").reset_index(drop=True)

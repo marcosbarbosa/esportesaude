@@ -3,3 +3,4 @@
 - [Config singleton pattern](config-singleton-pattern.md) — use get_config_valor/set_config_valor (database.py) for admin-configurable single values in configuracoes_sistema; don't confuse with the log-entry pattern.
 - [foto_url rename coverage](foto-url-rename.md) — coluna renomeada url_foto→foto_url; 14 arquivos corrigidos; bi_individual_view.py mantém fallback duplo (seguro).
 - [Email BI multi-schedule](email-bi-multischedule.md) — sistema completo já implementado; só falta criar tabela email_bi_schedules no Supabase (SQL exibido automaticamente na tela Email BI).
+- [Agrupamento de turmas por horário](turmas-mesmo-horario.md) — prefira a coluna `horario` da tabela turmas a regex sobre o nome para mesclar turmas simultâneas.
