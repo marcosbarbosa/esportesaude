@@ -185,9 +185,12 @@ def montar_link_whatsapp(numero: str, mensagem: str) -> str | None:
     return f"https://wa.me/{num}?text={texto_enc}"
 
 
-def personalizar_mensagem(template: str, nome: str) -> str:
+def personalizar_mensagem(template: str, nome: str, **extras) -> str:
     primeiro = nome.strip().split()[0].title() if nome.strip() else nome
-    return template.replace("{nome}", primeiro)
+    texto = template.replace("{nome}", primeiro)
+    for tag, valor in extras.items():
+        texto = texto.replace("{" + tag + "}", str(valor))
+    return texto
 
 
 # ──────────────────────────────────────────────────────────────────────────────

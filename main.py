@@ -1849,18 +1849,24 @@ if st.session_state.menu_atual == "Principal":
                 def _pa_html_row(aluno_id):
                     p = _pa_dict.get(str(aluno_id)) or _pa_dict.get(int(aluno_id) if str(aluno_id).isdigit() else aluno_id)
                     if not p:
-                        return None, "—", "<span style='color:#CBD5E1;font-size:11px;'>—</span>"
+                        return None, "—", "<span style='color:#CBD5E1;font-size:11px;'>—</span>", None, ""
                     _sis = p.get("sis")
                     _dia = p.get("dia")
                     _txt = f"{_sis}/{_dia}" if _sis and _dia else (str(_sis) if _sis else "—")
-                    return _sis, _txt, _pa_compact_html(_sis, _dia, p.get("pul"), p.get("cls", "normal"))
-                _df_hg[["_pa_sis", "_pa_txt", "_pa_html"]] = _df_hg["id"].apply(
+                    return (
+                        _sis, _txt,
+                        _pa_compact_html(_sis, _dia, p.get("pul"), p.get("cls", "normal")),
+                        _dia, p.get("cls", ""),
+                    )
+                _df_hg[["_pa_sis", "_pa_txt", "_pa_html", "_pa_dia", "_pa_cls"]] = _df_hg["id"].apply(
                     lambda _aid: pd.Series(_pa_html_row(_aid))
                 )
             except Exception:
                 _df_hg["_pa_sis"]  = None
                 _df_hg["_pa_txt"]  = "—"
                 _df_hg["_pa_html"] = "<span style='color:#CBD5E1;font-size:11px;'>—</span>"
+                _df_hg["_pa_dia"]  = None
+                _df_hg["_pa_cls"]  = ""
 
 
             # Birthday cols
@@ -2267,15 +2273,65 @@ if st.session_state.menu_atual == "Principal":
                             f"{_dv_icon} {_dv_dt.strftime('%d/%m/%y')}</span>"
                             f"<br><span style='font-size:10px;color:#94A3B8;'>{_dv_label}</span>"
                         )
+                        if _wapp_ok and (_dv_dias < 0 or _dv_dias <= 30):
+                            _wap_at = str(_r.get("whatsapp") or "").strip()
+                            if _wap_at:
+                                _at_key = "Atestado_Vencido" if _dv_dias < 0 else "Atestado_A_Vencer"
+                                _at_default = (
+                                    "Olá, {nome}! Seu atestado médico está vencido. Para continuar "
+                                    "participando das atividades com segurança, pedimos que envie um "
+                                    "atestado atualizado o quanto antes."
+                                    if _dv_dias < 0 else
+                                    "Olá, {nome}! Seu atestado médico vence em breve ({data_vencimento}). "
+                                    "Para não haver interrupção nas suas atividades, pedimos que providencie "
+                                    "a renovação."
+                                )
+                                _tpl_at = _tpl_map.get(_at_key, _at_default)
+                                _msg_at = personalizar_mensagem(
+                                    _tpl_at, str(_r.get("nome", "")),
+                                    data_vencimento=_dv_dt.strftime("%d/%m/%Y"),
+                                )
+                                _link_at = montar_link_whatsapp(_wap_at, _msg_at)
+                                if _link_at:
+                                    _dv_html += (
+                                        f"<br><a href='{_link_at}' target='_blank' "
+                                        f"style='font-size:10px;color:#25D366;text-decoration:none;"
+                                        f"font-weight:600;'>📱 Avisar</a>"
+                                    )
                     else:
                         _dv_html = "<span style='font-size:11px;color:#CBD5E1;'>— sem atestado</span>"
                     _cg.markdown(_dv_html, unsafe_allow_html=True)
 
                     # Última PA compacta
-                    _cpa.markdown(
-                        str(_r.get("_pa_html", "<span style='color:#CBD5E1;font-size:11px;'>—</span>")),
-                        unsafe_allow_html=True,
-                    )
+                    _pa_html_v = str(_r.get("_pa_html", "<span style='color:#CBD5E1;font-size:11px;'>—</span>"))
+                    _pa_cls_v  = str(_r.get("_pa_cls") or "")
+                    if _wapp_ok and _pa_cls_v in ("estagio2", "crise", "estagio1"):
+                        _wap_pa = str(_r.get("whatsapp") or "").strip()
+                        if _wap_pa:
+                            _pa_key = "PA_Grave" if _pa_cls_v in ("estagio2", "crise") else "PA_Atencao"
+                            _pa_default = (
+                                "Olá, {nome}! Identificamos que sua última aferição de pressão arterial "
+                                "está em nível elevado ({pa_sistolica}/{pa_diastolica}). Recomendamos que "
+                                "procure orientação médica o quanto antes."
+                                if _pa_key == "PA_Grave" else
+                                "Olá, {nome}! Sua última aferição de pressão arterial ficou um pouco acima "
+                                "do ideal ({pa_sistolica}/{pa_diastolica}). Fique atento e, se possível, "
+                                "converse com seu médico."
+                            )
+                            _tpl_pa = _tpl_map.get(_pa_key, _pa_default)
+                            _msg_pa = personalizar_mensagem(
+                                _tpl_pa, str(_r.get("nome", "")),
+                                pa_sistolica=_r.get("_pa_sis"),
+                                pa_diastolica=int(_r.get("_pa_dia")) if pd.notna(_r.get("_pa_dia")) else "",
+                            )
+                            _link_pa = montar_link_whatsapp(_wap_pa, _msg_pa)
+                            if _link_pa:
+                                _pa_html_v += (
+                                    f"<br><a href='{_link_pa}' target='_blank' "
+                                    f"style='font-size:10px;color:#25D366;text-decoration:none;"
+                                    f"font-weight:600;'>📱 Avisar</a>"
+                                )
+                    _cpa.markdown(_pa_html_v, unsafe_allow_html=True)
 
                     # Botão Ficha
                     with _cf:
