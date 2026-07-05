@@ -1,0 +1,216 @@
+Contexto do arquivo e da tela
+
+Trabalhamos no arquivo views/frequencia_view.py, que é o “Roteador Mestre” da tela de Frequência / Portal do Aluno.
+
+Essa tela exibe a grade de “Alunos Ativos” com colunas:
+Nome, Turma, Freq.60D + Pres., Venc. (Atestado), Últ. PA, Aniversári, Atestado (e queremos também Anamnese).
+
+
+Na parte superior da tela de Gestão de Fluxo/Frequências, existe um checkbox com texto semelhante a:
+“Exibir TODOS os alunos do horário das 09H (turmas da mesma de outros dias)”
+que hoje está subutilizado / inefetivo.
+
+
+Já existe um padrão de micro‑botão de WhatsApp em alguma coluna (por exemplo, “Aniversário” ou “Freq.60D + Pres.”), usando mensagens configuradas em “Gestor > Config > Mensagens (WhatsApp)”, com suporte à tag {nome}.
+
+Objetivo geral
+
+Localizar, em frequencia_view.py, o trecho que:
+Constrói o DataFrame/lista de alunos exibido na grade principal.
+
+Renderiza as colunas Freq.60D + Pres., Venc. Atestado, Últ. PA, Aniversári, Atestado e o checkbox “Exibir TODOS os alunos do horário”.
+
+Implementa o micro‑botão de WhatsApp já existente (modelo que deve ser reaproveitado).
+
+
+A partir desse padrão, implementar:
+Micro‑botão de WhatsApp na coluna “Venc. Atestado”.
+
+Micro‑botão de WhatsApp na coluna “Últ. PA”.
+
+Nova coluna “Anamnese” com status e micro‑botão de WhatsApp.
+
+Comportamento funcional do checkbox “Exibir TODOS os alunos do horário”.
+
+
+Ajustar a ordenação da coluna “Venc. Atestado” para tratar corretamente quem não tem atestado (nulos).
+
+Regras de negócio – coluna “Venc. Atestado”
+
+Para cada aluno da grade:
+Ler a data de vencimento do atestado exibida na coluna “Venc.” (campo que já existe).
+
+Comparar com a data atual (datetime.date.today()):
+Se data_vencimento < hoje → estado Atestado Vencido.
+
+Se hoje <= data_vencimento <= hoje + X dias (por exemplo, 30 dias) → estado Atestado à Vencer.
+
+
+Mapear esses estados para templates de mensagens de WhatsApp:
+Atestado_Vencido
+
+Atestado_A_Vencer
+
+
+Ler os textos desses templates do mesmo repositório de mensagens já utilizado pelo módulo “Gestão de Mensagens (WhatsApp)”, com suporte à tag {nome} (primeiro nome do aluno) e, se desejado, {data_vencimento}.
+
+Implementar um micro‑botão na célula da coluna “Venc.”:
+Visualmente idêntico (ícone, tamanho, tooltip) ao botão usado hoje em “Aniversário/Freq.60D”.
+
+Ao clicar, chamar a função/utilitário central de envio de WhatsApp (já existente no projeto), passando:
+Telefone do aluno.
+
+Texto do template correspondente ao estado (vencido/à vencer), com tags substituídas.
+
+
+
+
+Regras de negócio – coluna “Últ. PA”
+
+Para cada aluno:
+Ler o valor de pressão arterial exibido na coluna “Últ. PA” (ex.: 158/89/001, 132/87/004 etc.).
+
+Implementar uma função auxiliar, por exemplo:
+```python
+def interpretar_pa(pa_str):
+"""
+Recebe string no formato '158/89/001' e retorna:
+sistolica (int)
+
+diastolica (int)
+
+nivel ('GRAVE', 'ATENCAO', 'NORMAL')
+"""
+```
+
+
+Critérios de classificação (ajustar conforme protocolo clínico do instituto):
+GRAVE: sistólica >= 160 ou diastólica >= 100.
+
+ATENCAO: sistólica entre 140–159 ou diastólica entre 90–99.
+
+NORMAL: abaixo dessas faixas.
+
+
+Mapear para templates de mensagem:
+PA_Grave para nível GRAVE.
+
+PA_Atencao para nível ATENCAO (opcional).
+
+
+Ler esses templates do módulo de Gestão de Mensagens (WhatsApp), usando {nome} e, se possível, {pa_sistolica}, {pa_diastolica}.
+
+Implementar o micro‑botão na coluna “Últ. PA”:
+Mesmo estilo visual do micro‑botão já existente.
+
+Posicionado próximo ao valor de PA (na mesma célula).
+
+Ao clicar, usar a mesma função utilitária de envio de WhatsApp, com o template apropriado.
+
+
+
+Nova coluna “Anamnese” (controle e WhatsApp)
+
+Adicionar uma nova coluna na grade principal, chamada “Anamnese”, com as seguintes características:
+Exibir o status da anamnese do aluno, por exemplo:
+“Feita em DD/MM/AAAA” (data da última anamnese válida).
+
+“Pendente” quando nunca realizou anamnese.
+
+“A vencer em DD/MM/AAAA” ou similar, caso exista uma validade definida (por exemplo, 1 ano).
+
+
+Usar o campo de dados adequado:
+Se já existir algo como data_anamnese ou similar no modelo/alunos, utilizá‑lo.
+
+Se houver campo de validade específico, usar diretamente; caso contrário, derivar a validade a partir da data da última anamnese.
+
+
+
+Lógica de vencimento da anamnese:
+Considerar uma validade (ex.: 1 ano) ou usar data_vencimento_anamnese caso já exista.
+
+Calcular data_vencimento_anamnese a partir de data_ultima_anamnese e da validade (ou ler diretamente).
+
+Estados:
+Anamnese Pendente: aluno nunca fez anamnese / campo nulo.
+
+Anamnese Vencida: data_vencimento_anamnese < hoje.
+
+Anamnese à Vencer: hoje <= data_vencimento_anamnese <= hoje + 10 dias.
+
+
+
+Mapear estados para templates de mensagens de WhatsApp:
+Anamnese_Pendente – para alunos sem anamnese registrada.
+
+Anamnese_Vencida – para casos em que a anamnese já passou da validade.
+
+Anamnese_A_Vencer – para casos em que a anamnese vencerá em menos de 10 dias.
+
+
+Conteúdo sugerido para as mensagens (admin configura nas telas de Mensagens):
+Anamnese_Pendente:
+> Olá, {nome}! Ainda não temos registrada sua anamnese completa no instituto.
+> Para garantir que suas atividades sejam sempre seguras e adequadas, pedimos que agende uma consulta de avaliação conosco ou com seu médico de confiança.
+> Nossa equipe está à disposição para apoiar esse cuidado.
+
+Anamnese_Vencida:
+> Olá, {nome}! Sua anamnese está vencida e precisamos atualizar suas informações de saúde e histórico.
+> Agende uma nova consulta de avaliação física/funcional para que possamos continuar sua programação de forma segura e personalizada.
+
+Anamnese_A_Vencer:
+> Olá, {nome}! Sua anamnese está próxima do vencimento (em menos de 10 dias).
+> Para evitar qualquer pausa nas suas atividades, recomendamos que você já agende uma nova avaliação com nossa equipe ou com seu médico.
+
+
+Implementar um micro‑botão de WhatsApp na nova coluna “Anamnese”:
+Mesmo padrão visual do micro‑botão já existente.
+
+O botão deve:
+Escolher o template correto (Anamnese_Pendente, Anamnese_Vencida, Anamnese_A_Vencer) conforme o estado calculado.
+
+Substituir {nome} pelo primeiro nome do aluno e, se houver, outras tags relevantes.
+
+Disparar a mensagem via função utilitária de envio de WhatsApp.
+
+
+
+Ordenação da coluna “Venc. Atestado”
+
+Ajustar a lógica de ordenação (sort) da coluna “Venc. Atestado”:
+Em ordenação crescente:
+Datas de vencimento em ordem cronológica.
+
+Registros sem atestado (campo nulo/vazio) devem aparecer agrupados: preferencialmente por último (ou por primeiro, conforme decisão de UX) – não misturados no meio dos demais.
+
+
+Em ordenação decrescente:
+Inverter a ordem das datas, preservando a regra para nulos.
+
+
+Em Pandas, por exemplo:
+```python
+df.sort_values(
+by="data_venc_atestado",
+ascending=True, # ou False, conforme clique
+na_position="last" # ou "first", conforme decisão
+)
+```
+ou equivalente com ORDER BY em SQL.
+
+
+Checkbox “Exibir TODOS os alunos do horário”
+
+Já existe no arquivo uma função auxiliar:
+```python
+def obter_alunos_por_selecao(selecao, mostrar_todos=False):
+"""Busca os alunos dinamicamente do banco de dados, unindo turmas do mesmo horário se solicitado."""
+if mostrar_todos:
+hora_match = re.search(r"(0H|1H)", selecao)
+if hora_match:
+hora_busca = hora_match.group(1)
+df_todas = get_todas_turmas(ativas_apenas=True)
+if not df_todas.empty:
+turmas_mesmo_horario = [
+t for t in df_todas["nome"].
