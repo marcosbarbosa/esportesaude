@@ -1868,6 +1868,34 @@ if st.session_state.menu_atual == "Principal":
                 _df_hg["_pa_dia"]  = None
                 _df_hg["_pa_cls"]  = ""
 
+            # Merge com status da Anamnese (avaliação clínica / prontuario_avaliacoes)
+            try:
+                from database import get_ultima_avaliacao_todos
+                from modulos_frequencia.tab_admin import get_dias_validade_anamnese
+                _anam_dict     = get_ultima_avaliacao_todos()
+                _dias_val_anam = get_dias_validade_anamnese()
+                def _anam_status_row(aluno_id):
+                    _dt_str = _anam_dict.get(str(aluno_id))
+                    if not _dt_str:
+                        return None, "nunca"
+                    try:
+                        _dt_anam = pd.Timestamp(_dt_str).date()
+                    except Exception:
+                        return None, "nunca"
+                    _dias_desde = (datetime.date.today() - _dt_anam).days
+                    if _dias_desde > _dias_val_anam:
+                        _st_anam = "vencida"
+                    elif _dias_desde >= (_dias_val_anam - 30):
+                        _st_anam = "a_vencer"
+                    else:
+                        _st_anam = "ok"
+                    return _dt_anam, _st_anam
+                _df_hg[["_anam_data", "_anam_status"]] = _df_hg["id"].apply(
+                    lambda _aid: pd.Series(_anam_status_row(_aid))
+                )
+            except Exception:
+                _df_hg["_anam_data"]   = None
+                _df_hg["_anam_status"] = "nunca"
 
             # Birthday cols
             _df_hg["_dt_nasc"] = pd.to_datetime(_df_hg["data_nascimento"], errors="coerce")
@@ -1952,8 +1980,8 @@ if st.session_state.menu_atual == "Principal":
                 pdf = _PDFHG(orientation="L", unit="mm", format="A4")
                 pdf.add_page()
                 pdf.set_auto_page_break(True, margin=14)
-                hdrs   = ["#", "Nome", "Turma", "Aniversario", "Freq.60d", "Ultima Pres.", "Venc. Atestado", "Ult. PA"]
-                widths = [8,   70,    26,      18,            16,         26,              26,                52]
+                hdrs   = ["#", "Nome", "Turma", "Aniversario", "Freq.60d", "Ultima Pres.", "Venc. Atestado", "Ult. PA", "Anamnese"]
+                widths = [8,   62,    24,      16,            14,         24,              24,                40,        44]
                 pdf.set_font("Helvetica", "B", 8)
                 pdf.set_fill_color(30, 77, 216)
                 pdf.set_text_color(255, 255, 255)
@@ -1982,15 +2010,29 @@ if st.session_state.menu_atual == "Principal":
                         _nasc_pdf = f"{int(_dn):02d}/{_meses_pdf[int(_mn)]}" if pd.notna(_dn) and pd.notna(_mn) else "-"
                     except Exception:
                         _nasc_pdf = "-"
+                    _anam_dt_pdf = a.get("_anam_data")
+                    try:
+                        _anam_pdf_str = (
+                            pd.Timestamp(_anam_dt_pdf).strftime("%d/%m/%y")
+                            if pd.notna(_anam_dt_pdf) else "-"
+                        )
+                    except Exception:
+                        _anam_pdf_str = "-"
+                    _anam_st_pdf = str(a.get("_anam_status") or "nunca")
+                    _anam_lbl_pdf = {
+                        "nunca": "Nunca", "vencida": "Vencida",
+                        "a_vencer": "A vencer", "ok": "Em dia",
+                    }.get(_anam_st_pdf, "-")
                     vals = [
                         str(i + 1),
-                        str(a.get("nome", ""))[:38],
-                        str(a.get("turma", ""))[:16],
+                        str(a.get("nome", ""))[:32],
+                        str(a.get("turma", ""))[:14],
                         _nasc_pdf,
                         str(int(a.get("total_presencas_hist", 0))),
                         _up_str,
                         _dv_str,
-                        str(a.get("_pa_txt", "") or "-")[:18],
+                        str(a.get("_pa_txt", "") or "-")[:14],
+                        f"{_anam_pdf_str} ({_anam_lbl_pdf})"[:22],
                     ]
                     for w, v in zip(widths, vals):
                         pdf.cell(w, 5, _s(v), border=0, fill=True)
@@ -2026,8 +2068,8 @@ if st.session_state.menu_atual == "Principal":
                     st.rerun()
 
             # ── Cabeçalho das colunas (clicável para ordenar) ──────────
-            _h0, _h1, _h2, _h3, _h4, _h5, _h5b, _h6 = st.columns(
-                [0.5, 2.5, 1.1, 1.0, 1.9, 1.2, 1.2, 0.9], gap="small"
+            _h0, _h1, _h2, _h3, _h4, _h5, _h5b, _h5c, _h6 = st.columns(
+                [0.5, 2.3, 1.0, 0.9, 1.7, 1.1, 1.1, 1.1, 0.9], gap="small"
             )
             _h0.markdown(" ", unsafe_allow_html=True)
             _h6.markdown(" ", unsafe_allow_html=True)
@@ -2055,6 +2097,7 @@ if st.session_state.menu_atual == "Principal":
             _sort_btn(_h4, "⏱ Freq.60d + Pres.",  "total_presencas_hist")
             _sort_btn(_h5, "🏥 Venc. Atestado",    "data_vencimento_atestado")
             _sort_btn(_h5b, "🩸 Últ. PA",          "_pa_sis")
+            _sort_btn(_h5c, "📋 Anamnese",         "_anam_data")
 
             # Pré-carregar IDs avaliados (1 query, sem N+1 no loop)
             try:
@@ -2071,8 +2114,8 @@ if st.session_state.menu_atual == "Principal":
 
             for _, _r in _df_pag.iterrows():
                 with st.container(border=True):
-                    _ca, _cb, _cc, _cd, _ce, _cg, _cpa, _cf = st.columns(
-                        [0.5, 2.5, 1.1, 1.0, 1.9, 1.2, 1.2, 0.9], gap="small",
+                    _ca, _cb, _cc, _cd, _ce, _cg, _cpa, _canam, _cf = st.columns(
+                        [0.5, 2.3, 1.0, 0.9, 1.7, 1.1, 1.1, 1.1, 0.9], gap="small",
                         vertical_alignment="center"
                     )
 
@@ -2332,6 +2375,62 @@ if st.session_state.menu_atual == "Principal":
                                     f"font-weight:600;'>📱 Avisar</a>"
                                 )
                     _cpa.markdown(_pa_html_v, unsafe_allow_html=True)
+
+                    # Status da Anamnese (avaliação clínica / prontuario_avaliacoes)
+                    _anam_dt_v  = _r.get("_anam_data")
+                    _anam_st_v  = str(_r.get("_anam_status") or "nunca")
+                    if _anam_st_v == "nunca":
+                        _anam_cor, _anam_bg, _anam_icon, _anam_label = "#DC2626", "#FEE2E2", "🔴", "Nunca feita"
+                    elif _anam_st_v == "vencida":
+                        _anam_cor, _anam_bg, _anam_icon, _anam_label = "#DC2626", "#FEE2E2", "🔴", "Vencida"
+                    elif _anam_st_v == "a_vencer":
+                        _anam_cor, _anam_bg, _anam_icon, _anam_label = "#D97706", "#FEF3C7", "🟡", "A vencer"
+                    else:
+                        _anam_cor, _anam_bg, _anam_icon, _anam_label = "#059669", "#D1FAE5", "🟢", "Em dia"
+                    _anam_data_txt = (
+                        pd.Timestamp(_anam_dt_v).strftime("%d/%m/%y") if pd.notna(_anam_dt_v) else "—"
+                    )
+                    _anam_html = (
+                        f"<span style='font-size:11px;font-weight:700;color:{_anam_cor};"
+                        f"background:{_anam_bg};border-radius:4px;padding:2px 5px;"
+                        f"display:inline-block;'>{_anam_icon} {_anam_data_txt}</span>"
+                        f"<br><span style='font-size:10px;color:#94A3B8;'>{_anam_label}</span>"
+                    )
+                    if _wapp_ok and _anam_st_v in ("nunca", "vencida", "a_vencer"):
+                        _wap_an = str(_r.get("whatsapp") or "").strip()
+                        if _wap_an:
+                            _an_key = (
+                                "Anamnese_Pendente" if _anam_st_v == "nunca"
+                                else "Anamnese_Vencida" if _anam_st_v == "vencida"
+                                else "Anamnese_A_Vencer"
+                            )
+                            _an_default = {
+                                "Anamnese_Pendente": (
+                                    "Olá, {nome}! Notamos que você ainda não realizou sua anamnese "
+                                    "(avaliação clínica inicial). Para sua segurança, pedimos que agende "
+                                    "esse atendimento o quanto antes."
+                                ),
+                                "Anamnese_Vencida": (
+                                    "Olá, {nome}! Sua anamnese (avaliação clínica) está vencida. Para "
+                                    "continuar participando das atividades com segurança, pedimos que "
+                                    "agende uma reavaliação."
+                                ),
+                                "Anamnese_A_Vencer": (
+                                    "Olá, {nome}! Sua anamnese (avaliação clínica) vencerá em breve. "
+                                    "Pedimos que agende sua reavaliação para não haver interrupção nas "
+                                    "suas atividades."
+                                ),
+                            }[_an_key]
+                            _tpl_an = _tpl_map.get(_an_key, _an_default)
+                            _msg_an = personalizar_mensagem(_tpl_an, str(_r.get("nome", "")))
+                            _link_an = montar_link_whatsapp(_wap_an, _msg_an)
+                            if _link_an:
+                                _anam_html += (
+                                    f"<br><a href='{_link_an}' target='_blank' "
+                                    f"style='font-size:10px;color:#25D366;text-decoration:none;"
+                                    f"font-weight:600;'>📱 Agendar</a>"
+                                )
+                    _canam.markdown(_anam_html, unsafe_allow_html=True)
 
                     # Botão Ficha
                     with _cf:

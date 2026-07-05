@@ -1122,6 +1122,64 @@ def atualizar_atestado_bloqueio(aluno_id: str, bloqueado: bool, obs: str = "",
 # 🧪 AVALIAÇÃO PENDENTE — funções para identificar e bloquear alunos sem avaliação
 # ==============================================================================
 
+@st.cache_data(ttl=300, show_spinner=False)
+def get_config_valor(chave: str, default=None):
+    """Lê um valor de configuração singleton (chave única) em configuracoes_sistema."""
+    try:
+        res = (
+            supabase.table("configuracoes_sistema")
+            .select("valor")
+            .eq("chave", chave)
+            .limit(1)
+            .execute()
+        )
+        if res.data:
+            return res.data[0].get("valor", default)
+        return default
+    except Exception:
+        return default
+
+
+def set_config_valor(chave: str, valor) -> tuple:
+    """Grava/atualiza um valor de configuração singleton em configuracoes_sistema."""
+    try:
+        supabase.table("configuracoes_sistema").upsert(
+            {"chave": chave, "valor": str(valor)}, on_conflict="chave"
+        ).execute()
+        get_config_valor.clear()
+        return True, "Configuração salva."
+    except Exception as e:
+        return False, str(e)
+
+
+@st.cache_data(ttl=60, show_spinner=False)
+def get_ultima_avaliacao_todos() -> dict:
+    """Retorna {aluno_id(str): 'YYYY-MM-DD'} com a data da última avaliação (anamnese/
+    'Data do Atendimento') registrada em prontuario_avaliacoes para cada aluno."""
+    try:
+        inicio = 0
+        datas: dict = {}
+        while True:
+            res = (
+                supabase.from_("prontuario_avaliacoes")
+                .select("aluno_id, data_avaliacao")
+                .order("data_avaliacao", desc=True)
+                .range(inicio, inicio + 999)
+                .execute()
+            )
+            for row in (res.data or []):
+                aid = str(row.get("aluno_id") or "")
+                dt = row.get("data_avaliacao")
+                if aid and dt and aid not in datas:
+                    datas[aid] = dt
+            if len(res.data or []) < 1000:
+                break
+            inicio += 1000
+        return datas
+    except Exception:
+        return {}
+
+
 @st.cache_data(ttl=60, show_spinner=False)
 def get_ids_alunos_avaliados() -> set:
     """Retorna set de aluno_ids que possuem ao menos 1 registro em prontuario_avaliacoes."""

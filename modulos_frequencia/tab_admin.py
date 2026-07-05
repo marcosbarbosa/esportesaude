@@ -16,7 +16,22 @@ from database import (
     _coluna_fonetica_disponivel,
     _coluna_fonetica_pronta,
     ADMIN_MASTER,
+    get_config_valor,
+    set_config_valor,
 )
+
+CHAVE_DIAS_VALIDADE_ANAMNESE = "config_dias_validade_anamnese"
+DIAS_VALIDADE_ANAMNESE_PADRAO = 180
+
+
+def get_dias_validade_anamnese() -> int:
+    """Lê o período (em dias) de validade da anamnese configurado pelo admin.
+    Padrão: 180 dias, caso nunca tenha sido configurado."""
+    try:
+        return int(get_config_valor(CHAVE_DIAS_VALIDADE_ANAMNESE, DIAS_VALIDADE_ANAMNESE_PADRAO))
+    except (TypeError, ValueError):
+        return DIAS_VALIDADE_ANAMNESE_PADRAO
+
 
 _DIAS_PT = {
     "Monday": "Segunda-feira", "Tuesday": "Terça-feira", "Wednesday": "Quarta-feira",
@@ -140,6 +155,32 @@ def _renderizar_bloco_fonetica():
                 st.error(f"❌ {msg}")
 
 
+def _renderizar_bloco_validade_anamnese():
+    """Painel admin para configurar o período (dias) de validade da anamnese
+    (avaliação clínica em prontuario_avaliacoes). Vencido esse período desde a
+    'Data do Atendimento', o aluno passa a ser sinalizado na coluna Anamnese
+    do grid Alunos Ativos, disparando o botão de WhatsApp de reavaliação."""
+    with st.expander("🩺 Validade da Anamnese (reavaliação clínica)", expanded=False):
+        atual = get_dias_validade_anamnese()
+        st.caption(
+            f"Período atual: **{atual} dias** desde a última avaliação registrada "
+            "no prontuário. Após esse prazo, o aluno aparece como 'Vencida' na "
+            "coluna Anamnese do grid Alunos Ativos."
+        )
+        novo = st.number_input(
+            "Dias de validade da anamnese",
+            min_value=30, max_value=730, step=10, value=atual,
+            key="admin_dias_validade_anamnese",
+        )
+        if st.button("💾 Salvar validade da anamnese", key="admin_btn_salvar_validade_anamnese"):
+            ok, msg = set_config_valor(CHAVE_DIAS_VALIDADE_ANAMNESE, int(novo))
+            if ok:
+                st.success(f"✅ Validade da anamnese atualizada para {int(novo)} dias.")
+                st.rerun()
+            else:
+                st.error(f"❌ Erro ao salvar: {msg}")
+
+
 def renderizar_aba_admin():
     email_op = (
         st.session_state.get("usuario_email")
@@ -152,6 +193,7 @@ def renderizar_aba_admin():
         return
 
     _renderizar_bloco_fonetica()
+    _renderizar_bloco_validade_anamnese()
 
     st.markdown(
         """<div style='background:#FEF2F2;border:1.5px solid #FCA5A5;border-radius:10px;
