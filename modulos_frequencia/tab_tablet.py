@@ -71,13 +71,23 @@ def cycle_presence_btn(aluno_id, data_aula, status_atual, nome_aluno):
         st.toast("🚨 Erro crítico de rede.", icon="🚨")
 
 
-# 🚀 NOVA ASSINATURA: Agora recebe a variável bloqueio_ativo
+# 🚀 NOVA ASSINATURA: Agora recebe a variável bloqueio_ativo + chave_unica (data+turmas)
 def renderizar_aba_terminal(
-    df_alunos_tab, data_aula, presencas_turma_geral, bloqueio_ativo=False
+    df_alunos_tab, data_aula, presencas_turma_geral, bloqueio_ativo=False, chave_unica=""
 ):
     if df_alunos_tab.empty:
         st.warning("Selecione uma turma para carregar os alunos.")
         return
+
+    # 🧼 Garante SEMPRE a ordem alfabética e um índice limpo antes de desenhar
+    # qualquer célula — evita qualquer resquício de ordenação/índice de uma
+    # combinação de turmas anterior "vazando" para a exibição atual.
+    if "nome" in df_alunos_tab.columns:
+        df_alunos_tab = df_alunos_tab.sort_values(by="nome").reset_index(drop=True)
+
+    _chave_sanit = "".join(
+        c if c.isalnum() else "_" for c in str(chave_unica)
+    ) or "sem_chave"
 
     # O CSS encostado na margem esquerda para evitar formatação de código do Markdown
     st.markdown(
@@ -312,7 +322,7 @@ def renderizar_aba_terminal(
         cols = st.columns(COLS, gap="small")
 
         for j, (_, row) in enumerate(df_alunos_tab.iloc[i : i + COLS].iterrows()):
-            with cols[j]:
+            with cols[j], st.container(key=f"cel_{_chave_sanit}_{row['id']}"):
                 # 🚀 INTERPRETAÇÃO DO STATUS
                 status_bd = presencas_turma_geral.get(row["id"])
 

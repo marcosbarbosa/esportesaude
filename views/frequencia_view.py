@@ -512,7 +512,7 @@ def tela_frequencia():
 
     with abas[0]:
         renderizar_aba_terminal(
-            df_alunos, data_aula, presencas_turma_geral, bloqueio_ativo
+            df_alunos, data_aula, presencas_turma_geral, bloqueio_ativo, chave_unica
         )
 
     with abas[1]:
