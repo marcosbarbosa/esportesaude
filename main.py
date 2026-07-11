@@ -1338,22 +1338,31 @@ def _tela_calendario_institucional():
 
     hoje_cal = datetime.date.today()
 
+    # chave rotativa para limpar o formulário após salvar
+    fk = st.session_state.get("cal_form_key", 0)
+
     # ── Formulário de cadastro ─────────────────────────────────────────────
     st.markdown("### ➕ Registrar dia sem aula")
     ca, cb, cc = st.columns([2, 4, 2])
-    novo_dia_cal   = ca.date_input("Data:", value=hoje_cal, format="DD/MM/YYYY", key="cal_data_novo")
-    motivo_cal_txt = cb.text_input("Motivo:", placeholder="Ex: Reunião pedagógica, Feriado municipal…", key="cal_motivo")
-    btn_reg_cal    = cc.button("✅ Registrar", type="primary", use_container_width=True, key="cal_btn_reg")
+    novo_dia_cal   = ca.date_input("Data:", value=hoje_cal, format="DD/MM/YYYY",
+                                   key=f"cal_data_novo_{fk}")
+    motivo_cal_txt = cb.text_input("Motivo:",
+                                   placeholder="Ex: Reunião pedagógica, Feriado municipal…",
+                                   key=f"cal_motivo_{fk}")
+    cc.markdown("<br>", unsafe_allow_html=True)
+    btn_reg_cal    = cc.button("✅ REGISTRAR", type="primary",
+                               use_container_width=True, key=f"cal_btn_reg_{fk}")
 
     if btn_reg_cal:
-        ok = registrar_dia_sem_aula(
-            str(novo_dia_cal),
-            motivo_cal_txt,
-            criado_por=st.session_state.get("usuario_logado", "sistema"),
-        )
+        with st.spinner("Salvando…"):
+            ok = registrar_dia_sem_aula(
+                str(novo_dia_cal),
+                motivo_cal_txt,
+                criado_por=st.session_state.get("usuario_logado", "sistema"),
+            )
         if ok:
-            st.success(f"✅ {novo_dia_cal.strftime('%d/%m/%Y')} registrado como Sem Aula.")
-            st.session_state.pop("cal_lista_carregada", None)
+            st.toast(f"✅ {novo_dia_cal.strftime('%d/%m/%Y')} registrado como Sem Aula!", icon="✅")
+            st.session_state["cal_form_key"] = fk + 1
             st.rerun()
         else:
             st.error("❌ Falha ao registrar. Verifique se a tabela `dias_sem_aula` foi criada no Supabase.")
@@ -1373,9 +1382,9 @@ CREATE POLICY "allow_all" ON dias_sem_aula
 
     st.markdown("---")
 
-    # ── Filtro de período para listar ──────────────────────────────────────
+    # ── Lista automática — sem botão Buscar ───────────────────────────────
     st.markdown("### 📋 Registros existentes")
-    fl1, fl2, fl3 = st.columns([2, 2, 2])
+    fl1, fl2 = st.columns([2, 2])
     cal_ini = fl1.date_input(
         "De:", value=hoje_cal - datetime.timedelta(days=180),
         format="DD/MM/YYYY", key="cal_lista_ini"
@@ -1384,38 +1393,31 @@ CREATE POLICY "allow_all" ON dias_sem_aula
         "Até:", value=hoje_cal + datetime.timedelta(days=90),
         format="DD/MM/YYYY", key="cal_lista_fim"
     )
-    btn_listar = fl3.button("🔍 Buscar", use_container_width=True, key="cal_btn_listar")
 
-    if btn_listar:
-        st.session_state["cal_lista_carregada"] = True
-
-    if st.session_state.get("cal_lista_carregada"):
-        df_cal = get_dias_sem_aula_periodo_df(str(cal_ini), str(cal_fim))
-        if df_cal.empty:
-            st.info("Nenhum dia sem aula registrado no período selecionado.")
-        else:
-            st.markdown(f"**{len(df_cal)} dia(s) encontrado(s):**")
-            for _, row_cal in df_cal.iterrows():
-                try:
-                    d_obj   = datetime.date.fromisoformat(str(row_cal["data"]))
-                    weekday = ["Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado", "Domingo"][d_obj.weekday()]
-                    d_disp  = f"{d_obj.strftime('%d/%m/%Y')} ({weekday})"
-                except Exception:
-                    d_disp = str(row_cal["data"])
-                motivo_d = str(row_cal.get("motivo", "") or "—")
-                criado_d = str(row_cal.get("criado_por", "") or "sistema")
-                col_d, col_m, col_x = st.columns([3, 5, 1])
-                col_d.markdown(f"📌 **{d_disp}**")
-                col_m.markdown(
-                    f"<small style='color:#64748B;'>{motivo_d} · <em>por {criado_d}</em></small>",
-                    unsafe_allow_html=True,
-                )
-                if col_x.button("🗑️", key=f"cal_del_{row_cal['data']}", help="Remover este dia"):
-                    remover_dia_sem_aula(str(row_cal["data"]))
-                    st.session_state.pop("cal_lista_carregada", None)
-                    st.rerun()
+    df_cal = get_dias_sem_aula_periodo_df(str(cal_ini), str(cal_fim))
+    if df_cal.empty:
+        st.info("Nenhum dia sem aula registrado no período selecionado.")
     else:
-        st.caption("Ajuste o período e clique em **Buscar** para ver os registros.")
+        st.markdown(f"**{len(df_cal)} dia(s) encontrado(s):**")
+        for _, row_cal in df_cal.iterrows():
+            try:
+                d_obj   = datetime.date.fromisoformat(str(row_cal["data"]))
+                weekday = ["Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado", "Domingo"][d_obj.weekday()]
+                d_disp  = f"{d_obj.strftime('%d/%m/%Y')} ({weekday})"
+            except Exception:
+                d_disp = str(row_cal["data"])
+            motivo_d = str(row_cal.get("motivo", "") or "—")
+            criado_d = str(row_cal.get("criado_por", "") or "sistema")
+            col_d, col_m, col_x = st.columns([3, 5, 1])
+            col_d.markdown(f"📌 **{d_disp}**")
+            col_m.markdown(
+                f"<small style='color:#64748B;'>{motivo_d} · <em>por {criado_d}</em></small>",
+                unsafe_allow_html=True,
+            )
+            if col_x.button("🗑️", key=f"cal_del_{row_cal['data']}", help="Remover este dia"):
+                remover_dia_sem_aula(str(row_cal["data"]))
+                st.toast("🗑️ Registro removido.", icon="🗑️")
+                st.rerun()
 
 
 # ==============================================================================
