@@ -311,17 +311,67 @@ def renderizar_aba_terminal(
     )
 
     st.progress(razao_progresso, text=f"Taxa de Presença Útil: {percentagem}%")
-    st.markdown("<br><br>", unsafe_allow_html=True)
+
+    # ── Filtros rápidos da grade ───────────────────────────────────────────────
+    _kf_pendentes = f"filtro_pendentes_{_chave_sanit}"
+    _kf_presentes = f"filtro_presentes_{_chave_sanit}"
+
+    _col_fp, _col_fs, _col_fi = st.columns([3, 3, 4])
+    _filtro_pendentes = _col_fp.checkbox(
+        "🔴 Ocultar já registrados",
+        key=_kf_pendentes,
+        help="Esconde alunos já marcados — mostra apenas quem falta registrar",
+    )
+    _filtro_presentes = _col_fs.checkbox(
+        "✅ Somente presentes",
+        key=_kf_presentes,
+        help="Mostra apenas alunos já marcados como presentes ou justificados",
+        disabled=_filtro_pendentes,   # desativa quando o outro está ativo
+    )
+
+    # Conjunto de IDs já marcados (PRESENTE ou JUSTIFICADA)
+    _ids_marcados = {
+        aid
+        for aid, st_bd in presencas_turma_geral.items()
+        if st_bd in ("PRESENTE", "JUSTIFICADA") or st_bd is True
+    }
+
+    # Aplica filtro apenas no df de renderização; totais sempre refletem todos
+    df_render = df_alunos_tab.copy()
+    if _filtro_pendentes:
+        df_render = df_render[~df_render["id"].isin(_ids_marcados)].reset_index(drop=True)
+    elif _filtro_presentes:
+        df_render = df_render[df_render["id"].isin(_ids_marcados)].reset_index(drop=True)
+
+    _total_visivel = len(df_render)
+    if _filtro_pendentes or _filtro_presentes:
+        _rotulo = "pendentes" if _filtro_pendentes else "já registrados"
+        _col_fi.markdown(
+            f"<small style='color:#64748B;'>👁 Exibindo <b>{_total_visivel}</b> "
+            f"de <b>{total_alunos}</b> alunos ({_rotulo})</small>",
+            unsafe_allow_html=True,
+        )
+
+    st.markdown("<br>", unsafe_allow_html=True)
+
+    if df_render.empty:
+        _msg = (
+            "✅ Todos os alunos já foram registrados!"
+            if _filtro_pendentes
+            else "Nenhum aluno marcado como presente ainda."
+        )
+        st.info(_msg)
+        return
 
     # ==============================================================================
     # 🖼️ RENDERIZAÇÃO DOS ALUNOS (8 COLUNAS — fotos 150px)
     # ==============================================================================
     COLS = 8
 
-    for i in range(0, total_alunos, COLS):
+    for i in range(0, _total_visivel, COLS):
         cols = st.columns(COLS, gap="small")
 
-        for j, (_, row) in enumerate(df_alunos_tab.iloc[i : i + COLS].iterrows()):
+        for j, (_, row) in enumerate(df_render.iloc[i : i + COLS].iterrows()):
             with cols[j], st.container(key=f"cel_{_chave_sanit}_{row['id']}"):
                 # 🚀 INTERPRETAÇÃO DO STATUS
                 status_bd = presencas_turma_geral.get(row["id"])
