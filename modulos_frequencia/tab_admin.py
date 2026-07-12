@@ -1,5 +1,5 @@
 # ==============================================================================
-# 🗑️ MÓDULO: tab_admin.py — Exclusão de Dias de Aula (ADMIN MASTER)
+# 📅 MÓDULO: tab_admin.py — Dias Regist./Anamnese + Exclusão (ADMIN MASTER)
 # ==============================================================================
 import streamlit as st
 import pandas as pd
@@ -18,6 +18,7 @@ from database import (
     ADMIN_MASTER,
     get_config_valor,
     set_config_valor,
+    get_dias_sem_aula,
 )
 
 CHAVE_DIAS_VALIDADE_ANAMNESE = "config_dias_validade_anamnese"
@@ -25,8 +26,6 @@ DIAS_VALIDADE_ANAMNESE_PADRAO = 180
 
 
 def get_dias_validade_anamnese() -> int:
-    """Lê o período (em dias) de validade da anamnese configurado pelo admin.
-    Padrão: 180 dias, caso nunca tenha sido configurado."""
     try:
         return int(get_config_valor(CHAVE_DIAS_VALIDADE_ANAMNESE, DIAS_VALIDADE_ANAMNESE_PADRAO))
     except (TypeError, ValueError):
@@ -41,17 +40,10 @@ _DIAS_PT = {
 
 
 def _feriados_sp(anos) -> dict:
-    """
-    Retorna {date: nome_feriado} com feriados nacionais + SP estado + SP cidade
-    para os anos solicitados.
-    """
     feriados = {}
     for ano in anos:
-        # ── Pascoa base para feriados moveis ──────────────────────────────
         p = easter(ano)
         td = datetime.timedelta
-
-        # Nacionais fixos
         fixos = [
             (1,  1,  "Ano Novo"),
             (4,  21, "Tiradentes"),
@@ -65,25 +57,17 @@ def _feriados_sp(anos) -> dict:
         ]
         for mes, dia, nome in fixos:
             feriados[datetime.date(ano, mes, dia)] = nome
-
-        # Nacionais móveis
         feriados[p - td(days=48)] = "Carnaval (2ª feira)"
         feriados[p - td(days=47)] = "Carnaval (3ª feira)"
         feriados[p - td(days=2)]  = "Sexta-feira Santa"
         feriados[p]               = "Páscoa"
         feriados[p + td(days=60)] = "Corpus Christi"
-
-        # SP Estado
-        feriados[datetime.date(ano, 7, 9)] = "Revolução Constitucionalista (SP)"
-
-        # SP Cidade
+        feriados[datetime.date(ano, 7, 9)]  = "Revolução Constitucionalista (SP)"
         feriados[datetime.date(ano, 1, 25)] = "Aniversário de São Paulo"
-
     return feriados
 
 
 def _classificar_anomalia(dt: datetime.date, feriados: dict) -> str:
-    """Retorna string de alerta ou '' para a data informada."""
     alertas = []
     if dt.weekday() >= 5:
         alertas.append("Fim de semana")
@@ -93,13 +77,103 @@ def _classificar_anomalia(dt: datetime.date, feriados: dict) -> str:
     return " + ".join(alertas) if alertas else ""
 
 
-def _renderizar_bloco_fonetica():
-    """Painel admin para ativar a busca rápida (índice fonético no banco).
+# ── Bloco: dias úteis sem frequência lançada ──────────────────────────────────
+def _renderizar_bloco_sem_frequencia(df_registradas: pd.DataFrame):
+    hoje = datetime.date.today()
+    periodo_dias = st.session_state.get("admin_periodo_sem_freq", 90)
 
-    A coluna `alunos.nome_fonetica` precisa ser criada por DDL no Supabase
-    (não há acesso ao schema a partir daqui). Depois de criada, este painel
-    retro-preenche os alunos existentes via `backfill_nome_fonetica`, ativando
-    o filtro server-side em `buscar_alunos_geral`."""
+    col_titulo, col_periodo = st.columns([5, 2])
+    col_titulo.markdown("### ⚠️ Dias úteis sem frequência lançada")
+    periodo_dias = col_periodo.number_input(
+        "Período (dias retroativos):",
+        min_value=7, max_value=365, step=7, value=periodo_dias,
+        key="admin_periodo_sem_freq",
+    )
+
+    ini = hoje - datetime.timedelta(days=int(periodo_dias))
+    fim = hoje
+
+    # Datas já registradas no banco
+    datas_registradas: set = set()
+    if not df_registradas.empty:
+        datas_registradas = set(
+            pd.to_datetime(df_registradas["data_aula"]).dt.date.tolist()
+        )
+
+    # Dias sem aula do calendário institucional
+    try:
+        dias_inst = get_dias_sem_aula(str(ini), str(fim))
+    except Exception:
+        dias_inst = set()
+
+    # Feriados SP/Nacional
+    anos = {ini.year, fim.year}
+    feriados = _feriados_sp(anos)
+
+    # Dias úteis no período que NÃO foram registrados e NÃO são dias sem aula
+    ausentes = []
+    cursor = ini
+    while cursor <= fim:
+        if (
+            cursor.weekday() < 5                   # seg–sex
+            and cursor not in feriados             # não é feriado
+            and cursor not in dias_inst            # não é dia sem aula cadastrado
+            and cursor not in datas_registradas    # chamada não lançada
+        ):
+            ausentes.append(cursor)
+        cursor += datetime.timedelta(days=1)
+
+    if not ausentes:
+        st.success(
+            f"✅ Nenhum dia útil sem frequência lançada nos últimos {int(periodo_dias)} dias. "
+            "Todos os dias úteis têm chamada registrada!"
+        )
+        return
+
+    # Alerta de quantidade
+    st.markdown(
+        f"""<div style='background:#FEF2F2;border-left:4px solid #EF4444;
+        padding:12px 16px;border-radius:8px;margin-bottom:12px;'>
+        <strong style='color:#991B1B;'>⚠️ {len(ausentes)} dia(s) útil(is) sem frequência registrada</strong><br>
+        <span style='color:#7F1D1D;font-size:13px;'>
+        Os dias abaixo são dias úteis (seg–sex, excluindo feriados e dias sem aula cadastrados)
+        sem nenhuma chamada lançada no sistema. Clique em <b>→ Lançar chamada</b> para registrar.
+        </span></div>""",
+        unsafe_allow_html=True,
+    )
+
+    # Grade de dias ausentes com botão de acesso direto
+    cab1, cab2, cab3 = st.columns([2, 3, 3])
+    cab1.markdown("<small><b>Data</b></small>", unsafe_allow_html=True)
+    cab2.markdown("<small><b>Dia da semana</b></small>", unsafe_allow_html=True)
+    cab3.markdown("<small><b>Ação</b></small>", unsafe_allow_html=True)
+
+    for d in sorted(ausentes, reverse=True):
+        weekday_pt = _DIAS_PT.get(d.strftime("%A"), d.strftime("%A"))
+        c1, c2, c3 = st.columns([2, 3, 3])
+        c1.markdown(
+            f"<span style='color:#DC2626;font-weight:700;'>{d.strftime('%d/%m/%Y')}</span>",
+            unsafe_allow_html=True,
+        )
+        c2.markdown(
+            f"<span style='color:#6B7280;font-size:13px;'>📌 {weekday_pt}</span>",
+            unsafe_allow_html=True,
+        )
+        if c3.button(
+            "→ Lançar chamada",
+            key=f"admin_ir_freq_{d}",
+            help=f"Abrir tela de frequência para {d.strftime('%d/%m/%Y')}",
+            use_container_width=True,
+        ):
+            st.session_state["_freq_data_alvo"] = d
+            st.session_state.menu_atual = "Frequência"
+            st.rerun()
+
+    st.markdown("---")
+
+
+# ── Bloco: busca fonética ──────────────────────────────────────────────────────
+def _renderizar_bloco_fonetica():
     with st.expander("🔎 Busca rápida (índice fonético)", expanded=False):
         coluna_existe = _coluna_fonetica_disponivel()
         coluna_pronta = _coluna_fonetica_pronta() if coluna_existe else False
@@ -155,11 +229,8 @@ def _renderizar_bloco_fonetica():
                 st.error(f"❌ {msg}")
 
 
+# ── Bloco: validade da anamnese ────────────────────────────────────────────────
 def _renderizar_bloco_validade_anamnese():
-    """Painel admin para configurar o período (dias) de validade da anamnese
-    (avaliação clínica em prontuario_avaliacoes). Vencido esse período desde a
-    'Data do Atendimento', o aluno passa a ser sinalizado na coluna Anamnese
-    do grid Alunos Ativos, disparando o botão de WhatsApp de reavaliação."""
     with st.expander("🩺 Validade da Anamnese (reavaliação clínica)", expanded=False):
         atual = get_dias_validade_anamnese()
         st.caption(
@@ -181,6 +252,7 @@ def _renderizar_bloco_validade_anamnese():
                 st.error(f"❌ Erro ao salvar: {msg}")
 
 
+# ── Renderizador principal da aba ──────────────────────────────────────────────
 def renderizar_aba_admin():
     email_op = (
         st.session_state.get("usuario_email")
@@ -192,9 +264,86 @@ def renderizar_aba_admin():
         st.error("🔒 Acesso restrito — apenas o Administrador Mestre pode usar este painel.")
         return
 
+    # Carrega todas as datas registradas (usada em múltiplos blocos)
+    with st.spinner("Carregando datas..."):
+        df_datas = listar_datas_aulas_registradas()
+
+    # ── 1. Dias úteis SEM frequência lançada ─────────────────────────────────
+    _renderizar_bloco_sem_frequencia(df_datas)
+
+    # ── 2. Dias de Aula Registrados ───────────────────────────────────────────
+    st.markdown("### 📋 Dias de Aula Registrados")
+
+    if df_datas.empty:
+        st.info("Nenhum dia de aula registrado no banco de dados.")
+    else:
+        df_display = df_datas.copy()
+        dts_parsed = pd.to_datetime(df_display["data_aula"])
+        df_display["data_fmt"]   = dts_parsed.dt.strftime("%d/%m/%Y")
+        df_display["dia_semana"] = dts_parsed.dt.day_name().map(_DIAS_PT)
+        df_display["turmas"]     = df_display["turmas_diario"].apply(
+            lambda t: ", ".join(t) if isinstance(t, list) and t else "—"
+        )
+        anos_dados = set(dts_parsed.dt.year.dropna().astype(int).tolist())
+        feriados   = _feriados_sp(anos_dados)
+        df_display["anomalia"] = dts_parsed.apply(
+            lambda dt: _classificar_anomalia(dt.date(), feriados) if pd.notna(dt) else ""
+        )
+
+        # Resumo de alertas
+        idx_anomalos = df_display[df_display["anomalia"] != ""].index.tolist()
+        if idx_anomalos:
+            n_fds = (df_display["anomalia"].str.contains("Fim de semana", na=False)).sum()
+            n_fer = (df_display["anomalia"].str.contains("Feriado", na=False)).sum()
+            partes = []
+            if n_fds: partes.append(f"**{n_fds}** fim(ns) de semana")
+            if n_fer: partes.append(f"**{n_fer}** feriado(s)")
+            st.warning(
+                f"⚠️ Encontrado(s) {' e '.join(partes)} com registros de aula — "
+                "verifique se foram lançamentos incorretos."
+            )
+
+        # Grade com botão de acesso rápido por linha
+        cab_a, cab_b, cab_c, cab_d, cab_e, cab_f = st.columns([2, 2, 1, 3, 2, 2])
+        for col, txt in zip(
+            [cab_a, cab_b, cab_c, cab_d, cab_e, cab_f],
+            ["Data", "Dia da Semana", "Presenças", "Turmas (Diário)", "Alerta", ""],
+        ):
+            col.markdown(f"<small><b>{txt}</b></small>", unsafe_allow_html=True)
+
+        for _, row in df_display.sort_values("data_aula", ascending=False).iterrows():
+            c1, c2, c3, c4, c5, c6 = st.columns([2, 2, 1, 3, 2, 2])
+            c1.markdown(f"**{row['data_fmt']}**")
+            c2.markdown(f"<small>{row['dia_semana']}</small>", unsafe_allow_html=True)
+            c3.markdown(f"<small>{int(row['total_presencas'])}</small>", unsafe_allow_html=True)
+            c4.markdown(f"<small>{row['turmas']}</small>", unsafe_allow_html=True)
+            c5.markdown(
+                f"<small style='color:#D97706;'>{row['anomalia']}</small>" if row["anomalia"] else "<small>—</small>",
+                unsafe_allow_html=True,
+            )
+            try:
+                d_obj = datetime.date.fromisoformat(str(row["data_aula"]))
+                if c6.button(
+                    "→ Ver chamada",
+                    key=f"admin_ver_freq_{row['data_aula']}",
+                    help=f"Abrir frequência de {row['data_fmt']}",
+                    use_container_width=True,
+                ):
+                    st.session_state["_freq_data_alvo"] = d_obj
+                    st.session_state.menu_atual = "Frequência"
+                    st.rerun()
+            except Exception:
+                pass
+
+    st.markdown("---")
+
+    # ── 3. Ferramentas de configuração (expanders) ────────────────────────────
     _renderizar_bloco_fonetica()
     _renderizar_bloco_validade_anamnese()
 
+    st.markdown("---")
+
+    # ── 4. Painel de exclusão permanente (zona de perigo) ─────────────────────
     st.markdown(
         """<div style='background:#FEF2F2;border:1.5px solid #FCA5A5;border-radius:10px;
         padding:14px 18px 10px;margin-bottom:18px;'>
@@ -206,69 +355,31 @@ def renderizar_aba_admin():
         unsafe_allow_html=True,
     )
 
-    # ── Carregar datas registradas ────────────────────────────────────────
-    with st.spinner("Carregando datas registradas..."):
-        df_datas = listar_datas_aulas_registradas()
-
     if df_datas.empty:
-        st.info("Nenhum dia de aula registrado no banco de dados.")
         return
 
-    # ── Tabela de datas registradas ───────────────────────────────────────
-    st.markdown("### 📋 Dias de Aula Registrados")
-
-    df_display = df_datas.copy()
-    dts_parsed = pd.to_datetime(df_display["data_aula"])
-    df_display["data_fmt"]  = dts_parsed.dt.strftime("%d/%m/%Y")
-    df_display["dia_semana"] = dts_parsed.dt.day_name().map(_DIAS_PT)
-    df_display["turmas"] = df_display["turmas_diario"].apply(
+    df_display_del = df_datas.copy()
+    dts_del = pd.to_datetime(df_display_del["data_aula"])
+    df_display_del["data_fmt"]   = dts_del.dt.strftime("%d/%m/%Y")
+    df_display_del["dia_semana"] = dts_del.dt.day_name().map(_DIAS_PT)
+    df_display_del["turmas"]     = df_display_del["turmas_diario"].apply(
         lambda t: ", ".join(t) if isinstance(t, list) and t else "—"
     )
-
-    # Construir dicionário de feriados para todos os anos presentes nos dados
-    anos_dados = set(dts_parsed.dt.year.dropna().astype(int).tolist())
-    feriados = _feriados_sp(anos_dados)
-
-    # Classificar cada data: fim de semana, feriado ou ambos
-    df_display["anomalia"] = dts_parsed.apply(
-        lambda dt: _classificar_anomalia(dt.date(), feriados) if pd.notna(dt) else ""
+    anos_del  = set(dts_del.dt.year.dropna().astype(int).tolist())
+    fer_del   = _feriados_sp(anos_del)
+    df_display_del["anomalia"] = dts_del.apply(
+        lambda dt: _classificar_anomalia(dt.date(), fer_del) if pd.notna(dt) else ""
     )
 
-    cols_show = ["data_fmt", "dia_semana", "total_presencas", "turmas", "anomalia"]
-    df_show = df_display[cols_show].rename(columns={
-        "data_fmt": "Data", "dia_semana": "Dia da Semana",
-        "total_presencas": "Presenças", "turmas": "Turmas (Diário)",
-        "anomalia": "Alerta",
-    })
-
-    # Resumo dos alertas encontrados
-    idx_anomalos = df_display[df_display["anomalia"] != ""].index.tolist()
-    if idx_anomalos:
-        n_fds      = (df_display["anomalia"].str.contains("Fim de semana", na=False)).sum()
-        n_fer      = (df_display["anomalia"].str.contains("Feriado", na=False)).sum()
-        partes = []
-        if n_fds: partes.append(f"**{n_fds}** fim(ns) de semana")
-        if n_fer: partes.append(f"**{n_fer}** feriado(s)")
-        st.warning(
-            f"⚠️ Encontrado(s) {' e '.join(partes)} com registros de aula — "
-            "verifique se foram lançamentos incorretos."
-        )
-
-    st.dataframe(df_show, use_container_width=True, hide_index=True)
-
-    st.markdown("---")
-
-    # ── Selecionar data para exclusão ────────────────────────────────────
     st.markdown("### 🗑️ Selecionar Data para Excluir")
-
-    opcoes_datas = df_display["data_aula"].tolist()
+    opcoes_datas = df_display_del["data_aula"].tolist()
     opcoes_label = {
         row["data_aula"]: (
             f"{row['data_fmt']} — {row['dia_semana']}"
             f"  ({row['total_presencas']} presenças)"
             f"{' ⚠️' if row['anomalia'] else ''}"
         )
-        for _, row in df_display.iterrows()
+        for _, row in df_display_del.iterrows()
     }
 
     data_sel_str = st.selectbox(
@@ -279,14 +390,13 @@ def renderizar_aba_admin():
     )
 
     if data_sel_str:
-        row_sel = df_display[df_display["data_aula"] == data_sel_str].iloc[0]
+        row_sel  = df_display_del[df_display_del["data_aula"] == data_sel_str].iloc[0]
         n_pres   = int(row_sel["total_presencas"])
         dia_nome = row_sel["dia_semana"]
         turmas_d = row_sel["turmas"]
         data_fmt = row_sel["data_fmt"]
         is_wknd  = row_sel["anomalia"] != ""
 
-        # Resumo do impacto
         fundo = "#FEF2F2" if not is_wknd else "#FFF7ED"
         borda = "#FCA5A5" if not is_wknd else "#FCD34D"
         st.markdown(
@@ -301,10 +411,8 @@ def renderizar_aba_admin():
             unsafe_allow_html=True,
         )
 
-        # Confirmação por digitação
         st.markdown(
-            f"Para confirmar, **digite a data exatamente** como aparece: "
-            f"`{data_fmt}`"
+            f"Para confirmar, **digite a data exatamente** como aparece: `{data_fmt}`"
         )
         confirmacao = st.text_input(
             "Confirmação:", placeholder=f"Ex: {data_fmt}", key="admin_confirma_data"
@@ -329,14 +437,12 @@ def renderizar_aba_admin():
                         f"✅ Data **{data_fmt}** excluída com sucesso! "
                         f"({n_f} registros de frequência e {n_d} diários removidos)"
                     )
-                    # Flush direto dos caches de BI e do listing
                     for fn in (bi_presencas_periodo, bi_frequencia_turmas,
-                                bi_resumo_studio, listar_datas_aulas_registradas):
+                               bi_resumo_studio, listar_datas_aulas_registradas):
                         try:
                             fn.clear()
                         except Exception:
                             pass
-                    # Sinaliza para a aba BI que houve exclusão
                     st.session_state["bi_cache_dirty"] = True
                     if "admin_confirma_data" in st.session_state:
                         del st.session_state["admin_confirma_data"]

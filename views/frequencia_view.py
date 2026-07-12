@@ -506,7 +506,7 @@ def tela_frequencia():
     nomes_abas = ["📱 Chamada Tablet", "📝 Diário", "🖨️ Dossiê", "🚨 Emergência",
                   "🔒 LGPD", "🏥 Atestado", label_niver]
     if eh_admin:
-        nomes_abas.append("🗑️ Admin")
+        nomes_abas.append("📅 Dias Regist./Anamnese")
 
     abas = st.tabs(nomes_abas)
 
