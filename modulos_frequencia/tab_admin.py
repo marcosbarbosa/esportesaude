@@ -82,23 +82,34 @@ def _renderizar_bloco_sem_frequencia(df_registradas: pd.DataFrame):
     hoje = datetime.date.today()
     periodo_dias = st.session_state.get("admin_periodo_sem_freq", 90)
 
-    col_titulo, col_periodo = st.columns([5, 2])
+    col_titulo, col_periodo, col_baixa = st.columns([4, 2, 2])
     col_titulo.markdown("### ⚠️ Dias úteis sem frequência lançada")
     periodo_dias = col_periodo.number_input(
         "Período (dias retroativos):",
         min_value=7, max_value=365, step=7, value=periodo_dias,
         key="admin_periodo_sem_freq",
     )
+    limite_baixa = col_baixa.number_input(
+        "Alerta: presenças ≤",
+        min_value=1, max_value=100, step=5, value=10,
+        key="admin_limite_baixa_freq",
+        help="Destaca dias registrados que tiveram poucas presenças",
+    )
 
     ini = hoje - datetime.timedelta(days=int(periodo_dias))
     fim = hoje
 
-    # Datas já registradas no banco
+    # Datas já registradas no banco — mapa data_str → total_presencas
     datas_registradas: set = set()
+    mapa_presencas: dict = {}
     if not df_registradas.empty:
-        datas_registradas = set(
-            pd.to_datetime(df_registradas["data_aula"]).dt.date.tolist()
-        )
+        for _, row in df_registradas.iterrows():
+            try:
+                d_parsed = pd.to_datetime(row["data_aula"]).date()
+                datas_registradas.add(d_parsed)
+                mapa_presencas[d_parsed] = int(row.get("total_presencas", 0))
+            except Exception:
+                pass
 
     # Dias sem aula do calendário institucional
     try:
@@ -123,51 +134,105 @@ def _renderizar_bloco_sem_frequencia(df_registradas: pd.DataFrame):
             ausentes.append(cursor)
         cursor += datetime.timedelta(days=1)
 
-    if not ausentes:
+    # Dias registrados mas com frequência muito baixa
+    baixa_freq = [
+        d for d, n in mapa_presencas.items()
+        if ini <= d <= fim
+        and d.weekday() < 5
+        and d not in feriados
+        and d not in dias_inst
+        and n <= int(limite_baixa)
+    ]
+
+    if not ausentes and not baixa_freq:
         st.success(
             f"✅ Nenhum dia útil sem frequência lançada nos últimos {int(periodo_dias)} dias. "
             "Todos os dias úteis têm chamada registrada!"
         )
         return
 
-    # Alerta de quantidade
-    st.markdown(
-        f"""<div style='background:#FEF2F2;border-left:4px solid #EF4444;
-        padding:12px 16px;border-radius:8px;margin-bottom:12px;'>
-        <strong style='color:#991B1B;'>⚠️ {len(ausentes)} dia(s) útil(is) sem frequência registrada</strong><br>
-        <span style='color:#7F1D1D;font-size:13px;'>
-        Os dias abaixo são dias úteis (seg–sex, excluindo feriados e dias sem aula cadastrados)
-        sem nenhuma chamada lançada no sistema. Clique em <b>→ Lançar chamada</b> para registrar.
-        </span></div>""",
-        unsafe_allow_html=True,
-    )
-
-    # Grade de dias ausentes com botão de acesso direto
-    cab1, cab2, cab3 = st.columns([2, 3, 3])
-    cab1.markdown("<small><b>Data</b></small>", unsafe_allow_html=True)
-    cab2.markdown("<small><b>Dia da semana</b></small>", unsafe_allow_html=True)
-    cab3.markdown("<small><b>Ação</b></small>", unsafe_allow_html=True)
-
-    for d in sorted(ausentes, reverse=True):
-        weekday_pt = _DIAS_PT.get(d.strftime("%A"), d.strftime("%A"))
-        c1, c2, c3 = st.columns([2, 3, 3])
-        c1.markdown(
-            f"<span style='color:#DC2626;font-weight:700;'>{d.strftime('%d/%m/%Y')}</span>",
+    # ── Dias sem nenhuma chamada ──────────────────────────────────────────────
+    if ausentes:
+        st.markdown(
+            f"""<div style='background:#FEF2F2;border-left:4px solid #EF4444;
+            padding:12px 16px;border-radius:8px;margin-bottom:12px;'>
+            <strong style='color:#991B1B;'>🚫 {len(ausentes)} dia(s) útil(is) sem frequência registrada</strong><br>
+            <span style='color:#7F1D1D;font-size:13px;'>
+            Dias úteis (seg–sex, excluindo feriados e dias sem aula) sem nenhuma chamada no sistema.
+            Clique em <b>→ Lançar chamada</b> para registrar.
+            </span></div>""",
             unsafe_allow_html=True,
         )
-        c2.markdown(
-            f"<span style='color:#6B7280;font-size:13px;'>📌 {weekday_pt}</span>",
+        cab1, cab2, cab3 = st.columns([2, 3, 3])
+        cab1.markdown("<small><b>Data</b></small>", unsafe_allow_html=True)
+        cab2.markdown("<small><b>Dia da semana</b></small>", unsafe_allow_html=True)
+        cab3.markdown("<small><b>Ação</b></small>", unsafe_allow_html=True)
+        for d in sorted(ausentes, reverse=True):
+            weekday_pt = _DIAS_PT.get(d.strftime("%A"), d.strftime("%A"))
+            c1, c2, c3 = st.columns([2, 3, 3])
+            c1.markdown(
+                f"<span style='color:#DC2626;font-weight:700;'>{d.strftime('%d/%m/%Y')}</span>",
+                unsafe_allow_html=True,
+            )
+            c2.markdown(
+                f"<span style='color:#6B7280;font-size:13px;'>📌 {weekday_pt}</span>",
+                unsafe_allow_html=True,
+            )
+            if c3.button(
+                "→ Lançar chamada",
+                key=f"admin_ir_freq_{d}",
+                help=f"Abrir tela de frequência para {d.strftime('%d/%m/%Y')}",
+                use_container_width=True,
+            ):
+                st.session_state["_freq_data_alvo"] = d
+                st.session_state["_freq_ir_tablet"] = True
+                st.session_state.menu_atual = "Frequência"
+                st.rerun()
+
+    # ── Dias com baixíssima frequência ───────────────────────────────────────
+    if baixa_freq:
+        st.markdown(
+            f"""<div style='background:#FFFBEB;border-left:4px solid #F59E0B;
+            padding:12px 16px;border-radius:8px;margin:12px 0;'>
+            <strong style='color:#92400E;'>⚠️ {len(baixa_freq)} dia(s) com frequência muito baixa
+            (≤ {int(limite_baixa)} presenças)</strong><br>
+            <span style='color:#78350F;font-size:13px;'>
+            Esses dias têm chamada registrada, mas com número de presenças abaixo do esperado.
+            Clique em <b>→ Ver chamada</b> para revisar.
+            </span></div>""",
             unsafe_allow_html=True,
         )
-        if c3.button(
-            "→ Lançar chamada",
-            key=f"admin_ir_freq_{d}",
-            help=f"Abrir tela de frequência para {d.strftime('%d/%m/%Y')}",
-            use_container_width=True,
-        ):
-            st.session_state["_freq_data_alvo"] = d
-            st.session_state.menu_atual = "Frequência"
-            st.rerun()
+        cab1, cab2, cab3, cab4 = st.columns([2, 3, 1, 3])
+        cab1.markdown("<small><b>Data</b></small>", unsafe_allow_html=True)
+        cab2.markdown("<small><b>Dia da semana</b></small>", unsafe_allow_html=True)
+        cab3.markdown("<small><b>Presenças</b></small>", unsafe_allow_html=True)
+        cab4.markdown("<small><b>Ação</b></small>", unsafe_allow_html=True)
+        for d in sorted(baixa_freq, reverse=True):
+            weekday_pt = _DIAS_PT.get(d.strftime("%A"), d.strftime("%A"))
+            n_pres = mapa_presencas.get(d, 0)
+            c1, c2, c3, c4 = st.columns([2, 3, 1, 3])
+            c1.markdown(
+                f"<span style='color:#D97706;font-weight:700;'>{d.strftime('%d/%m/%Y')}</span>",
+                unsafe_allow_html=True,
+            )
+            c2.markdown(
+                f"<span style='color:#6B7280;font-size:13px;'>📌 {weekday_pt}</span>",
+                unsafe_allow_html=True,
+            )
+            c3.markdown(
+                f"<span style='color:#92400E;font-weight:700;font-size:13px;'>{n_pres}</span>",
+                unsafe_allow_html=True,
+            )
+            if c4.button(
+                "→ Ver chamada",
+                key=f"admin_baixa_{d}",
+                help=f"Abrir frequência de {d.strftime('%d/%m/%Y')} ({n_pres} presenças)",
+                use_container_width=True,
+            ):
+                st.session_state["_freq_data_alvo"] = d
+                st.session_state["_freq_ir_tablet"] = True
+                st.session_state.menu_atual = "Frequência"
+                st.rerun()
 
     st.markdown("---")
 
@@ -330,6 +395,7 @@ def renderizar_aba_admin():
                     use_container_width=True,
                 ):
                     st.session_state["_freq_data_alvo"] = d_obj
+                    st.session_state["_freq_ir_tablet"] = True
                     st.session_state.menu_atual = "Frequência"
                     st.rerun()
             except Exception:

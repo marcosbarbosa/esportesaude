@@ -531,6 +531,22 @@ def tela_frequencia():
     )
     eh_admin = email_atual == ADMIN_MASTER
 
+    # ── Navegação direta: pré-renderiza tablet antes das abas ─────────────────
+    _ir_tablet = st.session_state.pop("_freq_ir_tablet", False)
+    if _ir_tablet:
+        st.markdown(
+            f"<div style='background:#EFF6FF;border-left:4px solid #3B82F6;"
+            f"padding:10px 16px;border-radius:8px;margin-bottom:8px;font-size:13px;'>"
+            f"📱 <b>Chamada de {data_aula.strftime('%d/%m/%Y')}</b> carregada — "
+            f"grade de presenças abaixo. Use as abas para outros recursos.</div>",
+            unsafe_allow_html=True,
+        )
+        renderizar_aba_terminal(
+            df_alunos, data_aula, presencas_turma_geral, bloqueio_ativo, chave_unica
+        )
+        st.markdown("---")
+        st.caption("⬇️ Recursos adicionais disponíveis nas abas:")
+
     nomes_abas = ["📱 Chamada Tablet", "📝 Diário", "🖨️ Dossiê", "🚨 Emergência",
                   "🔒 LGPD", "🏥 Atestado", label_niver]
     if eh_admin:
@@ -539,9 +555,12 @@ def tela_frequencia():
     abas = st.tabs(nomes_abas)
 
     with abas[0]:
-        renderizar_aba_terminal(
-            df_alunos, data_aula, presencas_turma_geral, bloqueio_ativo, chave_unica
-        )
+        if _ir_tablet:
+            st.caption("👆 Grade de chamada exibida acima — role para cima para ver.")
+        else:
+            renderizar_aba_terminal(
+                df_alunos, data_aula, presencas_turma_geral, bloqueio_ativo, chave_unica
+            )
 
     with abas[1]:
         renderizar_aba_diario(data_aula, turma_selecionada, chave_unica)
