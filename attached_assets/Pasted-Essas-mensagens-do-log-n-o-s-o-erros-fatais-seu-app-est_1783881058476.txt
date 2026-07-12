@@ -1,0 +1,89 @@
+Essas mensagens do log não são erros fatais; seu app está rodando, mas o sistema está te avisando de duas coisas que precisam entrar no “plano de manutenção”:
+
+1. **Biblioteca `google.generativeai` está oficialmente descontinuada.**  
+2. **`st.components.v1.html` será removido; você deve usar `st.iframe`.**  
+
+### 1. Deprecação de `google.generativeai`
+
+Log:
+
+> `All support for the google.generativeai package has ended. It will no longer be receiving updates or bug fixes. Please switch to the google.genai package as soon as possible.`
+
+Isso significa que o SDK antigo do Gemini foi congelado: não recebe correções nem novos recursos, e em algum momento pode deixar de funcionar corretamente. A recomendação oficial é migrar para o novo SDK **`google-genai`**. [ai.google](https://ai.google.dev/gemini-api/docs/libraries)
+
+Passos gerais de migração (no seu `database.py`, linha 61):
+
+- Instalar o novo pacote:
+  ```bash
+  pip install google-genai
+  ```
+ [ai.google](https://ai.google.dev/gemini-api/docs/libraries)
+
+- Trocar o import, por exemplo:
+
+  ```python
+  # antes
+  import google.generativeai as genai
+
+  # depois (padrão do novo SDK)
+  from google import genai
+  ```
+
+- Ajustar o código que cria cliente/modelo, seguindo o guia oficial do SDK:
+
+  ```python
+  # exemplo antigo (aproximado)
+  genai.configure(api_key=API_KEY)
+  model = genai.GenerativeModel("gemini-1.5-pro")
+  response = model.generate_content("...")
+
+  # exemplo novo (padrão do SDK google-genai)
+  from google import genai
+
+  client = genai.Client(api_key=API_KEY)
+  response = client.models.generate_content(
+      model="gemini-3.1-flash-lite",  # escolher o modelo adequado
+      contents="..."
+  )
+  ```
+ [github](https://github.com/GoogleCloudPlatform/generative-ai/blob/main/.gemini/styleguide.md)
+
+O detalhe exato vai depender de como você usa Gemini dentro do seu `database.py`, mas a direção é essa: **novo pacote, novo import, novo client**.
+
+### 2. Deprecação de `st.components.v1.html`
+
+Log:
+
+> `Please replace st.components.v1.html with st.iframe. st.components.v1.html will be removed after 2026-06-01.`
+
+Na versão nova do Streamlit, o caminho recomendado para embutir conteúdo (HTML externo, dashboards, etc.) é **`st.iframe`** em vez de `st.components.v1.html`. [note](https://note.com/toolstudio22/n/ncd0f354f001c?hl=en)
+
+Exemplo de ajuste:
+
+```python
+# antes
+import streamlit as st
+from streamlit import components
+
+components.v1.html(
+    "<iframe src='https://...' width='100%' height='600'></iframe>",
+    height=600,
+)
+
+# depois (mais simples)
+import streamlit as st
+
+st.iframe("https://...", height=600)
+```
+
+Ou, se você está só renderizando um URL remoto, nem precisa de HTML manual — `st.iframe` já faz isso direto. [note](https://note.com/toolstudio22/n/ncd0f354f001c?hl=en)
+
+### O que você precisa fazer agora
+
+- **Nada urgente para voltar a rodar**: seu app está funcionando, os logs são avisos.  
+- **Planejamento de manutenção**:
+  - Colocar na “lista de TODO”:
+    - Migrar `database.py` de `google.generativeai` → `google-genai` (ou `from google import genai`), seguindo o guia oficial. [github](https://github.com/GoogleCloudPlatform/generative-ai/blob/main/.gemini/styleguide.md)
+    - Procurar onde você usa `st.components.v1.html` (provavelmente em `main.py` ou algum módulo de componentes) e substituir por `st.iframe`, mantendo mesma funcionalidade. [note](https://note.com/toolstudio22/n/ncd0f354f001c?hl=en)
+
+Se você quiser, pode me mandar o trecho de `database.py` onde usa `google.generativeai` e o trecho onde aparece `st.components.v1.html`, que eu te devolvo versões já migradas linha a linha, prontas pra colar no Replit.
