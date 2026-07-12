@@ -58,12 +58,14 @@ def _resolver_turma_id(turma_input: str):
 # 🤖 INTEGRAÇÃO IA (GEMINI) E BLINDAGEM DE DADOS
 # ==============================================================================
 try:
-    import google.generativeai as genai
+    from google import genai as _genai
 
-    genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-    ia_model = genai.GenerativeModel("gemini-1.5-flash")
+    _ia_client = _genai.Client(api_key=st.secrets["GEMINI_API_KEY"])
+    _IA_MODEL = "gemini-1.5-flash"
     IA_ATIVA = True
 except Exception as e:
+    _ia_client = None
+    _IA_MODEL = None
     IA_ATIVA = False
     print(f"⚠️ IA Desativada: {e}")
 
@@ -71,12 +73,19 @@ except Exception as e:
 def revisar_texto_ia(texto):
     if not IA_ATIVA or not texto or len(texto.strip()) < 5:
         return None
-    prompt = f"Corrija a gramática, ortografia e acentuação do texto. Mantenha o sentido original.\nTexto: '{texto}'\nRetorne APENAS o texto corrigido."
+    prompt = (
+        f"Corrija a gramática, ortografia e acentuação do texto. "
+        f"Mantenha o sentido original.\n"
+        f"Texto: '{texto}'\nRetorne APENAS o texto corrigido."
+    )
     try:
-        response = ia_model.generate_content(prompt)
+        response = _ia_client.models.generate_content(
+            model=_IA_MODEL,
+            contents=prompt,
+        )
         sugestao = response.text.strip()
         return sugestao if sugestao.lower() != texto.lower() else None
-    except:
+    except Exception:
         return None
 
 

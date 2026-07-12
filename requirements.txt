@@ -10,7 +10,7 @@ requests
 httpx
 
 # --- Inteligência Artificial ---
-google-generativeai
+google-genai
 
 # --- Geração de Documentos (Excel, Word, PDF) ---
 xlsxwriter
