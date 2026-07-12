@@ -18,7 +18,6 @@ from database import (
     ADMIN_MASTER,
     get_config_valor,
     set_config_valor,
-    get_dias_sem_aula,
 )
 
 CHAVE_DIAS_VALIDADE_ANAMNESE = "config_dias_validade_anamnese"
@@ -75,166 +74,6 @@ def _classificar_anomalia(dt: datetime.date, feriados: dict) -> str:
     if nome_fer:
         alertas.append(f"Feriado: {nome_fer}")
     return " + ".join(alertas) if alertas else ""
-
-
-# ── Bloco: dias úteis sem frequência lançada ──────────────────────────────────
-def _renderizar_bloco_sem_frequencia(df_registradas: pd.DataFrame):
-    hoje = datetime.date.today()
-    periodo_dias = st.session_state.get("admin_periodo_sem_freq", 90)
-
-    col_titulo, col_periodo, col_baixa = st.columns([4, 2, 2])
-    col_titulo.markdown("### ⚠️ Dias úteis sem frequência lançada")
-    periodo_dias = col_periodo.number_input(
-        "Período (dias retroativos):",
-        min_value=7, max_value=365, step=7, value=periodo_dias,
-        key="admin_periodo_sem_freq",
-    )
-    limite_baixa = col_baixa.number_input(
-        "Alerta: presenças ≤",
-        min_value=1, max_value=100, step=5, value=10,
-        key="admin_limite_baixa_freq",
-        help="Destaca dias registrados que tiveram poucas presenças",
-    )
-
-    ini = hoje - datetime.timedelta(days=int(periodo_dias))
-    fim = hoje
-
-    # Datas já registradas no banco — mapa data_str → total_presencas
-    datas_registradas: set = set()
-    mapa_presencas: dict = {}
-    if not df_registradas.empty:
-        for _, row in df_registradas.iterrows():
-            try:
-                d_parsed = pd.to_datetime(row["data_aula"]).date()
-                datas_registradas.add(d_parsed)
-                mapa_presencas[d_parsed] = int(row.get("total_presencas", 0))
-            except Exception:
-                pass
-
-    # Dias sem aula do calendário institucional
-    try:
-        dias_inst = get_dias_sem_aula(str(ini), str(fim))
-    except Exception:
-        dias_inst = set()
-
-    # Feriados SP/Nacional
-    anos = {ini.year, fim.year}
-    feriados = _feriados_sp(anos)
-
-    # Dias úteis no período que NÃO foram registrados e NÃO são dias sem aula
-    ausentes = []
-    cursor = ini
-    while cursor <= fim:
-        if (
-            cursor.weekday() < 5                   # seg–sex
-            and cursor not in feriados             # não é feriado
-            and cursor not in dias_inst            # não é dia sem aula cadastrado
-            and cursor not in datas_registradas    # chamada não lançada
-        ):
-            ausentes.append(cursor)
-        cursor += datetime.timedelta(days=1)
-
-    # Dias registrados mas com frequência muito baixa
-    baixa_freq = [
-        d for d, n in mapa_presencas.items()
-        if ini <= d <= fim
-        and d.weekday() < 5
-        and d not in feriados
-        and d not in dias_inst
-        and n <= int(limite_baixa)
-    ]
-
-    if not ausentes and not baixa_freq:
-        st.success(
-            f"✅ Nenhum dia útil sem frequência lançada nos últimos {int(periodo_dias)} dias. "
-            "Todos os dias úteis têm chamada registrada!"
-        )
-        return
-
-    # ── Dias sem nenhuma chamada ──────────────────────────────────────────────
-    if ausentes:
-        st.markdown(
-            f"""<div style='background:#FEF2F2;border-left:4px solid #EF4444;
-            padding:12px 16px;border-radius:8px;margin-bottom:12px;'>
-            <strong style='color:#991B1B;'>🚫 {len(ausentes)} dia(s) útil(is) sem frequência registrada</strong><br>
-            <span style='color:#7F1D1D;font-size:13px;'>
-            Dias úteis (seg–sex, excluindo feriados e dias sem aula) sem nenhuma chamada no sistema.
-            Clique em <b>→ Lançar chamada</b> para registrar.
-            </span></div>""",
-            unsafe_allow_html=True,
-        )
-        cab1, cab2, cab3 = st.columns([2, 3, 3])
-        cab1.markdown("<small><b>Data</b></small>", unsafe_allow_html=True)
-        cab2.markdown("<small><b>Dia da semana</b></small>", unsafe_allow_html=True)
-        cab3.markdown("<small><b>Ação</b></small>", unsafe_allow_html=True)
-        for d in sorted(ausentes, reverse=True):
-            weekday_pt = _DIAS_PT.get(d.strftime("%A"), d.strftime("%A"))
-            c1, c2, c3 = st.columns([2, 3, 3])
-            c1.markdown(
-                f"<span style='color:#DC2626;font-weight:700;'>{d.strftime('%d/%m/%Y')}</span>",
-                unsafe_allow_html=True,
-            )
-            c2.markdown(
-                f"<span style='color:#6B7280;font-size:13px;'>📌 {weekday_pt}</span>",
-                unsafe_allow_html=True,
-            )
-            if c3.button(
-                "→ Lançar chamada",
-                key=f"admin_ir_freq_{d}",
-                help=f"Abrir tela de frequência para {d.strftime('%d/%m/%Y')}",
-                use_container_width=True,
-            ):
-                st.session_state["_freq_data_alvo"] = d
-                st.session_state["_freq_ir_tablet"] = True
-                st.session_state.menu_atual = "Frequência"
-                st.rerun()
-
-    # ── Dias com baixíssima frequência ───────────────────────────────────────
-    if baixa_freq:
-        st.markdown(
-            f"""<div style='background:#FFFBEB;border-left:4px solid #F59E0B;
-            padding:12px 16px;border-radius:8px;margin:12px 0;'>
-            <strong style='color:#92400E;'>⚠️ {len(baixa_freq)} dia(s) com frequência muito baixa
-            (≤ {int(limite_baixa)} presenças)</strong><br>
-            <span style='color:#78350F;font-size:13px;'>
-            Esses dias têm chamada registrada, mas com número de presenças abaixo do esperado.
-            Clique em <b>→ Ver chamada</b> para revisar.
-            </span></div>""",
-            unsafe_allow_html=True,
-        )
-        cab1, cab2, cab3, cab4 = st.columns([2, 3, 1, 3])
-        cab1.markdown("<small><b>Data</b></small>", unsafe_allow_html=True)
-        cab2.markdown("<small><b>Dia da semana</b></small>", unsafe_allow_html=True)
-        cab3.markdown("<small><b>Presenças</b></small>", unsafe_allow_html=True)
-        cab4.markdown("<small><b>Ação</b></small>", unsafe_allow_html=True)
-        for d in sorted(baixa_freq, reverse=True):
-            weekday_pt = _DIAS_PT.get(d.strftime("%A"), d.strftime("%A"))
-            n_pres = mapa_presencas.get(d, 0)
-            c1, c2, c3, c4 = st.columns([2, 3, 1, 3])
-            c1.markdown(
-                f"<span style='color:#D97706;font-weight:700;'>{d.strftime('%d/%m/%Y')}</span>",
-                unsafe_allow_html=True,
-            )
-            c2.markdown(
-                f"<span style='color:#6B7280;font-size:13px;'>📌 {weekday_pt}</span>",
-                unsafe_allow_html=True,
-            )
-            c3.markdown(
-                f"<span style='color:#92400E;font-weight:700;font-size:13px;'>{n_pres}</span>",
-                unsafe_allow_html=True,
-            )
-            if c4.button(
-                "→ Ver chamada",
-                key=f"admin_baixa_{d}",
-                help=f"Abrir frequência de {d.strftime('%d/%m/%Y')} ({n_pres} presenças)",
-                use_container_width=True,
-            ):
-                st.session_state["_freq_data_alvo"] = d
-                st.session_state["_freq_ir_tablet"] = True
-                st.session_state.menu_atual = "Frequência"
-                st.rerun()
-
-    st.markdown("---")
 
 
 # ── Bloco: busca fonética ──────────────────────────────────────────────────────
@@ -329,21 +168,41 @@ def renderizar_aba_admin():
         st.error("🔒 Acesso restrito — apenas o Administrador Mestre pode usar este painel.")
         return
 
-    # Carrega todas as datas registradas (usada em múltiplos blocos)
     with st.spinner("Carregando datas..."):
         df_datas = listar_datas_aulas_registradas()
 
-    # ── 1. Dias úteis SEM frequência lançada ─────────────────────────────────
-    _renderizar_bloco_sem_frequencia(df_datas)
-
-    # ── 2. Dias de Aula Registrados ───────────────────────────────────────────
+    # ── Dias de Aula Registrados ───────────────────────────────────────────────
     st.markdown("### 📋 Dias de Aula Registrados")
+
+    hoje = datetime.date.today()
+
+    # Filtros: período e alerta de baixa frequência
+    col_de, col_ate, col_alerta = st.columns([2, 2, 2])
+    data_ini = col_de.date_input(
+        "📅 De:",
+        value=hoje - datetime.timedelta(days=30),
+        format="DD/MM/YYYY",
+        key="admin_data_ini",
+    )
+    data_fim = col_ate.date_input(
+        "📅 Até:",
+        value=hoje,
+        format="DD/MM/YYYY",
+        key="admin_data_fim",
+    )
+    limite_baixa = col_alerta.number_input(
+        "⚠️ Alerta: presenças ≤",
+        min_value=1, max_value=200, step=5, value=10,
+        key="admin_limite_baixa_freq",
+        help="Linhas com presenças abaixo desse valor são destacadas em amarelo",
+    )
 
     if df_datas.empty:
         st.info("Nenhum dia de aula registrado no banco de dados.")
     else:
         df_display = df_datas.copy()
         dts_parsed = pd.to_datetime(df_display["data_aula"])
+        df_display["data_date"]  = dts_parsed.dt.date
         df_display["data_fmt"]   = dts_parsed.dt.strftime("%d/%m/%Y")
         df_display["dia_semana"] = dts_parsed.dt.day_name().map(_DIAS_PT)
         df_display["turmas"]     = df_display["turmas_diario"].apply(
@@ -355,51 +214,83 @@ def renderizar_aba_admin():
             lambda dt: _classificar_anomalia(dt.date(), feriados) if pd.notna(dt) else ""
         )
 
-        # Resumo de alertas
-        idx_anomalos = df_display[df_display["anomalia"] != ""].index.tolist()
-        if idx_anomalos:
-            n_fds = (df_display["anomalia"].str.contains("Fim de semana", na=False)).sum()
-            n_fer = (df_display["anomalia"].str.contains("Feriado", na=False)).sum()
+        # Aplica filtro de período
+        df_filtrado = df_display[
+            (df_display["data_date"] >= data_ini) &
+            (df_display["data_date"] <= data_fim)
+        ].sort_values("data_aula", ascending=False)
+
+        n_total = len(df_filtrado)
+        n_baixa = (df_filtrado["total_presencas"] <= int(limite_baixa)).sum()
+
+        # Resumo rápido
+        partes_info = [f"**{n_total}** dia(s) no período"]
+        if n_baixa:
+            partes_info.append(f"**{n_baixa}** com ≤ {int(limite_baixa)} presenças ⚠️")
+        st.caption(" · ".join(partes_info))
+
+        # Aviso de anomalias (fins de semana/feriados com aula)
+        anomalos = df_filtrado[df_filtrado["anomalia"] != ""]
+        if not anomalos.empty:
+            n_fds = anomalos["anomalia"].str.contains("Fim de semana", na=False).sum()
+            n_fer = anomalos["anomalia"].str.contains("Feriado", na=False).sum()
             partes = []
             if n_fds: partes.append(f"**{n_fds}** fim(ns) de semana")
             if n_fer: partes.append(f"**{n_fer}** feriado(s)")
-            st.warning(
-                f"⚠️ Encontrado(s) {' e '.join(partes)} com registros de aula — "
-                "verifique se foram lançamentos incorretos."
-            )
+            st.warning(f"⚠️ {' e '.join(partes)} com registros de aula no período — verifique.")
 
-        # Grade com botão de acesso rápido por linha
-        cab_a, cab_b, cab_c, cab_d, cab_e, cab_f = st.columns([2, 2, 1, 3, 2, 2])
-        for col, txt in zip(
-            [cab_a, cab_b, cab_c, cab_d, cab_e, cab_f],
-            ["Data", "Dia da Semana", "Presenças", "Turmas (Diário)", "Alerta", ""],
-        ):
-            col.markdown(f"<small><b>{txt}</b></small>", unsafe_allow_html=True)
+        if df_filtrado.empty:
+            st.info("Nenhum registro no período selecionado.")
+        else:
+            # Cabeçalho da grade
+            cab_a, cab_b, cab_c, cab_d, cab_e = st.columns([2, 2, 1, 4, 2])
+            for col, txt in zip(
+                [cab_a, cab_b, cab_c, cab_d, cab_e],
+                ["Data", "Dia da Semana", "Presenças", "Turmas (Diário)", ""],
+            ):
+                col.markdown(f"<small><b>{txt}</b></small>", unsafe_allow_html=True)
 
-        for _, row in df_display.sort_values("data_aula", ascending=False).iterrows():
-            c1, c2, c3, c4, c5, c6 = st.columns([2, 2, 1, 3, 2, 2])
-            c1.markdown(f"**{row['data_fmt']}**")
-            c2.markdown(f"<small>{row['dia_semana']}</small>", unsafe_allow_html=True)
-            c3.markdown(f"<small>{int(row['total_presencas'])}</small>", unsafe_allow_html=True)
-            c4.markdown(f"<small>{row['turmas']}</small>", unsafe_allow_html=True)
-            c5.markdown(
-                f"<small style='color:#D97706;'>{row['anomalia']}</small>" if row["anomalia"] else "<small>—</small>",
-                unsafe_allow_html=True,
-            )
-            try:
-                d_obj = datetime.date.fromisoformat(str(row["data_aula"]))
-                if c6.button(
-                    "→ Ver chamada",
-                    key=f"admin_ver_freq_{row['data_aula']}",
-                    help=f"Abrir frequência de {row['data_fmt']}",
-                    use_container_width=True,
-                ):
-                    st.session_state["_freq_data_alvo"] = d_obj
-                    st.session_state["_freq_ir_tablet"] = True
-                    st.session_state.menu_atual = "Frequência"
-                    st.rerun()
-            except Exception:
-                pass
+            for _, row in df_filtrado.iterrows():
+                n_pres      = int(row["total_presencas"])
+                baixa       = n_pres <= int(limite_baixa)
+                cor_data    = "#D97706" if baixa else "#1E40AF"
+                cor_pres    = "#92400E" if baixa else "#166534"
+                bg_pres     = "#FEF3C7" if baixa else "transparent"
+
+                c1, c2, c3, c4, c5 = st.columns([2, 2, 1, 4, 2])
+                c1.markdown(
+                    f"<span style='color:{cor_data};font-weight:700;'>{row['data_fmt']}"
+                    f"{'  ⚠️' if row['anomalia'] else ''}</span>",
+                    unsafe_allow_html=True,
+                )
+                c2.markdown(
+                    f"<small style='color:#6B7280;'>{row['dia_semana']}</small>",
+                    unsafe_allow_html=True,
+                )
+                c3.markdown(
+                    f"<span style='background:{bg_pres};color:{cor_pres};"
+                    f"font-weight:700;font-size:13px;padding:2px 6px;"
+                    f"border-radius:4px;'>{n_pres}</span>",
+                    unsafe_allow_html=True,
+                )
+                c4.markdown(
+                    f"<small style='color:#374151;'>{row['turmas']}</small>",
+                    unsafe_allow_html=True,
+                )
+                try:
+                    d_obj = datetime.date.fromisoformat(str(row["data_aula"]))
+                    if c5.button(
+                        "→ Ver chamada",
+                        key=f"admin_ver_freq_{row['data_aula']}",
+                        help=f"Abrir frequência de {row['data_fmt']} ({n_pres} presenças)",
+                        use_container_width=True,
+                    ):
+                        st.session_state["_freq_data_alvo"] = d_obj
+                        st.session_state["_freq_ir_tablet"] = True
+                        st.session_state.menu_atual = "Frequência"
+                        st.rerun()
+                except Exception:
+                    pass
 
     st.markdown("---")
 

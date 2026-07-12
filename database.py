@@ -1328,9 +1328,10 @@ def listar_datas_aulas_registradas() -> pd.DataFrame:
         if not datas:
             return pd.DataFrame(columns=["data_aula", "total_presencas", "turmas_diario"])
 
-        # Pré-calcula contagens usando value_counts (muito mais rápido que loop ==)
+        # Pré-calcula contagens — apenas registros com status PRESENTE
+        df_f_pres = df_f[df_f["status"] == "PRESENTE"] if not df_f.empty else df_f
         contagem_freq = (
-            df_f["data_aula"].value_counts() if not df_f.empty
+            df_f_pres["data_aula"].value_counts() if not df_f_pres.empty
             else pd.Series(dtype=int)
         )
 
