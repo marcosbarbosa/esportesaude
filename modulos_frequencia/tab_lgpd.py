@@ -237,4 +237,4 @@ def _gerar_pdf_lgpd(df: pd.DataFrame, ult_pres_map: dict, total: int):
       w.document.close();
     </script>
     """
-    st.components.v1.html(js, height=0)
+    st.html(js)

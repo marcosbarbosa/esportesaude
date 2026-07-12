@@ -226,4 +226,4 @@ def _gerar_pdf_atestado(df: pd.DataFrame, ult_pres_map: dict, total: int):
       var html = atob('{b64}');
       w.document.open(); w.document.write(html); w.document.close();
     </script>"""
-    st.components.v1.html(js, height=0)
+    st.html(js)

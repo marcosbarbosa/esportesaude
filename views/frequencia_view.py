@@ -261,6 +261,18 @@ def tela_frequencia():
         if not turmas_selecionadas:
             turmas_selecionadas = [turmas_combo[0]]
 
+        # ── Checkbox: incluir alunos de outras turmas ──────────────────────
+        _incluir_outras = False
+        if len(turmas_combo) > 1 and dia_semana not in [5, 6]:
+            _incluir_outras = st.checkbox(
+                "➕ Incluir alunos de outras turmas na chamada",
+                key=f"chk_outras_{data_aula}",
+                help=(
+                    "Mescla alunos das demais turmas na grade — "
+                    "útil para registrar reposições sem mudar a turma principal"
+                ),
+            )
+
         turma_selecionada = turmas_selecionadas[0]
 
         chave_unica = f"{data_aula}_{'_'.join(turmas_selecionadas)}"
@@ -486,6 +498,22 @@ def tela_frequencia():
             st.caption("⏳ Digite pelo menos 3 letras para ativar a Busca Global...")
 
         df_alunos = obter_alunos_por_turmas(turmas_selecionadas)
+
+        # Mescla alunos de outras turmas quando checkbox ativo
+        if _incluir_outras and len(turmas_combo) > 1:
+            _turmas_outras = [t for t in turmas_combo if t not in turmas_selecionadas]
+            if _turmas_outras:
+                df_extras = obter_alunos_por_turmas(_turmas_outras)
+                if not df_extras.empty:
+                    df_alunos = (
+                        pd.concat([df_alunos, df_extras])
+                        .drop_duplicates(subset=["id"])
+                        .reset_index(drop=True)
+                    )
+                    st.info(
+                        f"➕ {len(df_extras)} aluno(s) de outras turmas incluídos na grade.",
+                        icon="ℹ️",
+                    )
 
     if not df_alunos.empty and "nome" in df_alunos.columns:
         df_alunos = df_alunos.sort_values(by="nome").reset_index(drop=True)

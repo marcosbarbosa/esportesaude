@@ -1,0 +1,33 @@
+instance:s6rfs
+Jul 12, 2:28 PM - 3:29 PM
+GMT-3
+==> Running 'streamlit run main.py --server.address=0.0.0.0 --server.port=$PORT'
+2026-07-12 17:39:06.253 Uvicorn server started on 0.0.0.0:10000
+  You can now view your Streamlit app in your browser.
+  Local URL: [http://localhost:10000](http://localhost:10000/)
+  Network URL: [http://10.28.165.17:10000](http://10.28.165.17:10000/)
+  External URL: [http://74.220.49.248:10000](http://74.220.49.248:10000/)
+/opt/render/project/src/database.py:61: FutureWarning: 
+All support for the `google.generativeai` package has ended. It will no longer be receiving 
+updates or bug fixes. Please switch to the `google.genai` package as soon as possible.
+See README for more details:
+[https://github.com/google-gemini/deprecated-generative-ai-python/blob/main/README.md](https://github.com/google-gemini/deprecated-generative-ai-python/blob/main/README.md)
+  import google.generativeai as genai
+2026-07-12 18:28:00.135 Please replace `st.components.v1.html` with `st.iframe`.
+`st.components.v1.html` will be removed after 2026-06-01.
+2026-07-12 18:28:19.518 Please replace `st.components.v1.html` with `st.iframe`.
+`st.components.v1.html` will be removed after 2026-06-01.
+==> Running 'streamlit run main.py --server.address=0.0.0.0 --server.port=$PORT'
+2026-07-12 18:28:28.265 Uvicorn server started on 0.0.0.0:10000
+  You can now view your Streamlit app in your browser.
+  Local URL: [http://localhost:10000](http://localhost:10000/)
+  Network URL: [http://10.28.165.17:10000](http://10.28.165.17:10000/)
+  External URL: [http://74.220.49.248:10000](http://74.220.49.248:10000/)
+/opt/render/project/src/database.py:61: FutureWarning: 
+All support for the `google.generativeai` package has ended. It will no longer be receiving 
+updates or bug fixes. Please switch to the `google.genai` package as soon as possible.
+See README for more details:
+[https://github.com/google-gemini/deprecated-generative-ai-python/blob/main/README.md](https://github.com/google-gemini/deprecated-generative-ai-python/blob/main/README.md)
+  import google.generativeai as genai
+2026-07-12 18:28:46.593 Please replace `st.components.v1.html` with `st.iframe`.
+`st.components.v1.html` will be removed after 2026-06-01.
