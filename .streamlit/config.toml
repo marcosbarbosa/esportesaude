@@ -18,5 +18,5 @@ runOnSave = false
 gatherUsageStats = false
 
 [client]
-toolbarMode = "viewer"
+toolbarMode = "minimal"
 showErrorDetails = false
