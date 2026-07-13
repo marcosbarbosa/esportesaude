@@ -1296,15 +1296,19 @@ def listar_datas_aulas_registradas() -> pd.DataFrame:
 
         # ── 1. Todos os registros de frequência (data_aula + status) ──────────────────
         # Supabase/PostgREST limita respostas a 1000 linhas por request.
-        # .limit(N>1000) é silenciosamente cortado. Usamos paginação real com
-        # PAGE=1000 + .order("id") (obrigatório para .range() funcionar).
+        # MAX_PAGES=500 evita loop infinito caso RLS ou qualquer política devolva
+        # sempre exatamente 1000 linhas (condição de parada nunca seria atingida).
+        # Filtramos pelos últimos 5 anos para não buscar dados arqueológicos.
+        _CUTOFF = (datetime.date.today() - datetime.timedelta(days=5 * 365)).isoformat()
         freq_pages: list = []
         _offset = 0
         _PAGE = 1000
-        while True:
+        _MAX = 500
+        for _ in range(_MAX):
             _res = (
                 supabase.from_("frequencia")
                 .select("data_aula, status")
+                .gte("data_aula", _CUTOFF)
                 .order("id")
                 .range(_offset, _offset + _PAGE - 1)
                 .execute()
@@ -1318,10 +1322,11 @@ def listar_datas_aulas_registradas() -> pd.DataFrame:
         # ── 2. Diário de aulas ─────────────────────────────────────────────────────────
         diario_pages: list = []
         _offset = 0
-        while True:
+        for _ in range(_MAX):
             _res = (
                 supabase.from_("diario_aulas")
                 .select("data_aula, turma")
+                .gte("data_aula", _CUTOFF)
                 .order("id")
                 .range(_offset, _offset + _PAGE - 1)
                 .execute()
@@ -1388,8 +1393,9 @@ def contar_presencas_periodo_direto(data_ini, data_fim) -> dict:
         _RE = r"^\d{4}-\d{2}-\d{2}$"
         todos = []
         offset = 0
-        PAGE = 1000  # Supabase/PostgREST devolve no máximo 1000 linhas por request
-        while True:
+        PAGE = 1000   # Supabase/PostgREST devolve no máximo 1000 linhas por request
+        MAX_PAG = 500  # Guarda contra loop infinito (cobre até 500 000 registros)
+        for _ in range(MAX_PAG):
             res = (
                 supabase.from_("frequencia")
                 .select("data_aula")

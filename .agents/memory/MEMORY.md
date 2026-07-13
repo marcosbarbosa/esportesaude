@@ -5,3 +5,4 @@
 - [Email BI multi-schedule](email-bi-multischedule.md) — sistema completo já implementado; só falta criar tabela email_bi_schedules no Supabase (SQL exibido automaticamente na tela Email BI).
 - [Agrupamento de turmas por horário](turmas-mesmo-horario.md) — prefira a coluna `horario` da tabela turmas a regex sobre o nome para mesclar turmas simultâneas.
 - [Canvas iframe WebSocket protocol](canvas-iframe-protocol.md) — após toda atualização, sempre: restart_workflow + applyCanvasActions com URL cache-bustada; se persistir, usuário refresca o browser.
+- [Supabase pagination rules](supabase-pagination.md) — PAGE=1000 + .order() + for range(MAX) obrigatório; while True causa loop infinito com RLS.
