@@ -563,7 +563,7 @@ def tela_frequencia():
             )
 
     with abas[1]:
-        renderizar_aba_diario(data_aula, turma_selecionada, chave_unica)
+        renderizar_aba_diario(data_aula, turmas_combo, chave_unica)
 
     with abas[2]:
         renderizar_aba_dossie(df_alunos, data_aula, turma_selecionada, chave_unica)
