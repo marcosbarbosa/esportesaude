@@ -8,6 +8,7 @@ from dateutil.easter import easter
 
 from database import (
     listar_datas_aulas_registradas,
+    contar_presencas_periodo_direto,
     excluir_dia_aula_completo,
     bi_presencas_periodo,
     bi_frequencia_turmas,
@@ -176,7 +177,7 @@ def renderizar_aba_admin():
 
     hoje = datetime.date.today()
 
-    # Filtros: período e alerta de baixa frequência
+    # ── Filtros ────────────────────────────────────────────────────────────────
     col_de, col_ate, col_alerta = st.columns([2, 2, 2])
     data_ini = col_de.date_input(
         "📅 De:",
@@ -197,10 +198,72 @@ def renderizar_aba_admin():
         help="Linhas com presenças abaixo desse valor são destacadas em amarelo",
     )
 
-    if df_datas.empty:
+    # ── Botão de recálculo em lote ─────────────────────────────────────────────
+    _KEY_FRESCOS = "admin_presencas_frescas"
+    _KEY_FRESCOS_PERIODO = "admin_presencas_frescas_periodo"
+
+    col_btn, col_status = st.columns([2, 6])
+    if col_btn.button(
+        "🔄 Recalcular Presenças",
+        key="admin_btn_recalcular",
+        use_container_width=True,
+        help="Consulta o banco diretamente (ignora cache) e atualiza a coluna Presenças",
+    ):
+        with st.spinner(f"Consultando banco para {data_ini.strftime('%d/%m/%Y')} → {data_fim.strftime('%d/%m/%Y')}..."):
+            frescos = contar_presencas_periodo_direto(data_ini, data_fim)
+        if "_erro" in frescos:
+            col_status.error(f"❌ Erro na consulta: {frescos['_erro']}")
+        else:
+            st.session_state[_KEY_FRESCOS] = frescos
+            st.session_state[_KEY_FRESCOS_PERIODO] = (str(data_ini), str(data_fim))
+            # Invalida o cache para que próxima carga já traga dados corretos
+            try:
+                listar_datas_aulas_registradas.clear()
+            except Exception:
+                pass
+            n_dias = len(frescos)
+            total_pres = sum(frescos.values())
+            col_status.success(
+                f"✅ Recálculo concluído — {n_dias} dia(s) com PRESENTE no período · "
+                f"{total_pres} presenças totais"
+            )
+
+    # Exibe nota quando há contagens frescas disponíveis para o período atual
+    frescos_periodo = st.session_state.get(_KEY_FRESCOS_PERIODO)
+    frescos_dict    = st.session_state.get(_KEY_FRESCOS, {})
+    usando_frescos  = (
+        frescos_periodo == (str(data_ini), str(data_fim))
+        and bool(frescos_dict)
+    )
+    if usando_frescos:
+        st.caption("🟢 Presenças exibidas com dados **frescos do banco** (recálculo manual).")
+
+    if df_datas.empty and not frescos_dict:
         st.info("Nenhum dia de aula registrado no banco de dados.")
     else:
-        df_display = df_datas.copy()
+        df_display = df_datas.copy() if not df_datas.empty else pd.DataFrame(
+            columns=["data_aula", "total_presencas", "turmas_diario"]
+        )
+
+        # Se temos contagens frescas para este período, injeta no DataFrame
+        if usando_frescos:
+            # Garante que todas as datas do período com PRESENTE aparecem
+            datas_frescas = set(frescos_dict.keys())
+            datas_df = set(df_display["data_aula"].astype(str).str[:10].tolist()) if not df_display.empty else set()
+            faltando = datas_frescas - datas_df
+            for d_falt in faltando:
+                df_display = pd.concat([
+                    df_display,
+                    pd.DataFrame([{"data_aula": d_falt, "total_presencas": frescos_dict[d_falt], "turmas_diario": []}])
+                ], ignore_index=True)
+
+            # Sobrescreve total_presencas com os valores frescos
+            df_display["data_aula_str"] = df_display["data_aula"].astype(str).str[:10]
+            df_display["total_presencas"] = df_display["data_aula_str"].map(
+                lambda d: frescos_dict.get(d, df_display.loc[df_display["data_aula_str"] == d, "total_presencas"].iloc[0]
+                          if (df_display["data_aula_str"] == d).any() else 0)
+            )
+
         dts_parsed = pd.to_datetime(df_display["data_aula"])
         df_display["data_date"]  = dts_parsed.dt.date
         df_display["data_fmt"]   = dts_parsed.dt.strftime("%d/%m/%Y")
@@ -223,13 +286,11 @@ def renderizar_aba_admin():
         n_total = len(df_filtrado)
         n_baixa = (df_filtrado["total_presencas"] <= int(limite_baixa)).sum()
 
-        # Resumo rápido
         partes_info = [f"**{n_total}** dia(s) no período"]
         if n_baixa:
             partes_info.append(f"**{n_baixa}** com ≤ {int(limite_baixa)} presenças ⚠️")
         st.caption(" · ".join(partes_info))
 
-        # Aviso de anomalias (fins de semana/feriados com aula)
         anomalos = df_filtrado[df_filtrado["anomalia"] != ""]
         if not anomalos.empty:
             n_fds = anomalos["anomalia"].str.contains("Fim de semana", na=False).sum()
@@ -242,7 +303,6 @@ def renderizar_aba_admin():
         if df_filtrado.empty:
             st.info("Nenhum registro no período selecionado.")
         else:
-            # Cabeçalho da grade
             cab_a, cab_b, cab_c, cab_d, cab_e = st.columns([2, 2, 1, 4, 2])
             for col, txt in zip(
                 [cab_a, cab_b, cab_c, cab_d, cab_e],
@@ -251,11 +311,11 @@ def renderizar_aba_admin():
                 col.markdown(f"<small><b>{txt}</b></small>", unsafe_allow_html=True)
 
             for _, row in df_filtrado.iterrows():
-                n_pres      = int(row["total_presencas"])
-                baixa       = n_pres <= int(limite_baixa)
-                cor_data    = "#D97706" if baixa else "#1E40AF"
-                cor_pres    = "#92400E" if baixa else "#166534"
-                bg_pres     = "#FEF3C7" if baixa else "transparent"
+                n_pres   = int(row["total_presencas"])
+                baixa    = n_pres <= int(limite_baixa)
+                cor_data = "#D97706" if baixa else "#1E40AF"
+                cor_pres = "#92400E" if baixa else "#166534"
+                bg_pres  = "#FEF3C7" if baixa else "transparent"
 
                 c1, c2, c3, c4, c5 = st.columns([2, 2, 1, 4, 2])
                 c1.markdown(
@@ -278,7 +338,7 @@ def renderizar_aba_admin():
                     unsafe_allow_html=True,
                 )
                 try:
-                    d_obj = datetime.date.fromisoformat(str(row["data_aula"]))
+                    d_obj = datetime.date.fromisoformat(str(row["data_aula"])[:10])
                     if c5.button(
                         "→ Ver chamada",
                         key=f"admin_ver_freq_{row['data_aula']}",

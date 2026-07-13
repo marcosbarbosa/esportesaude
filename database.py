@@ -1291,43 +1291,21 @@ def listar_datas_aulas_registradas() -> pd.DataFrame:
     try:
         _RE_DATA = r"^\d{4}-\d{2}-\d{2}$"
 
-        # ── 1. Busca APENAS registros PRESENTE (filtro server-side, evita corte por limit) ──
-        # Usa paginação para suportar qualquer volume de dados.
-        pres_pages = []
-        offset = 0
-        PAGE = 5000
-        while True:
-            res = (
-                supabase.from_("frequencia")
-                .select("data_aula")
-                .eq("status", "PRESENTE")
-                .range(offset, offset + PAGE - 1)
-                .execute()
-            )
-            if res.data:
-                pres_pages.extend(res.data)
-            if not res.data or len(res.data) < PAGE:
-                break
-            offset += PAGE
+        def _norm(raw) -> str:
+            return str(raw)[:10] if raw is not None else ""
 
-        # ── 2. Busca todas as datas (qualquer status) para montar o conjunto de datas ──
-        # Também paginado para integridade total.
-        all_freq_pages = []
-        offset = 0
-        while True:
-            res = (
-                supabase.from_("frequencia")
-                .select("data_aula")
-                .range(offset, offset + PAGE - 1)
-                .execute()
-            )
-            if res.data:
-                all_freq_pages.extend(res.data)
-            if not res.data or len(res.data) < PAGE:
-                break
-            offset += PAGE
+        # ── 1. Todos os registros de frequência (data_aula + status) ──────────────────
+        # limit=50000 evita o corte silencioso de 1000 linhas do PostgREST.
+        # .range() sem .order() retorna vazio em alguns planos Supabase, por isso
+        # usamos .limit() aqui e reservamos .range()+.order() para queries filtradas.
+        r_freq = (
+            supabase.from_("frequencia")
+            .select("data_aula, status")
+            .limit(50000)
+            .execute()
+        )
 
-        # ── 3. Diário de aulas ─────────────────────────────────────────────────────────
+        # ── 2. Diário de aulas ─────────────────────────────────────────────────────────
         r_diario = (
             supabase.from_("diario_aulas")
             .select("data_aula, turma")
@@ -1335,43 +1313,36 @@ def listar_datas_aulas_registradas() -> pd.DataFrame:
             .execute()
         )
 
-        # ── 4. Normaliza datas para "YYYY-MM-DD" ──────────────────────────────────────
-        def _norm(raw: str) -> str:
-            """Extrai YYYY-MM-DD de qualquer formato ISO, incluindo timestamps com tz."""
-            return str(raw)[:10] if raw else ""
+        df_f = pd.DataFrame(r_freq.data or [])
+        df_d = pd.DataFrame(r_diario.data or [])
 
-        df_pres  = pd.DataFrame(pres_pages or [])
-        df_f_all = pd.DataFrame(all_freq_pages or [])
-        df_d     = pd.DataFrame(r_diario.data or [])
-
-        if not df_pres.empty:
-            df_pres["data_aula"] = df_pres["data_aula"].apply(_norm)
-            df_pres = df_pres[df_pres["data_aula"].str.match(_RE_DATA, na=False)]
-        if not df_f_all.empty:
-            df_f_all["data_aula"] = df_f_all["data_aula"].apply(_norm)
-            df_f_all = df_f_all[df_f_all["data_aula"].str.match(_RE_DATA, na=False)]
+        # ── 3. Normaliza datas ─────────────────────────────────────────────────────────
+        if not df_f.empty:
+            df_f["data_aula"] = df_f["data_aula"].apply(_norm)
+            df_f = df_f[df_f["data_aula"].str.match(_RE_DATA, na=False)]
         if not df_d.empty:
             df_d["data_aula"] = df_d["data_aula"].apply(_norm)
             df_d = df_d[df_d["data_aula"].str.match(_RE_DATA, na=False)]
 
-        # ── 5. Conjunto de todas as datas com algum registro ──────────────────────────
+        # ── 4. Conjunto de datas com algum registro ────────────────────────────────────
         datas: set = set()
-        if not df_f_all.empty:
-            datas.update(df_f_all["data_aula"].dropna().tolist())
+        if not df_f.empty:
+            datas.update(df_f["data_aula"].dropna().tolist())
         if not df_d.empty:
             datas.update(df_d["data_aula"].dropna().tolist())
 
         if not datas:
             return pd.DataFrame(columns=["data_aula", "total_presencas", "turmas_diario"])
 
-        # ── 6. Contagem de PRESENTES por data (já filtrado server-side) ───────────────
+        # ── 5. Contagem de PRESENTES por data (filtro Python — seguro em qualquer plano) ─
+        df_pres = df_f[df_f["status"] == "PRESENTE"] if not df_f.empty else pd.DataFrame()
         contagem_pres: pd.Series = (
             df_pres["data_aula"].value_counts()
             if not df_pres.empty
             else pd.Series(dtype=int)
         )
 
-        # ── 7. Monta resultado ────────────────────────────────────────────────────────
+        # ── 6. Monta resultado ────────────────────────────────────────────────────────
         rows = []
         for d in sorted(datas, reverse=True):
             presencas = int(contagem_pres.get(d, 0))
@@ -1383,6 +1354,48 @@ def listar_datas_aulas_registradas() -> pd.DataFrame:
         return pd.DataFrame(rows)
     except Exception:
         return pd.DataFrame(columns=["data_aula", "total_presencas", "turmas_diario"])
+
+
+def contar_presencas_periodo_direto(data_ini, data_fim) -> dict:
+    """
+    Conta registros PRESENTE por data no período — query DIRETA, sem cache.
+
+    Usa filtros server-side (.gte/.lte) para reduzir tráfego, mais .order()
+    que é obrigatório para que .range() funcione corretamente no PostgREST.
+
+    Retorna dict {date_str: int}.  Em caso de erro retorna {}.
+    """
+    try:
+        _RE = r"^\d{4}-\d{2}-\d{2}$"
+        todos = []
+        offset = 0
+        PAGE = 5000
+        while True:
+            res = (
+                supabase.from_("frequencia")
+                .select("data_aula")
+                .eq("status", "PRESENTE")
+                .gte("data_aula", str(data_ini))
+                .lte("data_aula", str(data_fim))
+                .order("data_aula")
+                .range(offset, offset + PAGE - 1)
+                .execute()
+            )
+            if res.data:
+                todos.extend(res.data)
+            if not res.data or len(res.data) < PAGE:
+                break
+            offset += PAGE
+
+        if not todos:
+            return {}
+
+        df = pd.DataFrame(todos)
+        df["data_aula"] = df["data_aula"].astype(str).str[:10]
+        df = df[df["data_aula"].str.match(_RE, na=False)]
+        return df["data_aula"].value_counts().to_dict()
+    except Exception:
+        return {}
 
 
 def excluir_dia_aula_completo(data_str: str, solicitante_email: str):
