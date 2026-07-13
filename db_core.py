@@ -31,15 +31,23 @@ except Exception as e:
     print(f"⚠️ IA Desativada. Motivo: {e}")
 
 def revisar_texto_ia(texto):
-    """Revisa gramática usando Gemini AI se disponível."""
+    """Revisa gramática usando Gemini AI se disponível.
+    Timeout de 10s via ThreadPoolExecutor para evitar travar o servidor."""
     if not IA_ATIVA or not texto or len(texto.strip()) < 5:
         return None
-    prompt = f"Corrija a gramática, ortografia e acentuação do texto. Mantenha o sentido original.\nTexto: '{texto}'\nRetorne APENAS o texto corrigido."
+    prompt = (
+        f"Corrija a gramática, ortografia e acentuação do texto. "
+        f"Mantenha o sentido original.\n"
+        f"Texto: '{texto}'\nRetorne APENAS o texto corrigido."
+    )
     try:
-        response = ia_model.generate_content(prompt)
+        from concurrent.futures import ThreadPoolExecutor, TimeoutError as _FTO
+        with ThreadPoolExecutor(max_workers=1) as _ex:
+            _fut = _ex.submit(ia_model.generate_content, prompt)
+            response = _fut.result(timeout=10)
         sugestao = response.text.strip()
         return sugestao if sugestao.lower() != texto.lower() else None
-    except:
+    except Exception:
         return None
 
 # ==============================================================================

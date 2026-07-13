@@ -192,7 +192,8 @@ def render_mapa_corporal(regioes_sel: list, intensidades: dict, height: int = 48
       </p>
     </div>
     """
-    st.components.v1.html(html, height=height, scrolling=False)
+    from streamlit.components.v1 import html as _html_v1
+    _html_v1(html, height=height, scrolling=False)
 
 
 # ──────────────────────────────────────────────────────────────────────────────

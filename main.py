@@ -6,6 +6,8 @@
 # ==============================================================================
 
 import streamlit as st
+from utils.logger import configurar_logging
+configurar_logging()
 
 st.set_page_config(
     page_title="Esporte e Saúde - Gestão",

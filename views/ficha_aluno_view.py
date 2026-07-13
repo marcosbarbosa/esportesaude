@@ -904,7 +904,8 @@ def tela_impressao_ficha():
                     st.warning("⚠️ Visualização disponível, mas os downloads estão bloqueados até o cadastro ser completado.")
                 else:
                     st.info("💡 **Dica:** Use os botões acima para baixar. Para imprimir direto, baixe o HTML e pressione Ctrl+P no navegador.")
-                st.components.v1.html(html_gerado, height=950, scrolling=True)
+                from streamlit.components.v1 import html as _html_v1
+                _html_v1(html_gerado, height=950, scrolling=True)
 
     with tab_lote:
         st.write(

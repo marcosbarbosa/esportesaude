@@ -151,7 +151,7 @@ def processar_foto_perfil(file_bytes):
 
 def rotacionar_imagem_supabase(aluno_id, url_atual, angulo):
     try:
-        resposta = requests.get(url_atual)
+        resposta = requests.get(url_atual, timeout=15)
         if resposta.status_code != 200:
             return False, "Falha ao descarregar a imagem."
         img = Image.open(io.BytesIO(resposta.content))
@@ -1770,7 +1770,8 @@ def renderizar_ficha():
         # Pré-seleção de aba via session_state (ex: vindo de agendamento)
         _aba_desejada = st.session_state.pop("prontuario_aba", None)
         if _aba_desejada == "Nova Medição":
-            st.components.v1.html(
+            from streamlit.components.v1 import html as _html_v1
+            _html_v1(
                 """<script>
                 (function tryClick() {
                     var tabs = window.parent.document.querySelectorAll('[data-testid="stTab"] button, [data-baseweb="tab"]');

@@ -1,0 +1,219 @@
+Contexto geral
+>
+
+Aplicação: plataforma de gestão de frequência/alunos em Streamlit, rodando na Render.
+
+Comando de startup (segundo os logs):
+streamlit run main.py --server.address=0.0.0.0 --server.port=$PORT.
+
+Temos observado:
+
+Muitos erros 502 (Bad Gateway / connection failed) na Render.
+
+Vários eventos “Instance failed” na aba de métricas e reinícios frequentes da instância ao longo do dia.
+b3c64faf-533d-40f5-b5a7-90de0f1ce640.pdf
+community.render
++1
+
+Logs com repetidos avisos: “Please replace st.components.v1.html with st.iframe”, seguidos de novos ==> Running 'streamlit run main.py...'.
+7692a559-13de-42f8-a86e-f1708cf05854.pdf
+
+>
+
+Nos últimos dias, o sistema recebeu várias funcionalidades novas (frequência avançada, tablet grid, PA, atestados, anamnese, micro‑botões de WhatsApp, chamadas Gemini), e desde então os 502 ficaram mais frequentes.
+>
+Objetivo
+>
+
+Usar toda a capacidade técnica do agente para:
+
+Detectar a causa real dos reboots da instância (saída do processo, OOM, exceções, health check falhando etc.).
+
+Instrumentar logs internos de forma inteligente (apenas onde necessário) para ajudar a diagnosticar falhas futuras sem “gastar tokens demais” nem sobrecarregar o servidor.
+
+Propor e implementar ajustes autocorretivos quando possível (time‑outs, try/except, circuit breakers, caching), mantendo o sistema estável.
+
+Minimizar o custo: evitar soluções que gerem muito overhead ou logging excessivo.
+
+>
+
+Passo 1 – Análise precisa dos reboots e health checks
+>
+
+Inspecione os logs de aplicação imediatamente acima de cada linha ==> Running 'streamlit run main.py...'.
+
+Procure por:
+
+Traceback (most recent call last) e mensagens de exceção.
+
+MemoryError, Killed, Out of memory ou qualquer mensagem de OOM.
+
+Erros em módulos recentes (tablet, PA, atestado, anamnese, Gemini, WhatsApp).
+
+Documente claramente qual padrão aparece mais antes dos reboots.
+
+>
+
+Verifique a configuração de health checks da Render:
+
+Qual é o healthCheckPath atual.
+render
+
+Se esse path bate em algum endpoint pesado ou que pode retornar 500/timeout.
+
+Ajuste, se necessário, para um endpoint leve e estável (por exemplo, um /health simples ou o endpoint recomendado para Streamlit).
+
+>
+
+Passo 2 – Instrumentação de logs interna “cirúrgica”
+>
+
+Sem encher o código de prints, adicione logging estruturado apenas nos pontos críticos:
+
+Entrada e saída das funções que:
+
+Carregam grandes DataFrames de alunos (multi‑turmas, Freq.60D, atestados, PA, anamnese).
+
+Fazem várias chamadas ao Supabase ou banco por request.
+
+Chamam APIs externas (Google Gemini, WhatsApp, qualquer outro serviço externo).
+
+Para cada ponto crítico, logue:
+
+Tempo de execução (ms).
+
+Tamanho de estruturas (nº de alunos, nº de registros).
+
+Qualquer exceção capturada (stack trace resumido).
+
+>
+
+Use um nível de log adequado:
+
+INFO para tempos e tamanhos.
+
+WARNING para timeouts ou erros recuperáveis.
+
+ERROR para exceções graves que derrubam o fluxo.
+
+Evite logging de dados sensíveis (LGPD/saúde); basta IDs/tamanhos.
+
+>
+
+Garanta que o logging:
+
+Seja centralizado (por exemplo, via módulo logging configurado uma vez em main.py).
+
+Não faça I/O bloqueante excessivo (não escrever arquivos enormes; usar stdout que a Render já captura).
+
+>
+
+Passo 3 – Caça às causas prováveis de crash (McGyver mode)
+>
+
+Investigue, com base nos logs e no código:
+
+Consultas pesadas (grandes DataFrame sem paginação ou sort_values sobre colunas sem índice).
+
+Loops de recalculagem de frequência, PA, atestados, anamnese rodando a cada request.
+
+Chamadas ao Gemini via google.generativeai:
+
+Verifique se há timeouts, exceções não tratadas ou uso do SDK deprecado.
+google
++1
+
+Envio de WhatsApp ou outros serviços externos feito de forma síncrona dentro da request.
+
+>
+
+Para cada fonte potencial de crash:
+
+Adicione try/except com logs de erro, garantindo que qualquer falha externa:
+
+Não mate o processo principal.
+
+Gere uma mensagem de fallback amigável ao usuário.
+
+Se detectar loops muito pesados:
+
+Considere quebrar em tarefas assíncronas ou jobs separados.
+
+Introduza caching (por ex. st.cache_data) onde fizer sentido, com TTL adequado.
+
+>
+
+Avalie o consumo de memória/CPU das principais rotinas:
+
+Use métricas da Render para ver picos próximos aos “Instance failed”.
+community.render
++1
+b3c64faf-533d-40f5-b5a7-90de0f1ce640.pdf
+
+Se ficar claro que o plano 2 GB / 1 CPU está no limite, documente isso e proponha:
+
+Ou otimizações de código.
+
+Ou aumento de recursos na Render.
+
+>
+
+Passo 4 – Ajustes autocorrigíveis e de baixo custo
+>
+
+Proponha e implemente, no código:
+
+Timeouts e retries para chamadas externas (Supabase, Gemini, WhatsApp), com circuit‑breaker simples:
+
+Ex.: se um serviço falhar repetidamente, voltar temporariamente para um modo “offline” leve, sem tentar requisições pesadas.
+
+Paginação ou limites de tamanho ao carregar listas de alunos:
+
+Evitar carregar milhares de registros em cada mudança de filtro.
+
+Cache leve de configurações estáveis (mensagens de WhatsApp, lista de turmas, textos estáticos).
+
+>
+
+Corrija o uso de componentes deprecados:
+
+Localize todas as ocorrências de st.components.v1.html e substitua por:
+
+from streamlit.components.v1 import html ou
+
+st.iframe(url, ...), conforme o caso.
+streamlit
++1
+
+Isso evita que futuras atualizações de Streamlit causem novos crashes.
+
+>
+
+Passo 5 – Entrega e documentação
+>
+
+Entregue:
+
+Uma explicação clara das causas mais prováveis dos 502 e “Instance failed” (ex.: OOM, exceção em módulo X, health check mal configurado).
+
+Uma lista das mudanças feitas:
+
+Onde foram adicionados logs.
+
+Onde foram colocados try/except e timeouts.
+
+Que componentes deprecados foram migrados.
+
+Que pontos foram otimizados/paginados/cachados.
+
+>
+
+Mantenha o custo sob controle:
+
+Não adicionar logging em todas as funções; apenas nos gargalos identificados.
+
+Evitar soluções exóticas que criem muita complexidade; focar em correções práticas, “alto impacto, baixo custo”.
+
+>
+
+Em resumo: agir como um “McGyver da tecnologia”, usando logs, métricas e leitura de código para diagnosticar a origem dos 502 e estabilizar o sistema, com o mínimo de mudanças necessárias, sempre documentando o que foi feito.

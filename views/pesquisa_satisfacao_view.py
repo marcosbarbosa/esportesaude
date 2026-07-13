@@ -239,7 +239,8 @@ def tela_pesquisa_satisfacao_move_right():
 
                         # 2️⃣ SOLTA OS BALÕES E SOBE A TELA
                         st.balloons()
-                        st.components.v1.html(
+                        from streamlit.components.v1 import html as _html_v1
+                        _html_v1(
                             """<script>
                             var doc = window.parent.document;
                             var elem = doc.getElementById('topo-da-pesquisa');

@@ -8,3 +8,4 @@
 - [Supabase pagination rules](supabase-pagination.md) — PAGE=1000 + .order() + for range(MAX) obrigatório; while True causa loop infinito com RLS.
 - [Home grid snapshot](home-grid-snapshot.md) — painel inicial usa snapshot em configuracoes_sistema para evitar 5 queries pesadas no cold start; botão "Processar em Lote" regenera.
 - [st_keyup runtime fallback](stkeyup-fallback.md) — componente pode falhar em runtime (não só ImportError) em proxies como Render; _KEYUP_RUNTIME_OK desativa globalmente na 1ª falha.
+- [Anti-502 fixes](anti-502-fixes.md) — 6 causas de crash no Render identificadas e corrigidas; checklist para código novo.

@@ -71,6 +71,7 @@ except Exception as e:
 
 
 def revisar_texto_ia(texto):
+    """Revisa gramática via Gemini. Timeout 10s via ThreadPoolExecutor."""
     if not IA_ATIVA or not texto or len(texto.strip()) < 5:
         return None
     prompt = (
@@ -79,10 +80,11 @@ def revisar_texto_ia(texto):
         f"Texto: '{texto}'\nRetorne APENAS o texto corrigido."
     )
     try:
-        response = _ia_client.models.generate_content(
-            model=_IA_MODEL,
-            contents=prompt,
-        )
+        from concurrent.futures import ThreadPoolExecutor, TimeoutError as _FTO
+        def _call():
+            return _ia_client.models.generate_content(model=_IA_MODEL, contents=prompt)
+        with ThreadPoolExecutor(max_workers=1) as _ex:
+            response = _ex.submit(_call).result(timeout=10)
         sugestao = response.text.strip()
         return sugestao if sugestao.lower() != texto.lower() else None
     except Exception:
@@ -515,7 +517,7 @@ def _carregar_base_alunos(incluir_inativos=False):
     """
     todos = []
     inicio = 0
-    while True:
+    for _ in range(500):
         query = supabase.from_("alunos").select("*")
         if not incluir_inativos:
             query = query.neq("status", "Inativo")
@@ -583,7 +585,7 @@ def _buscar_alunos_serverside(alvo, incluir_inativos):
     padrao = f"%{_escape_like(alvo)}%"
     todos = []
     inicio = 0
-    while True:
+    for _ in range(500):
         query = supabase.from_("alunos").select("*").ilike("nome_fonetica", padrao)
         if not incluir_inativos:
             query = query.neq("status", "Inativo")
@@ -1329,7 +1331,7 @@ def get_ultima_avaliacao_todos() -> dict:
     try:
         inicio = 0
         datas: dict = {}
-        while True:
+        for _ in range(500):
             res = (
                 supabase.from_("prontuario_avaliacoes")
                 .select("aluno_id, data_avaliacao")
@@ -1356,7 +1358,7 @@ def get_ids_alunos_avaliados() -> set:
     try:
         inicio = 0
         ids: set = set()
-        while True:
+        for _ in range(500):
             res = (
                 supabase.from_("prontuario_avaliacoes")
                 .select("aluno_id")
@@ -1742,19 +1744,33 @@ def load_atestados_vencimento():
 
 @st.cache_data(ttl=300, show_spinner=False)
 def load_frequencia_ultima_presenca():
-    """Retorna DataFrame com colunas [id, ultima_presenca] — máx data_aula PRESENTE por aluno."""
+    """Retorna DataFrame com colunas [id, ultima_presenca] — máx data_aula PRESENTE por aluno.
+
+    Usa janela de 180 dias + paginação correta para não truncar em 1000 linhas.
+    """
+    import datetime as _dt
     try:
-        res = (
-            supabase.from_("frequencia")
-            .select("aluno_id, data_aula")
-            .eq("status", "PRESENTE")
-            .order("data_aula", desc=True)
-            .limit(200000)
-            .execute()
-        )
-        if not res.data:
+        _corte = (_dt.date.today() - _dt.timedelta(days=180)).isoformat()
+        todos = []
+        inicio = 0
+        for _ in range(500):
+            res = (
+                supabase.from_("frequencia")
+                .select("aluno_id, data_aula")
+                .eq("status", "PRESENTE")
+                .gte("data_aula", _corte)
+                .order("id")
+                .range(inicio, inicio + 999)
+                .execute()
+            )
+            if res.data:
+                todos.extend(res.data)
+            if not res.data or len(res.data) < 1000:
+                break
+            inicio += 1000
+        if not todos:
             return pd.DataFrame(columns=["id", "ultima_presenca"])
-        df_f = pd.DataFrame(res.data)
+        df_f = pd.DataFrame(todos)
         df_f["data_aula"] = pd.to_datetime(df_f["data_aula"], errors="coerce")
         ultima = df_f.groupby("aluno_id")["data_aula"].max().reset_index()
         ultima.columns = ["id", "ultima_presenca"]
@@ -1765,21 +1781,33 @@ def load_frequencia_ultima_presenca():
 
 @st.cache_data(ttl=300, show_spinner=False)
 def load_total_presencas_todos():
-    """Retorna DataFrame [id, total_presencas_hist] — total de presenças por aluno nos últimos 60 dias."""
+    """Retorna DataFrame [id, total_presencas_hist] — total de presenças por aluno nos últimos 60 dias.
+
+    Usa paginação correta (.order + .range) para não truncar em 1000 linhas.
+    """
     import datetime as _dt
     try:
         _corte = (_dt.date.today() - _dt.timedelta(days=60)).isoformat()
-        res = (
-            supabase.from_("frequencia")
-            .select("aluno_id")
-            .eq("status", "PRESENTE")
-            .gte("data_aula", _corte)
-            .limit(200000)
-            .execute()
-        )
-        if not res.data:
+        todos = []
+        inicio = 0
+        for _ in range(500):
+            res = (
+                supabase.from_("frequencia")
+                .select("aluno_id")
+                .eq("status", "PRESENTE")
+                .gte("data_aula", _corte)
+                .order("id")
+                .range(inicio, inicio + 999)
+                .execute()
+            )
+            if res.data:
+                todos.extend(res.data)
+            if not res.data or len(res.data) < 1000:
+                break
+            inicio += 1000
+        if not todos:
             return pd.DataFrame(columns=["id", "total_presencas_hist"])
-        df_f = pd.DataFrame(res.data)
+        df_f = pd.DataFrame(todos)
         total = df_f.groupby("aluno_id").size().reset_index(name="total_presencas_hist")
         total.rename(columns={"aluno_id": "id"}, inplace=True)
         return total
@@ -1914,9 +1942,9 @@ def get_relatorio_periodo(data_inicio, data_fim, turma_filtro="Todas"):
     para superar o limite do PostgREST e evitar corte silencioso de dados.
     """
     def _paginar(query_fn):
-        """Executa query_fn(inicio, fim) em loop até esgotar os dados."""
+        """Executa query_fn(inicio, fim) em loop até esgotar os dados (cap 500 páginas)."""
         todos, inicio = [], 0
-        while True:
+        for _ in range(500):
             res = query_fn(inicio, inicio + 999).execute()
             if res.data:
                 todos.extend(res.data)
@@ -2463,7 +2491,7 @@ def bi_media_alunos_dia():
         PAGE = 1000
         registros = []
         offset = 0
-        while True:
+        for _ in range(500):
             r = (
                 supabase.from_("frequencia")
                 .select("data_aula, aluno_id")
@@ -2530,7 +2558,7 @@ def bi_presencas_por_mes():
         PAGE = 1000
         registros = []
         offset = 0
-        while True:
+        for _ in range(500):
             r = (
                 supabase.from_("frequencia")
                 .select("data_aula")
