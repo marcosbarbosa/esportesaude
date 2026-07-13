@@ -15,7 +15,7 @@
 # ==============================================================================
 import streamlit as st
 import pandas as pd
-from database import alternar_presenca, supabase
+from database import alternar_presenca, supabase, listar_datas_aulas_registradas
 
 
 def atualizar_status_presenca_3_estados(aluno_id, data_aula, novo_status):
@@ -26,7 +26,6 @@ def atualizar_status_presenca_3_estados(aluno_id, data_aula, novo_status):
             supabase.table("frequencia").delete().eq("aluno_id", str(aluno_id)).eq(
                 "data_aula", str(data_aula)
             ).execute()
-            return True
         else:
             # Insere ou atualiza (Upsert) para PRESENTE ou JUSTIFICADA
             payload = {
@@ -47,7 +46,15 @@ def atualizar_status_presenca_3_estados(aluno_id, data_aula, novo_status):
                 ).execute()
             else:
                 supabase.table("frequencia").insert(payload).execute()
-            return True
+
+        # Invalida o cache de datas registradas para que "Dias de Aula Registrados"
+        # reflita imediatamente a contagem atualizada de presenças.
+        try:
+            listar_datas_aulas_registradas.clear()
+        except Exception:
+            pass
+
+        return True
     except Exception as e:
         print(f"Erro frequencia 3 estados: {e}")
         return False

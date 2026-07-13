@@ -706,7 +706,7 @@ def _inv_frequencia():
     for fn in (
         get_ultima_presenca_batch, load_frequencia_ultima_presenca,
         get_presencas_dia, bi_presencas_periodo, bi_frequencia_turmas,
-        bi_resumo_studio, get_diarios_periodo,
+        bi_resumo_studio, get_diarios_periodo, listar_datas_aulas_registradas,
     ):
         try:
             fn.clear()
@@ -1289,13 +1289,45 @@ def listar_datas_aulas_registradas() -> pd.DataFrame:
     Colunas: data_aula (date), total_presencas (int), turmas_diario (list[str])
     """
     try:
-        # limit=50000 evita o corte silencioso de 1000 linhas do PostgREST
-        r_freq = (
-            supabase.from_("frequencia")
-            .select("data_aula, status")
-            .limit(50000)
-            .execute()
-        )
+        _RE_DATA = r"^\d{4}-\d{2}-\d{2}$"
+
+        # ── 1. Busca APENAS registros PRESENTE (filtro server-side, evita corte por limit) ──
+        # Usa paginação para suportar qualquer volume de dados.
+        pres_pages = []
+        offset = 0
+        PAGE = 5000
+        while True:
+            res = (
+                supabase.from_("frequencia")
+                .select("data_aula")
+                .eq("status", "PRESENTE")
+                .range(offset, offset + PAGE - 1)
+                .execute()
+            )
+            if res.data:
+                pres_pages.extend(res.data)
+            if not res.data or len(res.data) < PAGE:
+                break
+            offset += PAGE
+
+        # ── 2. Busca todas as datas (qualquer status) para montar o conjunto de datas ──
+        # Também paginado para integridade total.
+        all_freq_pages = []
+        offset = 0
+        while True:
+            res = (
+                supabase.from_("frequencia")
+                .select("data_aula")
+                .range(offset, offset + PAGE - 1)
+                .execute()
+            )
+            if res.data:
+                all_freq_pages.extend(res.data)
+            if not res.data or len(res.data) < PAGE:
+                break
+            offset += PAGE
+
+        # ── 3. Diário de aulas ─────────────────────────────────────────────────────────
         r_diario = (
             supabase.from_("diario_aulas")
             .select("data_aula, turma")
@@ -1303,42 +1335,47 @@ def listar_datas_aulas_registradas() -> pd.DataFrame:
             .execute()
         )
 
-        df_f = pd.DataFrame(r_freq.data or [])
-        df_d = pd.DataFrame(r_diario.data or [])
+        # ── 4. Normaliza datas para "YYYY-MM-DD" ──────────────────────────────────────
+        def _norm(raw: str) -> str:
+            """Extrai YYYY-MM-DD de qualquer formato ISO, incluindo timestamps com tz."""
+            return str(raw)[:10] if raw else ""
 
-        # Normaliza ambas as colunas para "YYYY-MM-DD" string pura.
-        # CRÍTICO: frequencia.data_aula pode ser date  → "2026-05-21"
-        #          diario_aulas.data_aula pode ser timestamp → "2026-05-21T00:00:00+00:00"
-        # pd.to_datetime com series mista (naive + tz-aware) converte tz-aware para NaT
-        # mesmo com errors='coerce' — por isso usamos str[:10] (sempre YYYY-MM-DD).
-        _RE_DATA = r"^\d{4}-\d{2}-\d{2}$"
-        if not df_f.empty:
-            df_f["data_aula"] = df_f["data_aula"].astype(str).str[:10]
-            df_f = df_f[df_f["data_aula"].str.match(_RE_DATA, na=False)]
+        df_pres  = pd.DataFrame(pres_pages or [])
+        df_f_all = pd.DataFrame(all_freq_pages or [])
+        df_d     = pd.DataFrame(r_diario.data or [])
+
+        if not df_pres.empty:
+            df_pres["data_aula"] = df_pres["data_aula"].apply(_norm)
+            df_pres = df_pres[df_pres["data_aula"].str.match(_RE_DATA, na=False)]
+        if not df_f_all.empty:
+            df_f_all["data_aula"] = df_f_all["data_aula"].apply(_norm)
+            df_f_all = df_f_all[df_f_all["data_aula"].str.match(_RE_DATA, na=False)]
         if not df_d.empty:
-            df_d["data_aula"] = df_d["data_aula"].astype(str).str[:10]
+            df_d["data_aula"] = df_d["data_aula"].apply(_norm)
             df_d = df_d[df_d["data_aula"].str.match(_RE_DATA, na=False)]
 
-        datas = set()
-        if not df_f.empty:
-            datas.update(df_f["data_aula"].dropna().tolist())
+        # ── 5. Conjunto de todas as datas com algum registro ──────────────────────────
+        datas: set = set()
+        if not df_f_all.empty:
+            datas.update(df_f_all["data_aula"].dropna().tolist())
         if not df_d.empty:
             datas.update(df_d["data_aula"].dropna().tolist())
 
         if not datas:
             return pd.DataFrame(columns=["data_aula", "total_presencas", "turmas_diario"])
 
-        # Pré-calcula contagens — apenas registros com status PRESENTE
-        df_f_pres = df_f[df_f["status"] == "PRESENTE"] if not df_f.empty else df_f
-        contagem_freq = (
-            df_f_pres["data_aula"].value_counts() if not df_f_pres.empty
+        # ── 6. Contagem de PRESENTES por data (já filtrado server-side) ───────────────
+        contagem_pres: pd.Series = (
+            df_pres["data_aula"].value_counts()
+            if not df_pres.empty
             else pd.Series(dtype=int)
         )
 
+        # ── 7. Monta resultado ────────────────────────────────────────────────────────
         rows = []
         for d in sorted(datas, reverse=True):
-            presencas = int(contagem_freq.get(d, 0))
-            turmas = []
+            presencas = int(contagem_pres.get(d, 0))
+            turmas: list = []
             if not df_d.empty:
                 turmas = df_d[df_d["data_aula"] == d]["turma"].dropna().tolist()
             rows.append({"data_aula": d, "total_presencas": presencas, "turmas_diario": turmas})
