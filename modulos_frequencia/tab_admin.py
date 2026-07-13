@@ -283,12 +283,24 @@ def renderizar_aba_admin():
             (df_display["data_date"] <= data_fim)
         ].sort_values("data_aula", ascending=False)
 
+        # Garante coluna motivo_sem_aula mesmo em cache antigo
+        if "motivo_sem_aula" not in df_filtrado.columns:
+            df_filtrado = df_filtrado.copy()
+            df_filtrado["motivo_sem_aula"] = ""
+
         n_total = len(df_filtrado)
-        n_baixa = (df_filtrado["total_presencas"] <= int(limite_baixa)).sum()
+        # Dias com evento calendário não contam como "baixa frequência"
+        mask_evento = df_filtrado["motivo_sem_aula"].fillna("") != ""
+        n_baixa = (
+            (df_filtrado["total_presencas"] <= int(limite_baixa)) & ~mask_evento
+        ).sum()
 
         partes_info = [f"**{n_total}** dia(s) no período"]
         if n_baixa:
             partes_info.append(f"**{n_baixa}** com ≤ {int(limite_baixa)} presenças ⚠️")
+        n_eventos = mask_evento.sum()
+        if n_eventos:
+            partes_info.append(f"**{n_eventos}** evento(s) de calendário 📅")
         st.caption(" · ".join(partes_info))
 
         anomalos = df_filtrado[df_filtrado["anomalia"] != ""]
@@ -312,10 +324,17 @@ def renderizar_aba_admin():
 
             for _, row in df_filtrado.iterrows():
                 n_pres   = int(row["total_presencas"])
-                baixa    = n_pres <= int(limite_baixa)
-                cor_data = "#D97706" if baixa else "#1E40AF"
-                cor_pres = "#92400E" if baixa else "#166534"
-                bg_pres  = "#FEF3C7" if baixa else "transparent"
+                motivo   = str(row.get("motivo_sem_aula", "") or "")
+                evento   = bool(motivo)          # True → dia de evento/sem aula
+                # Baixa frequência real = zerado SEM motivo de calendário
+                baixa    = (n_pres <= int(limite_baixa)) and not evento
+
+                if evento:
+                    cor_data = "#1E3A5F"          # azul escuro neutro
+                elif baixa:
+                    cor_data = "#D97706"          # âmbar
+                else:
+                    cor_data = "#1E40AF"          # azul normal
 
                 c1, c2, c3, c4, c5 = st.columns([2, 2, 1, 4, 2])
                 c1.markdown(
@@ -327,12 +346,25 @@ def renderizar_aba_admin():
                     f"<small style='color:#6B7280;'>{row['dia_semana']}</small>",
                     unsafe_allow_html=True,
                 )
-                c3.markdown(
-                    f"<span style='background:{bg_pres};color:{cor_pres};"
-                    f"font-weight:700;font-size:13px;padding:2px 6px;"
-                    f"border-radius:4px;'>{n_pres}</span>",
-                    unsafe_allow_html=True,
-                )
+
+                if evento:
+                    # Badge verde-azulado com nome do evento
+                    c3.markdown(
+                        f"<span style='background:#DBEAFE;color:#1E40AF;"
+                        f"font-size:11px;padding:2px 7px;border-radius:4px;"
+                        f"white-space:nowrap;'>📅 {motivo}</span>",
+                        unsafe_allow_html=True,
+                    )
+                else:
+                    cor_pres = "#92400E" if baixa else "#166534"
+                    bg_pres  = "#FEF3C7" if baixa else "transparent"
+                    c3.markdown(
+                        f"<span style='background:{bg_pres};color:{cor_pres};"
+                        f"font-weight:700;font-size:13px;padding:2px 6px;"
+                        f"border-radius:4px;'>{n_pres}</span>",
+                        unsafe_allow_html=True,
+                    )
+
                 c4.markdown(
                     f"<small style='color:#374151;'>{row['turmas']}</small>",
                     unsafe_allow_html=True,

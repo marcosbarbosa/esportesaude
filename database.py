@@ -1358,7 +1358,24 @@ def listar_datas_aulas_registradas() -> pd.DataFrame:
         if not datas:
             return pd.DataFrame(columns=["data_aula", "total_presencas", "turmas_diario"])
 
-        # ── 5. Contagem de PRESENTES por data (filtro Python — seguro em qualquer plano) ─
+        # ── 5. Dias sem aula (calendário institucional) ───────────────────────────────
+        try:
+            r_sem = (
+                supabase.from_("dias_sem_aula")
+                .select("data, motivo")
+                .gte("data", _CUTOFF)
+                .order("data")
+                .execute()
+            )
+            sem_aula_map: dict = {
+                str(r["data"])[:10]: (r.get("motivo") or "Sem aula")
+                for r in (r_sem.data or [])
+                if r.get("data")
+            }
+        except Exception:
+            sem_aula_map = {}
+
+        # ── 6. Contagem de PRESENTES por data (filtro Python — seguro em qualquer plano) ─
         df_pres = df_f[df_f["status"] == "PRESENTE"] if not df_f.empty else pd.DataFrame()
         contagem_pres: pd.Series = (
             df_pres["data_aula"].value_counts()
@@ -1366,18 +1383,23 @@ def listar_datas_aulas_registradas() -> pd.DataFrame:
             else pd.Series(dtype=int)
         )
 
-        # ── 6. Monta resultado ────────────────────────────────────────────────────────
+        # ── 7. Monta resultado ────────────────────────────────────────────────────────
         rows = []
         for d in sorted(datas, reverse=True):
             presencas = int(contagem_pres.get(d, 0))
             turmas: list = []
             if not df_d.empty:
                 turmas = df_d[df_d["data_aula"] == d]["turma"].dropna().tolist()
-            rows.append({"data_aula": d, "total_presencas": presencas, "turmas_diario": turmas})
+            rows.append({
+                "data_aula": d,
+                "total_presencas": presencas,
+                "turmas_diario": turmas,
+                "motivo_sem_aula": sem_aula_map.get(d, ""),
+            })
 
         return pd.DataFrame(rows)
     except Exception:
-        return pd.DataFrame(columns=["data_aula", "total_presencas", "turmas_diario"])
+        return pd.DataFrame(columns=["data_aula", "total_presencas", "turmas_diario", "motivo_sem_aula"])
 
 
 def contar_presencas_periodo_direto(data_ini, data_fim) -> dict:
