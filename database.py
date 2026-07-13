@@ -1161,6 +1161,167 @@ def set_config_valor(chave: str, valor) -> tuple:
         return False, str(e)
 
 
+# ==============================================================================
+# 📦 SNAPSHOT DO PAINEL INICIAL (view materializada em configuracoes_sistema)
+# Evita reprocessamento pesado em cada carregamento — operador aciona via botão.
+# ==============================================================================
+_CHAVE_SNAP_HOME = "snapshot_home_grid_v1"
+
+
+def get_snapshot_home_grid() -> dict:
+    """Lê o snapshot pré-computado do grid inicial.
+
+    Retorna dict com chaves: gerado_em, ultima_presenca_recs,
+    total_presencas_recs, atestados_recs, ultima_pa, ultima_aval.
+    Retorna {} se o snapshot não existir ou estiver corrompido.
+    """
+    import json
+    try:
+        raw = get_config_valor(_CHAVE_SNAP_HOME)
+        if raw:
+            return json.loads(raw)
+    except Exception:
+        pass
+    return {}
+
+
+def salvar_snapshot_home_grid(dados: dict) -> tuple:
+    """Persiste o snapshot do grid inicial em configuracoes_sistema."""
+    import json, datetime as _dt
+    dados["gerado_em"] = _dt.datetime.now().strftime("%Y-%m-%d %H:%M")
+    try:
+        payload = json.dumps(dados, default=str)
+        return set_config_valor(_CHAVE_SNAP_HOME, payload)
+    except Exception as e:
+        return False, str(e)
+
+
+def computar_snapshot_home_grid() -> dict:
+    """Executa todas as queries pesadas do painel inicial e devolve o snapshot dict.
+
+    NÃO usa @st.cache_data — chamado apenas quando o operador pressiona
+    o botão 'Processar em Lote'. Cada query usa paginação segura (PAGE=1000).
+    """
+    import datetime as _dt
+    snap: dict = {}
+
+    # ── 1. Última presença (status=PRESENTE) por aluno ──────────────────────
+    try:
+        res = (
+            supabase.from_("frequencia")
+            .select("aluno_id, data_aula")
+            .eq("status", "PRESENTE")
+            .order("data_aula", desc=True)
+            .limit(200000)
+            .execute()
+        )
+        if res.data:
+            df_up = pd.DataFrame(res.data)
+            df_up["data_aula"] = pd.to_datetime(df_up["data_aula"], errors="coerce")
+            ult = df_up.groupby("aluno_id")["data_aula"].max().reset_index()
+            ult.columns = ["id", "ultima_presenca"]
+            ult["ultima_presenca"] = ult["ultima_presenca"].astype(str).str[:10]
+            snap["ultima_presenca_recs"] = ult.to_dict("records")
+        else:
+            snap["ultima_presenca_recs"] = []
+    except Exception:
+        snap["ultima_presenca_recs"] = []
+
+    # ── 2. Total presenças 60 dias ───────────────────────────────────────────
+    try:
+        _corte = (_dt.date.today() - _dt.timedelta(days=60)).isoformat()
+        res = (
+            supabase.from_("frequencia")
+            .select("aluno_id")
+            .eq("status", "PRESENTE")
+            .gte("data_aula", _corte)
+            .limit(200000)
+            .execute()
+        )
+        if res.data:
+            df_tp = pd.DataFrame(res.data)
+            total = df_tp.groupby("aluno_id").size().reset_index(name="total_presencas_hist")
+            total.rename(columns={"aluno_id": "id"}, inplace=True)
+            snap["total_presencas_recs"] = total.to_dict("records")
+        else:
+            snap["total_presencas_recs"] = []
+    except Exception:
+        snap["total_presencas_recs"] = []
+
+    # ── 3. Vencimento de atestado de aptidão ────────────────────────────────
+    try:
+        res = (
+            supabase.from_("atestados_temporarios")
+            .select("aluno_id, data_vencimento")
+            .eq("tipo_atestado", "aptidao_fisica")
+            .not_.is_("data_vencimento", "null")
+            .execute()
+        )
+        if res.data:
+            df_at = pd.DataFrame(res.data)
+            df_at["data_vencimento"] = pd.to_datetime(df_at["data_vencimento"], errors="coerce")
+            mais_rec = df_at.groupby("aluno_id")["data_vencimento"].max().reset_index()
+            mais_rec.columns = ["id", "data_vencimento_atestado"]
+            mais_rec["data_vencimento_atestado"] = mais_rec["data_vencimento_atestado"].astype(str).str[:10]
+            snap["atestados_recs"] = mais_rec.to_dict("records")
+        else:
+            snap["atestados_recs"] = []
+    except Exception:
+        snap["atestados_recs"] = []
+
+    # ── 4. Última PA por aluno ───────────────────────────────────────────────
+    try:
+        r = (
+            supabase.table("registros_pa")
+            .select("aluno_id, sistolica, diastolica, pulso, classificacao, data")
+            .order("data", desc=True)
+            .limit(500)
+            .execute()
+        )
+        pa: dict = {}
+        for rec in (r.data or []):
+            aid = str(rec.get("aluno_id", ""))
+            if aid and aid not in pa:
+                pa[aid] = {
+                    "sis": rec.get("sistolica"),
+                    "dia": rec.get("diastolica"),
+                    "pul": rec.get("pulso"),
+                    "cls": rec.get("classificacao") or "",
+                }
+        snap["ultima_pa"] = pa
+    except Exception:
+        snap["ultima_pa"] = {}
+
+    # ── 5. Última avaliação clínica (prontuario_avaliacoes) ──────────────────
+    try:
+        inicio = 0
+        datas: dict = {}
+        for _ in range(50):
+            res = (
+                supabase.from_("prontuario_avaliacoes")
+                .select("aluno_id, data_avaliacao")
+                .not_.is_("data_avaliacao", "null")
+                .order("id")
+                .range(inicio, inicio + 999)
+                .execute()
+            )
+            if not res.data:
+                break
+            for row in res.data:
+                aid = str(row.get("aluno_id", ""))
+                dt_val = str(row.get("data_avaliacao") or "")[:10]
+                if aid and dt_val > datas.get(aid, ""):
+                    datas[aid] = dt_val
+            if len(res.data) < 1000:
+                break
+            inicio += 1000
+        snap["ultima_aval"] = datas
+    except Exception:
+        snap["ultima_aval"] = {}
+
+    return snap
+
+
 @st.cache_data(ttl=60, show_spinner=False)
 def get_ultima_avaliacao_todos() -> dict:
     """Retorna {aluno_id(str): 'YYYY-MM-DD'} com a data da última avaliação (anamnese/

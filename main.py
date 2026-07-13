@@ -1778,9 +1778,16 @@ if st.session_state.menu_atual == "Principal":
     # COLUNA ESQUERDA — Grid de Alunos
     # ════════════════════════════════════════════════
     with _col_grid:
-        from database import buscar_alunos_geral
-        _hg_c_titulo, _hg_c_busca, _hg_c_turma = st.columns(
-            [1.4, 2.5, 1.8], vertical_alignment="bottom", gap="small"
+        from database import (
+            buscar_alunos_geral,
+            get_snapshot_home_grid as _get_snap_home,
+            salvar_snapshot_home_grid as _save_snap_home,
+            computar_snapshot_home_grid as _computar_snap_home,
+        )
+
+        # ── Linha de título + busca + turma + botão Processar em Lote ────────
+        _hg_c_titulo, _hg_c_busca, _hg_c_turma, _hg_c_lote = st.columns(
+            [1.4, 2.5, 1.8, 1.3], vertical_alignment="bottom", gap="small"
         )
         _hg_c_titulo.markdown(
             "<p style='font-weight:800;color:#0A2540;font-size:1.05rem;margin:0;'>👥 Alunos Ativos</p>",
@@ -1793,11 +1800,60 @@ if st.session_state.menu_atual == "Principal":
             placeholder="🔍 Nome ou turma…",
         )
 
-        # Carregar dados
-        _df_alunos      = buscar_alunos_geral("")
-        _df_ultima      = load_frequencia_ultima_presenca()
-        _df_atestad     = load_atestados_vencimento()
-        _df_total_pres  = load_total_presencas_todos()
+        # ── Snapshot: leitura + botão Processar em Lote ──────────────────────
+        _snap_home = _get_snap_home()
+        _snap_ts   = _snap_home.get("gerado_em", "")
+
+        with _hg_c_lote:
+            if st.button(
+                "⚙️ Processar em Lote",
+                key="hg_proc_lote",
+                use_container_width=True,
+                help=(
+                    "Recalcula presenças, atestados, PA e anamnese de todos os alunos "
+                    "e salva o resultado para carregamento instantâneo."
+                ),
+            ):
+                with st.spinner("⏳ Calculando painel… aguarde."):
+                    _snap_new = _computar_snap_home()
+                    _ok_snap, _msg_snap = _save_snap_home(_snap_new)
+                    # Limpar caches in-memory para que leituras futuras usem o snapshot
+                    load_frequencia_ultima_presenca.clear()
+                    load_atestados_vencimento.clear()
+                    load_total_presencas_todos.clear()
+                    _snap_home = _snap_new
+                    _snap_ts   = _snap_home.get("gerado_em", "")
+                if _ok_snap:
+                    st.toast("✅ Painel atualizado com sucesso!", icon="✅")
+                    st.rerun()
+                else:
+                    st.error(f"Erro ao salvar painel: {_msg_snap}")
+
+        if _snap_ts:
+            st.caption(f"📦 Painel processado em: **{_snap_ts}**")
+        else:
+            st.info(
+                "⚠️ Painel ainda não processado. Clique em **⚙️ Processar em Lote** "
+                "para gerar os dados e acelerar a abertura do sistema.",
+                icon=None,
+            )
+
+        # ── Carregar dados — snapshot primeiro, fallback em queries ao vivo ──
+        _df_alunos = buscar_alunos_geral("")
+
+        if _snap_ts:
+            _recs_up = _snap_home.get("ultima_presenca_recs", [])
+            _df_ultima = pd.DataFrame(_recs_up) if _recs_up else pd.DataFrame(columns=["id", "ultima_presenca"])
+
+            _recs_at = _snap_home.get("atestados_recs", [])
+            _df_atestad = pd.DataFrame(_recs_at) if _recs_at else pd.DataFrame(columns=["id", "data_vencimento_atestado"])
+
+            _recs_tp = _snap_home.get("total_presencas_recs", [])
+            _df_total_pres = pd.DataFrame(_recs_tp) if _recs_tp else pd.DataFrame(columns=["id", "total_presencas_hist"])
+        else:
+            _df_ultima     = load_frequencia_ultima_presenca()
+            _df_atestad    = load_atestados_vencimento()
+            _df_total_pres = load_total_presencas_todos()
 
         # Templates WhatsApp — carregados uma vez, fora do loop.
         # Cada gatilho da tabela crm_templates (painel Configurações > Mensagens)
@@ -1847,7 +1903,15 @@ if st.session_state.menu_atual == "Principal":
             try:
                 from database import get_ultima_pa_todos
                 from views.prontuario_dashboard import _pa_compact_html
-                _pa_dict = get_ultima_pa_todos()
+                if _snap_ts and _snap_home.get("ultima_pa"):
+                    _snap_pa_raw = _snap_home["ultima_pa"]
+                    _pa_dict = {}
+                    for _sk, _sv in _snap_pa_raw.items():
+                        _pa_dict[_sk] = _sv
+                        if _sk.isdigit():
+                            _pa_dict[int(_sk)] = _sv
+                else:
+                    _pa_dict = get_ultima_pa_todos()
                 def _pa_html_row(aluno_id):
                     p = _pa_dict.get(str(aluno_id)) or _pa_dict.get(int(aluno_id) if str(aluno_id).isdigit() else aluno_id)
                     if not p:
@@ -1874,7 +1938,10 @@ if st.session_state.menu_atual == "Principal":
             try:
                 from database import get_ultima_avaliacao_todos
                 from modulos_frequencia.tab_admin import get_dias_validade_anamnese
-                _anam_dict     = get_ultima_avaliacao_todos()
+                if _snap_ts and _snap_home.get("ultima_aval"):
+                    _anam_dict = _snap_home["ultima_aval"]
+                else:
+                    _anam_dict = get_ultima_avaliacao_todos()
                 _dias_val_anam = get_dias_validade_anamnese()
                 def _anam_status_row(aluno_id):
                     _dt_str = _anam_dict.get(str(aluno_id))

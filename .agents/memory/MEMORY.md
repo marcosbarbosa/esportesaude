@@ -6,3 +6,5 @@
 - [Agrupamento de turmas por horário](turmas-mesmo-horario.md) — prefira a coluna `horario` da tabela turmas a regex sobre o nome para mesclar turmas simultâneas.
 - [Canvas iframe WebSocket protocol](canvas-iframe-protocol.md) — após toda atualização, sempre: restart_workflow + applyCanvasActions com URL cache-bustada; se persistir, usuário refresca o browser.
 - [Supabase pagination rules](supabase-pagination.md) — PAGE=1000 + .order() + for range(MAX) obrigatório; while True causa loop infinito com RLS.
+- [Home grid snapshot](home-grid-snapshot.md) — painel inicial usa snapshot em configuracoes_sistema para evitar 5 queries pesadas no cold start; botão "Processar em Lote" regenera.
+- [st_keyup runtime fallback](stkeyup-fallback.md) — componente pode falhar em runtime (não só ImportError) em proxies como Render; _KEYUP_RUNTIME_OK desativa globalmente na 1ª falha.

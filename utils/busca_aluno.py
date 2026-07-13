@@ -14,6 +14,10 @@ try:
 except ImportError:
     _HAS_KEYUP = False
 
+# Flag de módulo: se o componente falhar em runtime (proxy/Render), desativa globalmente
+# para a sessão inteira e cai no fallback text_input sem loops de erro.
+_KEYUP_RUNTIME_OK = True
+
 
 def busca_aluno_widget(
     key: str,
@@ -24,16 +28,29 @@ def busca_aluno_widget(
     debounce: int = 300,
     label_visibility: str = "collapsed",
 ) -> str:
-    """Renderiza o campo de busca de aluno (st_keyup com fallback text_input)."""
+    """Renderiza o campo de busca de aluno (st_keyup com fallback text_input).
+
+    Duplo fallback:
+      1. ImportError  — st_keyup não instalado → usa text_input diretamente.
+      2. RuntimeError — componente instalado mas falha ao carregar assets no
+         ambiente de produção (proxy/Render) → desativa para a sessão e usa
+         text_input, evitando o loop "component loading trouble" que causa 502.
+    """
+    global _KEYUP_RUNTIME_OK
+
     def _render():
-        if _HAS_KEYUP:
-            return _st_keyup(
-                label,
-                placeholder=placeholder,
-                debounce=debounce,
-                key=key,
-                label_visibility=label_visibility,
-            )
+        global _KEYUP_RUNTIME_OK
+        if _HAS_KEYUP and _KEYUP_RUNTIME_OK:
+            try:
+                return _st_keyup(
+                    label,
+                    placeholder=placeholder,
+                    debounce=debounce,
+                    key=key,
+                    label_visibility=label_visibility,
+                )
+            except Exception:
+                _KEYUP_RUNTIME_OK = False
         return st.text_input(
             label,
             placeholder=placeholder,
