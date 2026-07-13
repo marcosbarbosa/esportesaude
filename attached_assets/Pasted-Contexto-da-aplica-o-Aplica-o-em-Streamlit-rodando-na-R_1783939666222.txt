@@ -1,0 +1,226 @@
+Contexto da aplicação
+>
+
+Aplicação em Streamlit rodando na Render, com comando de startup semelhante a:
+streamlit run main.py --server.address=0.0.0.0 --server.port=$PORT
+
+Logs recentes mostram:
+
+Serviço subindo normalmente (Uvicorn server started on 0.0.0.0:10000).
+
+Avisos de deprecação (google.generativeai -> google.genai e st.components.v1.html -> st.iframe).
+
+Porém, na prática, o usuário está vendo erros 502 (connection failed) contínuos e queda para tela de login após alguns minutos de uso.
+
+>
+
+Nos últimos dias, o sistema recebeu novas features como:
+
+Ferramentas de frequência, tablet grid de alunos, colunas “Venc. Atestado”, “Últ. PA”, “Anamnese”.
+
+Funções de envio de mensagens de WhatsApp baseadas em templates configurados no banco.
+
+Potencial aumento de consultas a Supabase/DB (frequência, PA, atestados, anamnese, etc.).
+
+>
+
+Problema
+>
+
+Antes, o sistema funcionava sem 502.
+
+Agora, várias vezes por hora, aparece “connection failed 502”, a app cai e volta para login.
+
+O operador está preocupado com:
+
+Possível “banco inchado” (volume de dados).
+
+Possível excesso de scripts/robôs que consomem memória/CPU.
+
+Possível atraso e timeouts nas chamadas para Supabase/Google Gemini/WhatsApp.
+
+>
+
+Objetivo da análise
+>
+
+Investigar, de forma sistemática, várias hipóteses para os 502, incluindo:
+
+Configuração de host/porta da app.
+
+Uso de memória/CPU acima do limite do plano.
+
+Overload / timeout no banco de dados (Supabase).
+
+Picos de requisições e saturação do servidor.
+
+Jobs de “robô” ou loops que seguram o event loop.
+
+Chamadas externas (Google Gemini, APIs) demoradas ou mal tratadas.
+
+Incidentes ou problemas na própria Render (infra).
+
+>
+
+Tarefas específicas
+>
+
+Verificar host/porta e parâmetros de Streamlit
+
+Checar o comando exato de startup (no render.yaml ou na configuração da Render) e no main.py.
+
+Garantir que:
+
+A app escuta em host="0.0.0.0" e em port=int(os.environ["PORT"]).
+community.render
++1
+
+Não há hardcode de porta (ex.: 8501, 5000).
+
+Confirmar que não há múltiplos processos competindo pela mesma porta.
+
+>
+
+Analisar métricas de memória/CPU na Render (últimos 7 dias)
+
+Abrir o painel de métricas da Render para o serviço web e inspecionar:
+
+Curvas de memória e eventos “Out of memory (used over X MB)”.
+community.render
+
+Curvas de CPU e número de requisições/minuto.
+
+Picos de 50x (transientes) coincidentes com spikes de memória/CPU.
+community.render
++1
+
+Se houver “Out of memory” ou reinicializações frequentes:
+
+Identificar se há tarefas pesadas (consultas grandes, loops, processamento de imagens, etc.).
+
+Sugerir:
+
+Uso de caching.
+
+Paginação.
+
+Offload de tarefas pesadas para jobs assíncronos/background.
+
+>
+
+Examinar logs de Supabase/banco (erro de conexão, timeout)
+
+Mapear todas as funções que fazem acesso ao banco (por exemplo: frequência, atestados, PA, anamnese, tags de saúde).
+
+Verificar se:
+
+Há mensagens de timeout ou “connection reset by peer”.
+thelinuxcode
+
+Há burst de queries idênticas em loop (ex.: dentro de for sem cache).
+
+Avaliar:
+
+Se há índices adequados nas colunas usadas para ordenação (ex.: data de vencimento de atestado).
+
+Se consultas de PA/atestados/anamnese agregam muitos dados desnecessários.
+
+>
+
+Verificar picos de requisições e comportamento sob carga
+
+Usar métricas da Render para ver quantas requisições/minuto o serviço recebe quando os 502 acontecem.
+community.render
++1
+
+Simular carga moderada (ex.: múltiplos acessos simultâneos) e observar:
+
+Se o app começa a responder lentamente e depois “some” (502).
+
+Se necessário, sugerir:
+
+Redução de operações síncronas longas dentro do ciclo principal do Streamlit.
+
+Uso de locks/caches locais para evitar repetições de lógica pesada por usuário.
+
+>
+
+Inspecionar “scripts/robôs” e loops de manutenção
+
+Mapear funções que rodam automaticamente:
+
+Atualizações de frequência em batch.
+
+Recálculo de “Freq.60D + Pres.”, status de atestado, PA, anamnese.
+
+Envio automatizado de WhatsApp em massa.
+
+Verificar se algum desses processos:
+
+Fica rodando em loop na mesma instância web.
+
+Não faz sleep ou rate-limit em consultas/requests externas.
+
+Bloqueia o thread principal do Streamlit por tempo prolongado.
+
+>
+
+Verificar chamadas externas (Gemini, WhatsApp, etc.)
+
+Avaliar uso de google.generativeai e propor migração segura para google.genai:
+
+Checar tempo médio de resposta das chamadas.
+
+Garantir que erros de rede/timeouts são tratados com try/except, sem travar a app.
+
+Confirmar que:
+
+Chamadas de envio de WhatsApp não bloqueiam o fluxo da app por longos períodos.
+
+Há timeouts e retentativas configuradas, com log claro quando há falha.
+
+>
+
+Checar incidentes na Render / infra
+
+Acessar https://status.render.com/ e verificar se houve incidentes na região/plane em que o serviço está, nos últimos dias, coincidindo com o início dos 502.
+github
++2
+
+Se houver incidentes:
+
+Documentar que parte dos 502 pode ser externa à app.
+
+Ainda assim, focar em robustez da aplicação para se recuperar bem de flutuações.
+
+>
+
+Recomendações de mitigação
+
+Com base nos achados acima, propor um plano que pode incluir:
+
+Otimização de queries e índices (vencimento de atestado, PA, anamnese).
+
+Limite de batch para envio de mensagens e recálculos.
+
+Cache de dados estáveis (por exemplo, configuração de mensagens, lista de turmas).
+
+Monitoramento extra (logs com request ID, tempo de resposta, consumo de memória por endpoint).
+
+Ajuste de plano na Render (mais memória/CPU) se estiver claramente subdimensionado.
+community.render
++1
+
+>
+
+Entrega esperada
+
+Explicar, em linguagem técnica mas clara, quais as causas mais prováveis dos 502 observados.
+
+Relacionar essas causas com mudanças recentes no código (novas colunas, novas lógicas).
+
+Indicar ações de curto prazo (low‑hanging fruit) e ações de médio prazo para tornar o sistema mais resiliente a overload/timeouts.
+
+>
+
+Por favor, execute essa análise com atenção aos logs da Render, métricas de memória/CPU e comportamento sob carga, e devolva um diagnóstico com hipóteses bem fundamentadas e sugestões práticas de correção.

@@ -177,14 +177,36 @@ def renderizar_aba_admin():
 
     hoje = datetime.date.today()
 
+    # Default De: 5º dia de aula mais recente registrado no banco.
+    # Usa df_datas (já carregado) para encontrar exatamente as datas reais de aula,
+    # evitando janelas de 30 dias com muitos dias sem dados.
+    _KEY_INI_DEFAULT = "admin_data_ini_default_computado"
+    if _KEY_INI_DEFAULT not in st.session_state:
+        if not df_datas.empty:
+            _datas_ord = sorted(
+                [d[:10] for d in df_datas["data_aula"].astype(str).tolist() if d],
+                reverse=True,
+            )
+            _idx = min(4, len(_datas_ord) - 1)   # 5º mais recente (índice 4)
+            try:
+                st.session_state[_KEY_INI_DEFAULT] = datetime.date.fromisoformat(
+                    _datas_ord[_idx]
+                )
+            except Exception:
+                st.session_state[_KEY_INI_DEFAULT] = hoje - datetime.timedelta(days=7)
+        else:
+            st.session_state[_KEY_INI_DEFAULT] = hoje - datetime.timedelta(days=7)
+
     # ── Filtros ────────────────────────────────────────────────────────────────
     col_de, col_ate, col_alerta = st.columns([2, 2, 2])
     data_ini = col_de.date_input(
         "📅 De:",
-        value=hoje - datetime.timedelta(days=30),
+        value=st.session_state[_KEY_INI_DEFAULT],
         format="DD/MM/YYYY",
         key="admin_data_ini",
     )
+    # Persiste o valor escolhido pelo operador para não voltar ao default ao recarregar
+    st.session_state[_KEY_INI_DEFAULT] = data_ini
     data_fim = col_ate.date_input(
         "📅 Até:",
         value=hoje,
