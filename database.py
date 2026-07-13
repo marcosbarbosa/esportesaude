@@ -1295,26 +1295,45 @@ def listar_datas_aulas_registradas() -> pd.DataFrame:
             return str(raw)[:10] if raw is not None else ""
 
         # ── 1. Todos os registros de frequência (data_aula + status) ──────────────────
-        # limit=50000 evita o corte silencioso de 1000 linhas do PostgREST.
-        # .range() sem .order() retorna vazio em alguns planos Supabase, por isso
-        # usamos .limit() aqui e reservamos .range()+.order() para queries filtradas.
-        r_freq = (
-            supabase.from_("frequencia")
-            .select("data_aula, status")
-            .limit(50000)
-            .execute()
-        )
+        # Supabase/PostgREST limita respostas a 1000 linhas por request.
+        # .limit(N>1000) é silenciosamente cortado. Usamos paginação real com
+        # PAGE=1000 + .order("id") (obrigatório para .range() funcionar).
+        freq_pages: list = []
+        _offset = 0
+        _PAGE = 1000
+        while True:
+            _res = (
+                supabase.from_("frequencia")
+                .select("data_aula, status")
+                .order("id")
+                .range(_offset, _offset + _PAGE - 1)
+                .execute()
+            )
+            if _res.data:
+                freq_pages.extend(_res.data)
+            if not _res.data or len(_res.data) < _PAGE:
+                break
+            _offset += _PAGE
 
         # ── 2. Diário de aulas ─────────────────────────────────────────────────────────
-        r_diario = (
-            supabase.from_("diario_aulas")
-            .select("data_aula, turma")
-            .limit(10000)
-            .execute()
-        )
+        diario_pages: list = []
+        _offset = 0
+        while True:
+            _res = (
+                supabase.from_("diario_aulas")
+                .select("data_aula, turma")
+                .order("id")
+                .range(_offset, _offset + _PAGE - 1)
+                .execute()
+            )
+            if _res.data:
+                diario_pages.extend(_res.data)
+            if not _res.data or len(_res.data) < _PAGE:
+                break
+            _offset += _PAGE
 
-        df_f = pd.DataFrame(r_freq.data or [])
-        df_d = pd.DataFrame(r_diario.data or [])
+        df_f = pd.DataFrame(freq_pages or [])
+        df_d = pd.DataFrame(diario_pages or [])
 
         # ── 3. Normaliza datas ─────────────────────────────────────────────────────────
         if not df_f.empty:
@@ -1369,7 +1388,7 @@ def contar_presencas_periodo_direto(data_ini, data_fim) -> dict:
         _RE = r"^\d{4}-\d{2}-\d{2}$"
         todos = []
         offset = 0
-        PAGE = 5000
+        PAGE = 1000  # Supabase/PostgREST devolve no máximo 1000 linhas por request
         while True:
             res = (
                 supabase.from_("frequencia")
