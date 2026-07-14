@@ -1163,32 +1163,6 @@ def set_config_valor(chave: str, valor) -> tuple:
         return False, str(e)
 
 
-@st.cache_data(ttl=60, show_spinner=False)
-def get_modulos_permissoes() -> dict:
-    """Retorna dict de permissões de módulos/funcionalidades do sistema.
-
-    Lê 'config_modulos_permissoes' de configuracoes_sistema.
-    Default: todos os módulos habilitados (True) — comportamento preservado
-    caso a chave ainda não exista no banco.
-    """
-    import json as _json
-    _default = {
-        "mod_frequencia":  True,
-        "mod_portal_aluno": True,
-        "mod_relatorios":  True,
-        "feat_dias_anamnese": True,
-    }
-    try:
-        raw = get_config_valor("config_modulos_permissoes", None)
-        if raw:
-            parsed = _json.loads(raw)
-            if isinstance(parsed, dict):
-                return {**_default, **parsed}
-        return _default
-    except Exception:
-        return _default
-
-
 # ==============================================================================
 # 📦 SNAPSHOT DO PAINEL INICIAL (view materializada em configuracoes_sistema)
 # Evita reprocessamento pesado em cada carregamento — operador aciona via botão.
