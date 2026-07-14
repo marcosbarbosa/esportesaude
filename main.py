@@ -1840,22 +1840,41 @@ if st.session_state.menu_atual == "Principal":
                 icon=None,
             )
 
-        # ── Carregar dados — snapshot primeiro, fallback em queries ao vivo ──
-        _df_alunos = buscar_alunos_geral("")
+        # ── Checkbox: grid desabilitado por padrão para evitar crash na abertura ──
+        _grid_habilitado = st.checkbox(
+            "📊 Exibir painel de alunos",
+            value=False,
+            key="hg_grid_ativo",
+            help=(
+                "Desabilitado por padrão para o sistema abrir rápido e sem travamentos. "
+                "Ative aqui quando precisar consultar o painel completo de alunos."
+            ),
+        )
+        if not _grid_habilitado:
+            st.info(
+                "💡 Painel desabilitado. Marque **Exibir painel de alunos** acima para carregar os dados.",
+                icon=None,
+            )
 
-        if _snap_ts:
-            _recs_up = _snap_home.get("ultima_presenca_recs", [])
-            _df_ultima = pd.DataFrame(_recs_up) if _recs_up else pd.DataFrame(columns=["id", "ultima_presenca"])
+        # ── Carregar dados — somente se o grid estiver habilitado ────────────
+        if _grid_habilitado:
+            _df_alunos = buscar_alunos_geral("")
 
-            _recs_at = _snap_home.get("atestados_recs", [])
-            _df_atestad = pd.DataFrame(_recs_at) if _recs_at else pd.DataFrame(columns=["id", "data_vencimento_atestado"])
+            if _snap_ts:
+                _recs_up = _snap_home.get("ultima_presenca_recs", [])
+                _df_ultima = pd.DataFrame(_recs_up) if _recs_up else pd.DataFrame(columns=["id", "ultima_presenca"])
 
-            _recs_tp = _snap_home.get("total_presencas_recs", [])
-            _df_total_pres = pd.DataFrame(_recs_tp) if _recs_tp else pd.DataFrame(columns=["id", "total_presencas_hist"])
+                _recs_at = _snap_home.get("atestados_recs", [])
+                _df_atestad = pd.DataFrame(_recs_at) if _recs_at else pd.DataFrame(columns=["id", "data_vencimento_atestado"])
+
+                _recs_tp = _snap_home.get("total_presencas_recs", [])
+                _df_total_pres = pd.DataFrame(_recs_tp) if _recs_tp else pd.DataFrame(columns=["id", "total_presencas_hist"])
+            else:
+                _df_ultima     = load_frequencia_ultima_presenca()
+                _df_atestad    = load_atestados_vencimento()
+                _df_total_pres = load_total_presencas_todos()
         else:
-            _df_ultima     = load_frequencia_ultima_presenca()
-            _df_atestad    = load_atestados_vencimento()
-            _df_total_pres = load_total_presencas_todos()
+            _df_alunos = pd.DataFrame()
 
         # Templates WhatsApp — carregados uma vez, fora do loop.
         # Cada gatilho da tabela crm_templates (painel Configurações > Mensagens)
