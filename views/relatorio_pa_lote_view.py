@@ -6,7 +6,7 @@
 #            ordenação alfabética, agrupamento por turma com numeração reiniciada.
 # ==============================================================================
 import streamlit as st
-import streamlit.components.v1 as components
+from streamlit.components.v1 import html as _html_v1
 import datetime
 
 from utils.identidade import get_config, get_logo_b64
@@ -814,7 +814,7 @@ def tela_relatorio_pa_lote():
             "desmarque 'Cabeçalhos e rodapés do navegador'.",
             icon="🖨️",
         )
-        components.html(
+        _html_v1(
             st.session_state["pa_lote_html"],
             height=860,
             scrolling=True,
