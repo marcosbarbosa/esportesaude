@@ -549,7 +549,9 @@ def tela_frequencia():
 
     nomes_abas = ["📱 Chamada Tablet", "📝 Diário", "🖨️ Dossiê", "🚨 Emergência",
                   "🔒 LGPD", "🏥 Atestado", label_niver]
-    if eh_admin:
+    from database import get_modulos_permissoes as _gmp_freq
+    _mods_freq = _gmp_freq()
+    if _mods_freq.get("feat_dias_anamnese", True):
         nomes_abas.append("📅 Dias Regist./Anamnese")
 
     abas = st.tabs(nomes_abas)
@@ -580,6 +582,6 @@ def tela_frequencia():
     with abas[6]:
         renderizar_aba_niver()
 
-    if eh_admin:
+    if _mods_freq.get("feat_dias_anamnese", True):
         with abas[7]:
             renderizar_aba_admin()

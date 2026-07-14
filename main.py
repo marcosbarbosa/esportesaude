@@ -1429,13 +1429,16 @@ CREATE POLICY "allow_all" ON dias_sem_aula
 # Executa as ferramentas de topo (Seletor de Tema e Botão do Drive) acima do menu principal
 renderizar_seletor_tema()
 
-menu = [
-    "Principal",
-    "Frequência",
-    "Portal do Aluno",
-    "Relatórios & BI",
-    "Gestor",
-]
+from database import get_modulos_permissoes as _get_mods_nav
+_mods_nav = _get_mods_nav()
+menu = ["Principal"]
+if _mods_nav.get("mod_frequencia", True):
+    menu.append("Frequência")
+if _mods_nav.get("mod_portal_aluno", True):
+    menu.append("Portal do Aluno")
+if _mods_nav.get("mod_relatorios", True):
+    menu.append("Relatórios & BI")
+menu.append("Gestor")
 menu.append("Sair")
 
 
@@ -1549,8 +1552,8 @@ if st.session_state.menu_atual == "Principal":
         )
 
     with _col_clock:
-        import streamlit.components.v1 as _stc
-        _stc.html(
+        from streamlit.components.v1 import html as _stc_html
+        _stc_html(
             """
 <div style='text-align:right; padding:4px 0; font-family:sans-serif;'>
   <div id="ck"
@@ -2625,7 +2628,7 @@ elif st.session_state.menu_atual in (
             _aba_cfg = st.tabs([
                 "🏫 Turmas", "💬 Mensagens", "🔔 Auto Niver", "🎨 Identidade Visual",
                 "🗄️ Bck Adm", "🔀 Mescla Cad", "📅 Calendário", "📧 Email BI",
-                "👥 Usuários", "🔒 LGPD", "🏷️ Tags Saúde",
+                "👥 Usuários", "🔒 LGPD", "🏷️ Tags Saúde", "🔐 Módulos",
             ])
             with _aba_cfg[0]:
                 from views.turmas_view import tela_gestao_turmas
@@ -2693,6 +2696,9 @@ elif st.session_state.menu_atual in (
             with _aba_cfg[10]:
                 from views.tags_clinicas_config_view import tela_tags_clinicas_config
                 tela_tags_clinicas_config()
+            with _aba_cfg[11]:
+                from views.modulos_config_view import tela_modulos_config
+                tela_modulos_config()
 
 # ── Rodapé Fixo ─────────────────────────────────────────────────────────────
 from utils.identidade import get_config as _gcfg_rodape
