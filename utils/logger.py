@@ -9,13 +9,21 @@ from contextlib import contextmanager
 
 
 def configurar_logging(level: int = logging.INFO) -> None:
-    """Configura o logger raiz uma única vez. Chame em main.py na inicialização."""
-    logging.basicConfig(
-        level=level,
-        format="%(asctime)s [%(levelname)-8s] %(name)s: %(message)s",
-        datefmt="%H:%M:%S",
-        force=True,
-    )
+    """Configura o logger 'imbra' sem tocar nos handlers do Streamlit.
+
+    Usa APENAS o logger nomeado 'imbra' para não remover os handlers internos
+    do Streamlit (que também ficam no root logger). force=True foi removido.
+    """
+    logger = logging.getLogger("imbra")
+    if not logger.handlers:
+        _handler = logging.StreamHandler()
+        _handler.setFormatter(logging.Formatter(
+            "%(asctime)s [%(levelname)-8s] %(name)s: %(message)s",
+            datefmt="%H:%M:%S",
+        ))
+        logger.addHandler(_handler)
+    logger.setLevel(level)
+    logger.propagate = False
     # Silenciar loggers verbose de dependências
     for _lib in ("httpx", "urllib3", "httpcore", "hpack", "h2", "h11"):
         logging.getLogger(_lib).setLevel(logging.WARNING)
