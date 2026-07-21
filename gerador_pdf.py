@@ -1364,6 +1364,13 @@ def criar_documento_aluno_pdf(aluno_data, avaliacoes, historico, estatisticas):
                 elif "JOELHO" in _cod2: _cal_map[_dc2]["fj"] = True
                 elif "LOMBAR" in _cod2: _cal_map[_dc2]["fl"] = True
 
+    # Buscar temperatura matutina (8h) para cada dia de aula
+    _temp_cal = {}
+    try:
+        _temp_cal = _buscar_temperaturas_historicas(list(_cal_map.keys()), hora_turma=8)
+    except Exception:
+        _temp_cal = {}
+
     _cal_meses_k = sorted({d[:7] for d in _cal_map.keys() if len(d) == 10})
     _MES_PT_CAL  = {"01":"Jan","02":"Fev","03":"Mar","04":"Abr","05":"Mai","06":"Jun",
                     "07":"Jul","08":"Ago","09":"Set","10":"Out","11":"Nov","12":"Dez"}
@@ -1372,7 +1379,7 @@ def criar_documento_aluno_pdf(aluno_data, avaliacoes, historico, estatisticas):
         _cw_lbl  = 14   # largura do label do mes
         _cw_grid = 172  # largura da area de dias (1-31)
         _cw_cell = _cw_grid / 31
-        _ch_row  = 6.5  # altura de cada linha de mes
+        _ch_row  = 9.5  # altura de cada linha de mes (extra para temperatura)
         _ct_cal  = pdf.get_y() + 2
         _n_meses = len(_cal_meses_k)
 
@@ -1427,17 +1434,32 @@ def criar_documento_aluno_pdf(aluno_data, avaliacoes, historico, estatisticas):
                         pdf.rect(_cx, _cy, _cw_cell - 0.2, _ch_row - 1.2, style="D")
                         pdf.set_line_width(0.1)
 
-                    # Numero do dia
-                    pdf.set_font("Arial", "", 3.2)
+                    # Numero do dia (terço superior da célula)
+                    pdf.set_font("Arial", "B", 3.5)
                     pdf.set_text_color(255, 255, 255)
-                    pdf.set_xy(_cx, _cy + (_ch_row - 1.2 - 3.2) / 2)
-                    pdf.cell(_cw_cell - 0.2, 3.2, str(_dd), align="C")
+                    pdf.set_xy(_cx, _cy + 0.5)
+                    pdf.cell(_cw_cell - 0.2, 3.5, str(_dd), align="C")
+                    # Temperatura às 8h (terço inferior da célula)
+                    _tv_c = _temp_cal.get(_dc3)
+                    if _tv_c is not None:
+                        _tv_int = int(round(_tv_c))
+                        pdf.set_font("Arial", "", 3.0)
+                        pdf.set_text_color(255, 255, 200)
+                        pdf.set_xy(_cx, _cy + 4.2)
+                        pdf.cell(_cw_cell - 0.2, 3.0, f"{_tv_int}\xb0", align="C")
                 else:
                     # Dia sem aula: quadrado cinza muito claro
                     pdf.set_fill_color(235, 235, 242)
                     pdf.set_draw_color(220, 220, 228)
                     pdf.set_line_width(0.05)
                     pdf.rect(_cx, _cy, _cw_cell - 0.2, _ch_row - 1.2, style="FD")
+                    # Temperatura sutil em dias sem aula (contexto climático)
+                    _tv_g = _temp_cal.get(_dc3)
+                    if _tv_g is not None:
+                        pdf.set_font("Arial", "", 2.8)
+                        pdf.set_text_color(170, 170, 185)
+                        pdf.set_xy(_cx, _cy + 1.0)
+                        pdf.cell(_cw_cell - 0.2, 2.8, f"{int(round(_tv_g))}\xb0", align="C")
 
         # Legenda do calendario
         _cal_ly = _ct_cal + _cal_tot_h + 3
@@ -1446,8 +1468,9 @@ def criar_documento_aluno_pdf(aluno_data, avaliacoes, historico, estatisticas):
         pdf.set_text_color(34, 139, 34);  pdf.write(4, "Verde = Presente  ")
         pdf.set_text_color(180, 0, 0);    pdf.write(4, "Vermelho = Falta  ")
         pdf.set_text_color(200, 160, 0);  pdf.write(4, "Amarelo = Justificada  ")
-        pdf.set_text_color(240, 130, 80); pdf.write(4, "Cinza = sem aula  ")
-        pdf.set_text_color(255, 130, 0);  pdf.write(4, "  Borda laranja = aula com foco tecnico (ombro/joelho/lombar)")
+        pdf.set_text_color(160, 160, 175);pdf.write(4, "Cinza = sem aula  ")
+        pdf.set_text_color(255, 130, 0);  pdf.write(4, "  Borda laranja = foco tecnico (ombro/joelho/lombar)  ")
+        pdf.set_text_color(100, 100, 60); pdf.write(4, u"  \xb0 = Temperatura local (8h) — Campo Belo/SP")
         pdf.set_text_color(0, 0, 0)
         pdf.set_y(_cal_ly + 7)
 
