@@ -26,6 +26,24 @@ _LON_CAMPO_BELO = -46.6642
 _WEATHER_CACHE: dict = {}
 
 
+def _mc(pdf, h, txt, align="L"):
+    """multi_cell seguro — reseta X para margem esquerda antes de renderizar."""
+    pdf.set_x(pdf.l_margin)
+    pdf.multi_cell(0, h, txt, align=align)
+    pdf.set_x(pdf.l_margin)
+
+
+def _mc_inline(pdf, h, txt):
+    """multi_cell inline (apos write) — usa largura disponivel a partir do cursor."""
+    _w = pdf.w - pdf.r_margin - pdf.get_x()
+    if _w < 20:
+        pdf.ln(h)
+        pdf.set_x(pdf.l_margin)
+        _w = 0
+    pdf.multi_cell(_w, h, txt)
+    pdf.set_x(pdf.l_margin)
+
+
 def _buscar_temperaturas_historicas(datas_iso: list, hora_turma: int = 9) -> dict:
     """Busca temperatura histórica em Campo Belo SP para uma lista de datas.
 
@@ -504,7 +522,7 @@ def criar_documento_aluno_pdf(aluno_data, avaliacoes, historico, estatisticas):
         pdf.set_font("Arial", "B" if negrito_valor else "", 10)
         if cor_valor:
             pdf.set_text_color(*cor_valor)
-        pdf.multi_cell(0, 5, limpar_texto(str(valor)))
+        _mc_inline(pdf, 5, limpar_texto(str(valor)))
         pdf.set_text_color(0, 0, 0)
 
     # ── Pré-computações ───────────────────────────────────────────────────────
@@ -772,12 +790,12 @@ def criar_documento_aluno_pdf(aluno_data, avaliacoes, historico, estatisticas):
                 pdf.set_font("Arial", "B", 9)
                 pdf.write(5, "Cirurgias/Lesoes: ")
                 pdf.set_font("Arial", "", 9)
-                pdf.multi_cell(0, 5, limpar_texto(cir))
+                _mc_inline(pdf, 5, limpar_texto(cir))
             if meds != "Nao informado":
                 pdf.set_font("Arial", "B", 9)
                 pdf.write(5, "Medicamentos/Obs: ")
                 pdf.set_font("Arial", "", 9)
-                pdf.multi_cell(0, 5, limpar_texto(meds))
+                _mc_inline(pdf, 5, limpar_texto(meds))
             pdf.ln(2)
     else:
         pdf.set_font("Arial", "", 10)
@@ -911,18 +929,18 @@ def criar_documento_aluno_pdf(aluno_data, avaliacoes, historico, estatisticas):
                 pdf.set_font("Arial", "B", 9)
                 pdf.write(5, "Regioes: ")
                 pdf.set_font("Arial", "", 9)
-                pdf.multi_cell(0, 5, limpar_texto(", ".join(str(r) for r in _regioes)))
+                _mc_inline(pdf, 5, limpar_texto(", ".join(str(r) for r in _regioes)))
             if isinstance(_inten, dict) and _inten:
                 pdf.set_font("Arial", "B", 9)
                 pdf.write(5, "Intensidade: ")
                 pdf.set_font("Arial", "", 9)
-                pdf.multi_cell(0, 5, limpar_texto(" | ".join(
+                _mc_inline(pdf, 5, limpar_texto(" | ".join(
                     f"{k}: {v}" for k, v in list(_inten.items())[:6])))
             if _obs != "Sem observacoes":
                 pdf.set_font("Arial", "B", 9)
                 pdf.write(5, "Observacoes: ")
                 pdf.set_font("Arial", "", 9)
-                pdf.multi_cell(0, 5, limpar_texto(_obs))
+                _mc_inline(pdf, 5, limpar_texto(_obs))
             pdf.ln(2)
     else:
         pdf.set_font("Arial", "", 10)
@@ -1046,7 +1064,7 @@ def criar_documento_aluno_pdf(aluno_data, avaliacoes, historico, estatisticas):
 
         # Resumo numérico
         pdf.set_font("Arial", "", 9)
-        pdf.multi_cell(0, 5, limpar_texto(
+        _mc(pdf, 5, limpar_texto(
             f"Total: {pres_total}x presencas  |  {faltas} faltas  |  "
             f"Assiduidade geral: {pct:.1f}%  |  Ultimos 60 dias: {pres_60}x ({pct_60:.1f}%)"
         ))
@@ -1129,33 +1147,33 @@ def criar_documento_aluno_pdf(aluno_data, avaliacoes, historico, estatisticas):
             pdf.set_font("Arial", "B", 9)
             pdf.write(5, "Objetivo: ")
             pdf.set_font("Arial", "", 9)
-            pdf.multi_cell(0, 5, limpar_texto(obj))
+            _mc_inline(pdf, 5, limpar_texto(obj))
 
             if exc and exc != "Nao informado":
                 pdf.set_font("Arial", "B", 9)
                 pdf.write(5, "Exercicios: ")
                 pdf.set_font("Arial", "", 9)
-                pdf.multi_cell(0, 5, limpar_texto(exc))
+                _mc_inline(pdf, 5, limpar_texto(exc))
 
             for codigo, descricao in alertas:
                 pdf.set_font("Arial", "B", 9)
                 pdf.set_text_color(*_COR_RISCO.get(codigo, (150, 0, 0)))
                 pdf.write(5, limpar_texto(f"  {_LABEL_RISCO.get(codigo, '[RISCO]')} "))
                 pdf.set_font("Arial", "", 9)
-                pdf.multi_cell(0, 5, limpar_texto(descricao))
+                _mc_inline(pdf, 5, limpar_texto(descricao))
                 pdf.set_text_color(0, 0, 0)
 
             if foco and foco != "Nao informado":
                 pdf.set_font("Arial", "B", 9)
                 pdf.write(5, "Foco Clinico: ")
                 pdf.set_font("Arial", "", 9)
-                pdf.multi_cell(0, 5, limpar_texto(foco))
+                _mc_inline(pdf, 5, limpar_texto(foco))
 
             if relatos and relatos != "Nao informado":
                 pdf.set_font("Arial", "B", 9)
                 pdf.write(5, "Relatos: ")
                 pdf.set_font("Arial", "I", 9)
-                pdf.multi_cell(0, 5, limpar_texto(relatos))
+                _mc_inline(pdf, 5, limpar_texto(relatos))
                 pdf.set_font("Arial", "", 9)
             pdf.ln(2)
     else:
@@ -1198,17 +1216,17 @@ def criar_documento_aluno_pdf(aluno_data, avaliacoes, historico, estatisticas):
         pdf.set_text_color(0, 0, 0)
         pdf.set_font("Arial", "", 9)
         if "OMBRO-ALTO" in codigos_encontrados:
-            pdf.multi_cell(0, 5, limpar_texto(
+            _mc(pdf, 5, limpar_texto(
                 "  [OMBRO] PRIORITARIO: Evitar exercicios acima da linha do ombro. "
                 "Substituir por movimentos abaixo de 90 graus. Verificar laudo ortopedico."))
         if "OMBRO-MOD" in codigos_encontrados:
-            pdf.multi_cell(0, 5, limpar_texto(
+            _mc(pdf, 5, limpar_texto(
                 "  [OMBRO] Monitorar queixas em remadas e halteres. Reduzir carga ao menor sinal de dor."))
         if "JOELHO" in codigos_encontrados:
-            pdf.multi_cell(0, 5, limpar_texto(
+            _mc(pdf, 5, limpar_texto(
                 "  [JOELHO] Evitar agachamentos profundos e impacto. Priorizar isometrico e amplitude parcial."))
         if "LOMBAR" in codigos_encontrados:
-            pdf.multi_cell(0, 5, limpar_texto(
+            _mc(pdf, 5, limpar_texto(
                 "  [LOMBAR] Manter coluna neutra. Evitar flexao forcada de tronco com carga."))
     else:
         pdf.set_font("Arial", "", 10)
@@ -1288,12 +1306,12 @@ def criar_documento_aluno_pdf(aluno_data, avaliacoes, historico, estatisticas):
     elif len(avaliacoes) == 1:
         recs.append("Repetir avaliacao clinica para iniciar acompanhamento de evolucao.")
     for i, rec in enumerate(recs, 1):
-        pdf.multi_cell(0, 5, limpar_texto(f"  {i}. {rec}"))
+        _mc(pdf, 5, limpar_texto(f"  {i}. {rec}"))
 
     pdf.ln(5)
     pdf.set_font("Arial", "I", 8)
     pdf.set_text_color(150, 150, 150)
-    pdf.multi_cell(0, 5, limpar_texto(
+    _mc(pdf, 5, limpar_texto(
         "Este dossie foi gerado automaticamente pelo sistema IMBRA com base nos dados clinicos e de frequencia "
         "registrados pelos profissionais responsaveis. Nao substitui avaliacao medica presencial."
     ))
