@@ -3504,6 +3504,52 @@ def seed_tags_clinicas_padrao() -> tuple:
         return False, str(e)
 
 
+# ==============================================================================
+# 🌡️ CACHE DE TEMPERATURAS HISTÓRICAS — Open-Meteo → Supabase
+# ==============================================================================
+# SQL para criar a tabela (executar UMA VEZ no Supabase SQL Editor):
+# CREATE TABLE IF NOT EXISTS temperatura_historica (
+#     data  DATE     NOT NULL,
+#     hora  SMALLINT NOT NULL DEFAULT 8,
+#     temp_c NUMERIC(4,1),
+#     PRIMARY KEY (data, hora)
+# );
+
+def get_temperaturas_db(datas: list, hora: int = 8) -> dict:
+    """Retorna {data_str: temp_c} para as datas que já estão no banco."""
+    if not datas:
+        return {}
+    try:
+        r = (
+            supabase.table("temperatura_historica")
+            .select("data, temp_c")
+            .in_("data", datas)
+            .eq("hora", hora)
+            .execute()
+        )
+        return {row["data"]: row["temp_c"] for row in (r.data or [])}
+    except Exception:
+        return {}
+
+
+def salvar_temperaturas_db(temps: dict, hora: int = 8) -> None:
+    """Persiste temperaturas no banco (upsert por data + hora)."""
+    if not temps:
+        return
+    try:
+        rows = [
+            {"data": d, "hora": hora, "temp_c": round(float(t), 1)}
+            for d, t in temps.items()
+            if t is not None
+        ]
+        if rows:
+            supabase.table("temperatura_historica").upsert(
+                rows, on_conflict="data,hora"
+            ).execute()
+    except Exception:
+        pass
+
+
 def sincronizar_tags_clinicas() -> tuple:
     """Upsert de todas as tags do seed — insere novas e atualiza as existentes por nome.
 

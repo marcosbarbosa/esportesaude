@@ -44,59 +44,105 @@ def _mc_inline(pdf, h, txt):
     pdf.set_x(pdf.l_margin)
 
 
-def _buscar_temperaturas_historicas(datas_iso: list, hora_turma: int = 9) -> dict:
+def _buscar_temperaturas_historicas(datas_iso: list, hora_turma: int = 8) -> dict:
     """Busca temperatura histórica em Campo Belo SP para uma lista de datas.
 
-    Faz UMA chamada batch à Open-Meteo Archive API (gratuita, sem chave).
+    Fluxo de cache (do mais rápido ao mais lento):
+      1. Cache em memória (_WEATHER_CACHE)
+      2. Banco Supabase (tabela temperatura_historica)
+      3. Open-Meteo Archive API  — para datas >= 5 dias atrás
+         Open-Meteo Forecast API — para datas < 5 dias atrás
+    Persiste automaticamente no banco os dados novos obtidos via API.
     Retorna dict {date_str: float | None}.
     """
     if not datas_iso:
         return {}
 
-    # Filtrar datas já em cache e datas futuras
     hoje = datetime.date.today()
-    pendentes = []
+    resultado: dict = {}
+
+    # ── 1. Cache em memória ──────────────────────────────────────────────────
+    sem_cache = []
     for d in datas_iso:
         chave = f"{d}_{hora_turma}"
-        if chave not in _WEATHER_CACHE:
+        if chave in _WEATHER_CACHE:
+            resultado[d] = _WEATHER_CACHE[chave]
+        else:
             try:
                 if datetime.date.fromisoformat(d) < hoje:
-                    pendentes.append(d)
+                    sem_cache.append(d)
                 else:
                     _WEATHER_CACHE[chave] = None
+                    resultado[d] = None
             except Exception:
                 _WEATHER_CACHE[chave] = None
+                resultado[d] = None
 
-    if pendentes:
-        data_min = min(pendentes)
-        data_max = max(pendentes)
-        try:
-            # Archive API cobre até ~5 dias atrás; forecast API cobre os últimos 7d
-            dias_atras = (hoje - datetime.date.fromisoformat(data_max)).days
-            if dias_atras >= 5:
-                base = "https://archive-api.open-meteo.com/v1/archive"
+    if not sem_cache:
+        return resultado
+
+    # ── 2. Banco Supabase ────────────────────────────────────────────────────
+    try:
+        from database import get_temperaturas_db as _gtdb, salvar_temperaturas_db as _stdb
+        db_data = _gtdb(sem_cache, hora_turma)
+        still_missing = []
+        for d in sem_cache:
+            if d in db_data:
+                v = db_data[d]
+                _WEATHER_CACHE[f"{d}_{hora_turma}"] = v
+                resultado[d] = v
             else:
-                base = "https://api.open-meteo.com/v1/forecast"
+                still_missing.append(d)
+        sem_cache = still_missing
+        _tem_db = True
+    except Exception:
+        _tem_db = False
+        _stdb = None  # type: ignore
 
+    if not sem_cache:
+        return resultado
+
+    # ── 3. Open-Meteo API (archive para antigas, forecast para recentes) ─────
+    _arquivo  = [d for d in sem_cache if (hoje - datetime.date.fromisoformat(d)).days >= 5]
+    _recentes = [d for d in sem_cache if (hoje - datetime.date.fromisoformat(d)).days < 5]
+    novos: dict = {}
+
+    def _api_call(grupo: list, base_url: str) -> None:
+        if not grupo:
+            return
+        try:
             url = (
-                f"{base}?latitude={_LAT_CAMPO_BELO}&longitude={_LON_CAMPO_BELO}"
-                f"&start_date={data_min}&end_date={data_max}"
+                f"{base_url}?latitude={_LAT_CAMPO_BELO}&longitude={_LON_CAMPO_BELO}"
+                f"&start_date={min(grupo)}&end_date={max(grupo)}"
                 f"&hourly=temperature_2m&timezone=America%2FSao_Paulo"
             )
-            resp = requests.get(url, timeout=10)
+            resp = requests.get(url, timeout=12)
             jdata = resp.json()
             times = jdata.get("hourly", {}).get("time", [])
             temps = jdata.get("hourly", {}).get("temperature_2m", [])
-            time_map = {t: v for t, v in zip(times, temps)}
-
-            for d in pendentes:
-                alvo = f"{d}T{hora_turma:02d}:00"
-                _WEATHER_CACHE[f"{d}_{hora_turma}"] = time_map.get(alvo)
+            tmap  = {t: v for t, v in zip(times, temps)}
+            for d in grupo:
+                v = tmap.get(f"{d}T{hora_turma:02d}:00")
+                _WEATHER_CACHE[f"{d}_{hora_turma}"] = v
+                resultado[d] = v
+                if v is not None:
+                    novos[d] = v
         except Exception:
-            for d in pendentes:
+            for d in grupo:
                 _WEATHER_CACHE[f"{d}_{hora_turma}"] = None
+                resultado[d] = None
 
-    return {d: _WEATHER_CACHE.get(f"{d}_{hora_turma}") for d in datas_iso}
+    _api_call(_arquivo,  "https://archive-api.open-meteo.com/v1/archive")
+    _api_call(_recentes, "https://api.open-meteo.com/v1/forecast")
+
+    # ── 4. Persistir novos dados no banco ────────────────────────────────────
+    if novos and _tem_db and _stdb:
+        try:
+            _stdb(novos, hora_turma)
+        except Exception:
+            pass
+
+    return resultado
 
 
 class PDF(FPDF):
