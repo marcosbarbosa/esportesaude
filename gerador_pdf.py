@@ -1508,7 +1508,7 @@ def criar_documento_aluno_pdf(aluno_data, avaliacoes, historico, estatisticas):
         pdf.set_xy(10, _cal_ly)
         pdf.set_font("Arial", "", 6.5)
         pdf.set_font("Arial", "B", 6.5)
-        pdf.set_text_color(0, 0, 0);      pdf.write(4, "Topo da celula — frequencia:  ")
+        pdf.set_text_color(0, 0, 0);      pdf.write(4, limpar_texto("Topo da celula - frequencia:  "))
         pdf.set_font("Arial", "", 6.5)
         pdf.set_text_color(34, 139, 34);  pdf.write(4, "Verde = Presente  ")
         pdf.set_text_color(180, 0, 0);    pdf.write(4, "Vermelho = Falta  ")
