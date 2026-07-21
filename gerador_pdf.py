@@ -600,9 +600,21 @@ def criar_documento_aluno_pdf(aluno_data, avaliacoes, historico, estatisticas):
         imc_str       = f"{imc:.1f} kg/m2"
         imc_class_str = _imc_class(imc)
 
-    pres_total = estatisticas.get("presentes", 0)   if estatisticas else 0
-    faltas     = estatisticas.get("faltas",    0)   if estatisticas else 0
-    pct        = estatisticas.get("percentual", 0.0) if estatisticas else 0.0
+    # Contagem EXATA direto de freq_serie — mesma fonte dos gráficos.
+    # Elimina qualquer divergência entre resumo textual e barras/calendário.
+    if freq_serie:
+        _fs_pres  = sum(1 for _r in freq_serie if str(_r.get("status","")).upper() == "PRESENTE")
+        _fs_just  = sum(1 for _r in freq_serie if str(_r.get("status","")).upper() == "JUSTIFICADA")
+        _fs_total = len(freq_serie)
+        pres_total = _fs_pres
+        faltas     = _fs_total - _fs_pres          # inclui JUSTIFICADA (convenção existente)
+        pct        = (_fs_pres / _fs_total * 100) if _fs_total > 0 else 0.0
+    else:
+        # fallback: sem dados de série, usa dict de estatísticas do banco
+        pres_total = estatisticas.get("presentes",  0)   if estatisticas else 0
+        faltas     = estatisticas.get("faltas",     0)   if estatisticas else 0
+        pct        = estatisticas.get("percentual", 0.0) if estatisticas else 0.0
+        _fs_just   = 0
 
     cutoff_60 = hoje - datetime.timedelta(days=60)
     pres_60, total_60 = 0, 0
@@ -1370,6 +1382,12 @@ def criar_documento_aluno_pdf(aluno_data, avaliacoes, historico, estatisticas):
                     pdf.set_line_width(0.1)
                     pdf.rect(_cx, _cy, _cw_cell - 0.2, _ch_row - 1.2, style="FD")
 
+                    # Faixa vermelha no topo = dia de calor (temp >= 15 °C)
+                    _tv_c = _temp_cal.get(_dc3)
+                    if _tv_c is not None and _tv_c >= 15:
+                        pdf.set_fill_color(230, 50, 0)
+                        pdf.rect(_cx + 0.12, _cy + 0.12, _cw_cell - 0.55, 1.0, style="F")
+
                     # Borda laranja = foco tecnico
                     if _entry.get("fo") or _entry.get("fj") or _entry.get("fl"):
                         pdf.set_draw_color(255, 130, 0)
@@ -1380,15 +1398,14 @@ def criar_documento_aluno_pdf(aluno_data, avaliacoes, historico, estatisticas):
                     # Numero do dia (terço superior da célula)
                     pdf.set_font("Arial", "B", 3.5)
                     pdf.set_text_color(255, 255, 255)
-                    pdf.set_xy(_cx, _cy + 0.5)
-                    pdf.cell(_cw_cell - 0.2, 3.5, str(_dd), align="C")
+                    pdf.set_xy(_cx, _cy + 1.3)
+                    pdf.cell(_cw_cell - 0.2, 3.0, str(_dd), align="C")
                     # Temperatura às 8h (terço inferior da célula)
-                    _tv_c = _temp_cal.get(_dc3)
                     if _tv_c is not None:
                         _tv_int = int(round(_tv_c))
                         pdf.set_font("Arial", "", 3.0)
                         pdf.set_text_color(255, 255, 200)
-                        pdf.set_xy(_cx, _cy + 4.2)
+                        pdf.set_xy(_cx, _cy + 4.5)
                         pdf.cell(_cw_cell - 0.2, 3.0, f"{_tv_int}\xb0", align="C")
                 else:
                     # Dia sem aula: quadrado cinza muito claro
@@ -1412,8 +1429,9 @@ def criar_documento_aluno_pdf(aluno_data, avaliacoes, historico, estatisticas):
         pdf.set_text_color(180, 0, 0);    pdf.write(4, "Vermelho = Falta  ")
         pdf.set_text_color(200, 160, 0);  pdf.write(4, "Amarelo = Justificada  ")
         pdf.set_text_color(160, 160, 175);pdf.write(4, "Cinza = sem aula  ")
-        pdf.set_text_color(255, 130, 0);  pdf.write(4, "  Borda laranja = foco tecnico (ombro/joelho/lombar)  ")
-        pdf.set_text_color(100, 100, 60); pdf.write(4, limpar_texto(u"  \xb0 = Temperatura local (8h) - Campo Belo/SP"))
+        pdf.set_text_color(255, 130, 0);  pdf.write(4, "  Borda laranja = foco tecnico  ")
+        pdf.set_text_color(230, 50, 0);   pdf.write(4, limpar_texto("  Faixa vermelha no topo = calor (>= 15 graus as 8h)  "))
+        pdf.set_text_color(100, 100, 60); pdf.write(4, limpar_texto(u"  \xb0 = Temp. local (8h) - Campo Belo/SP"))
         pdf.set_text_color(0, 0, 0)
         pdf.set_y(_cal_ly + 7)
 
