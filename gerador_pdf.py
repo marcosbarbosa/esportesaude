@@ -695,6 +695,17 @@ def criar_documento_aluno_pdf(aluno_data, avaliacoes, historico, estatisticas):
     pdf.set_draw_color(0, 0, 0)
     pdf.ln(3)
 
+    # Observações Clínicas (Livre) — campo problemas_saude do cadastro
+    _obs_livre = _safe_str(aluno_data.get("problemas_saude"), "")
+    if _obs_livre and _obs_livre not in ("Nao informado", "Sem registro", "nan", ""):
+        pdf.ln(2)
+        pdf.set_font("Arial", "B", 10)
+        pdf.set_fill_color(240, 248, 255)
+        pdf.cell(0, 6, limpar_texto("  Observacoes Clinicas (Livre)"), ln=1, fill=True)
+        pdf.set_font("Arial", "", 9)
+        _mc(pdf, 5, limpar_texto(_obs_livre))
+        pdf.ln(1)
+
     # Fatores de risco da última avaliação
     if avaliacoes:
         ultima_av = avaliacoes[0]
@@ -968,14 +979,14 @@ def criar_documento_aluno_pdf(aluno_data, avaliacoes, historico, estatisticas):
     _meses = sorted(_mtotal.keys())
     _mpct  = {m: (_mpres[m] / _mtotal[m] * 100) for m in _meses if _mtotal[m] > 0}
 
-    if len(_meses) >= 2:
+    if len(_meses) >= 1:
         _nm   = len(_meses)
-        _cl   = 28    # left margin (Y-axis labels)
-        _cw   = 162   # chart width
-        _ch   = 50    # chart height
+        _cl   = 28    # margem esquerda (rótulos Y)
+        _cw   = 162   # largura do gráfico
+        _ch   = 45    # altura do gráfico (barras)
         _ct   = pdf.get_y() + 3
 
-        if _ct + _ch + 18 > 275:
+        if _ct + _ch + 22 > 275:
             pdf.add_page()
             _ct = pdf.get_y() + 3
 
@@ -983,7 +994,6 @@ def criar_documento_aluno_pdf(aluno_data, avaliacoes, historico, estatisticas):
         pdf.set_fill_color(248, 250, 255)
         pdf.set_draw_color(180, 200, 230)
         pdf.rect(_cl, _ct, _cw, _ch, style="FD")
-        pdf.set_draw_color(0, 0, 0)
 
         # Grid horizontal e rótulos Y
         for _gp in [0, 25, 50, 75, 100]:
@@ -1000,51 +1010,59 @@ def criar_documento_aluno_pdf(aluno_data, avaliacoes, historico, estatisticas):
             pdf.set_xy(_cl - 14, _yg - 2)
             pdf.cell(13, 4, f"{_gp}%", align="R")
 
-        # Rótulo da linha de referência 75%
+        # Rótulo "meta 75%"
         pdf.set_font("Arial", "I", 6)
         pdf.set_text_color(220, 120, 0)
         pdf.set_xy(_cl + _cw - 28, _ct + _ch * 0.25 - 4)
         pdf.cell(28, 4, "meta 75%", align="R")
 
-        pdf.set_draw_color(0, 0, 0)
-        pdf.set_line_width(0.2)
+        # Dimensões das barras
+        _slot_w = _cw / _nm
+        _bar_w  = max(1.5, _slot_w * 0.72)
+        _gap    = (_slot_w - _bar_w) / 2
+        _show_pct = _slot_w >= 5.0  # só mostra % quando há espaço
+        _step_x = max(1, _nm // 14)  # máximo ~14 rótulos no eixo X
 
-        # Coordenadas de cada ponto
-        _coords = []
+        pdf.set_draw_color(200, 215, 230)
+        pdf.set_line_width(0.15)
+
         for _i, _mes in enumerate(_meses):
-            _pct_m = _mpct.get(_mes, 0)
-            _xp = _cl + (_i / max(_nm - 1, 1)) * _cw
-            _yp = _ct + _ch - (_pct_m / 100.0) * _ch
-            _coords.append((_xp, _yp, _pct_m))
+            _pct_m  = _mpct.get(_mes, 0)
+            _bx     = _cl + _i * _slot_w + _gap
+            _bh     = (_pct_m / 100.0) * _ch
+            _by     = _ct + _ch - _bh
 
-        # Linhas entre pontos (azul IMBRA)
-        pdf.set_draw_color(30, 136, 229)
-        pdf.set_line_width(0.8)
-        for _i in range(1, len(_coords)):
-            pdf.line(_coords[_i-1][0], _coords[_i-1][1],
-                     _coords[_i][0],   _coords[_i][1])
-
-        # Pontos de dados (elipse preenchida)
-        pdf.set_line_width(0.2)
-        for _xp, _yp, _pct_m in _coords:
+            # Cor da barra
             if _pct_m >= 75:
                 pdf.set_fill_color(34, 139, 34)
             elif _pct_m >= 50:
                 pdf.set_fill_color(220, 120, 0)
-            else:
+            elif _pct_m > 0:
                 pdf.set_fill_color(180, 0, 0)
-            pdf.ellipse(_xp - 1.5, _yp - 1.5, 3, 3, style="F")
+            else:
+                pdf.set_fill_color(210, 210, 210)
 
-        # Rótulos do eixo X
-        _step = max(1, _nm // 12)
-        pdf.set_draw_color(0, 0, 0)
-        for _i, _mes in enumerate(_meses):
-            if _i % _step == 0 or _i == _nm - 1:
-                _xp = _cl + (_i / max(_nm - 1, 1)) * _cw
-                pdf.set_font("Arial", "", 6)
+            if _bh > 0.3:
+                pdf.rect(_bx, _by, _bar_w, _bh, style="FD")
+
+            # Rótulo de % (dentro se barra alta, acima se baixa)
+            if _show_pct and _pct_m > 0:
+                _ps = f"{_pct_m:.0f}%"
+                pdf.set_font("Arial", "B", 5)
+                if _bh >= 7:
+                    pdf.set_text_color(255, 255, 255)
+                    pdf.set_xy(_bx - 1, _by + 1.5)
+                else:
+                    pdf.set_text_color(80, 80, 80)
+                    pdf.set_xy(_bx - 1, max(_ct + 1, _by - 4.5))
+                pdf.cell(_bar_w + 2, 3.5, _ps, align="C")
+
+            # Rótulo do eixo X
+            if _i % _step_x == 0 or _i == _nm - 1:
+                pdf.set_font("Arial", "", 5)
                 pdf.set_text_color(80, 80, 80)
-                pdf.set_xy(_xp - 8, _ct + _ch + 1)
-                pdf.cell(16, 4, _mes[5:] + "/" + _mes[2:4], align="C")
+                pdf.set_xy(_bx - 2, _ct + _ch + 1.5)
+                pdf.cell(_bar_w + 4, 3.5, _mes[5:] + "/" + _mes[2:4], align="C")
 
         # Legenda de cores
         pdf.set_text_color(0, 0, 0)
@@ -1069,13 +1087,6 @@ def criar_documento_aluno_pdf(aluno_data, avaliacoes, historico, estatisticas):
             f"Assiduidade geral: {pct:.1f}%  |  Ultimos 60 dias: {pres_60}x ({pct_60:.1f}%)"
         ))
 
-    elif len(_meses) == 1:
-        _mes = _meses[0]
-        pdf.set_font("Arial", "", 10)
-        pdf.cell(0, 6, limpar_texto(
-            f"Apenas 1 mes de dados: {_mes} — "
-            f"{_mpres[_mes]}/{_mtotal[_mes]} aulas ({_mpct.get(_mes, 0):.1f}%)"
-        ), ln=1)
     else:
         pdf.set_font("Arial", "", 10)
         pdf.set_text_color(150, 150, 150)
