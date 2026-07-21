@@ -176,8 +176,27 @@ _IMC_CODES = {
 def limpar_texto(texto):
     if not texto:
         return ""
-    # Remove caracteres especiais ou emojis que o FPDF não suporta nativamente (latin-1)
-    return str(texto).encode("latin-1", "replace").decode("latin-1")
+    s = str(texto)
+    # Substitui Unicode comuns que nao existem no latin-1
+    _subs = {
+        "\u2014": "-",   # em dash —
+        "\u2013": "-",   # en dash –
+        "\u2012": "-",   # figure dash
+        "\u2018": "'",   # aspas simples esquerda
+        "\u2019": "'",   # aspas simples direita
+        "\u201c": '"',   # aspas duplas esquerda
+        "\u201d": '"',   # aspas duplas direita
+        "\u2022": "*",   # bullet •
+        "\u2026": "...", # reticencias …
+        "\u00b7": ".",   # ponto medio
+        "\u2212": "-",   # sinal de menos matematico
+        "\u00d7": "x",   # sinal de multiplicacao
+        "\u2192": "->",  # seta direita
+        "\u2190": "<-",  # seta esquerda
+    }
+    for src, dst in _subs.items():
+        s = s.replace(src, dst)
+    return s.encode("latin-1", "replace").decode("latin-1")
 
 
 def _cabecalho_padrao(pdf, subtitulo=""):
@@ -609,7 +628,7 @@ def criar_documento_aluno_pdf(aluno_data, avaliacoes, historico, estatisticas):
     # ══════════════════════════════════════════════════════════════════════════
     # 1. PERFIL + PAINEL DE INDICADORES
     # ══════════════════════════════════════════════════════════════════════════
-    _secao(pdf, 1, "Perfil Pessoal + Painel de Indicadores")
+    _secao(pdf, 1, "Perfil Pessoal")
 
     y_foto = pdf.get_y()
     foto_url = aluno_data.get("foto_url")
@@ -639,60 +658,6 @@ def criar_documento_aluno_pdf(aluno_data, avaliacoes, historico, estatisticas):
     if pdf.get_y() < y_foto + 38:
         pdf.set_y(y_foto + 40)
 
-    # Painel de indicadores — mesmas colunas da tela principal
-    pdf.ln(2)
-    col_w = 47
-    pdf.set_fill_color(230, 240, 255)
-    pdf.set_draw_color(160, 190, 230)
-    pdf.set_font("Arial", "B", 9)
-    for lb in ["Freq. Total", "Freq. 60 Dias", "Ultima PA", "Atestado Medico"]:
-        pdf.cell(col_w, 6, limpar_texto(lb), border="TLR", align="C", fill=True)
-    pdf.ln(6)
-
-    pdf.set_font("Arial", "B", 11)
-    # Col1 freq total
-    c1 = (34, 139, 34) if pct >= 75 else ((220, 120, 0) if pct >= 50 else (180, 0, 0))
-    pdf.set_text_color(*c1)
-    pdf.cell(col_w, 10, limpar_texto(f"{pres_total}x / {pct:.0f}%"), border="LR", align="C", fill=True)
-    # Col2 freq 60d
-    c2 = (34, 139, 34) if pct_60 >= 75 else ((220, 120, 0) if pct_60 >= 50 else (180, 0, 0))
-    pdf.set_text_color(*c2)
-    pdf.cell(col_w, 10, limpar_texto(f"{pres_60}x / {pct_60:.0f}%"), border="LR", align="C", fill=True)
-    # Col3 ultima PA
-    if ultima_pa:
-        _pa_cls = str(ultima_pa.get("classificacao", "")).lower()
-        pdf.set_text_color(*_PA_COR.get(_pa_cls, (100, 100, 100)))
-        _pa_txt = f"{ultima_pa.get('sistolica','?')}/{ultima_pa.get('diastolica','?')}"
-        pdf.cell(col_w, 10, limpar_texto(_pa_txt), border="LR", align="C", fill=True)
-    else:
-        pdf.set_text_color(150, 150, 150)
-        pdf.cell(col_w, 10, "Sem registro", border="LR", align="C", fill=True)
-    # Col4 atestado
-    if atestado_apt:
-        _dvenc = _safe_str(atestado_apt.get("data_vencimento", ""), "")
-        try:
-            _dv = datetime.date.fromisoformat(str(_dvenc)[:10])
-            _dd = (_dv - hoje).days
-            if _dd < 0:
-                pdf.set_text_color(180, 0, 0)
-                pdf.cell(col_w, 10, limpar_texto(f"VENCIDO {abs(_dd)}d"), border="LR", align="C", fill=True)
-            elif _dd <= 30:
-                pdf.set_text_color(220, 120, 0)
-                pdf.cell(col_w, 10, limpar_texto(f"Vence {_dd}d"), border="LR", align="C", fill=True)
-            else:
-                pdf.set_text_color(34, 139, 34)
-                pdf.cell(col_w, 10, limpar_texto(f"OK {_dv.strftime('%d/%m/%y')}"), border="LR", align="C", fill=True)
-        except Exception:
-            pdf.set_text_color(100, 100, 100)
-            pdf.cell(col_w, 10, limpar_texto(str(_dvenc)[:10]), border="LR", align="C", fill=True)
-    else:
-        pdf.set_text_color(150, 150, 150)
-        pdf.cell(col_w, 10, "Nao registrado", border="LR", align="C", fill=True)
-    pdf.set_text_color(0, 0, 0)
-    pdf.ln(10)
-    for _ in range(4):
-        pdf.cell(col_w, 1, "", border="BLR", fill=True)
-    pdf.set_draw_color(0, 0, 0)
     pdf.ln(3)
 
     # Observações Clínicas (Livre) — campo problemas_saude do cadastro
@@ -962,7 +927,7 @@ def criar_documento_aluno_pdf(aluno_data, avaliacoes, historico, estatisticas):
     # ══════════════════════════════════════════════════════════════════════════
     # 6. FREQUÊNCIA — GRÁFICO DE LINHAS (início → hoje)
     # ══════════════════════════════════════════════════════════════════════════
-    _secao(pdf, 6, "Frequencia — Grafico de Linha Mensal (Inicio ate Hoje)")
+    _secao(pdf, 6, "Frequencia - Grafico de Barras Mensais (Inicio ate Hoje)")
 
     _mpres  = defaultdict(int)
     _mtotal = defaultdict(int)
