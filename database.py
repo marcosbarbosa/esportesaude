@@ -2797,6 +2797,26 @@ def get_estatisticas_frequencia_aluno(aluno_id):
         return {"total": 0, "presentes": 0, "faltas": 0, "percentual": 0.0}
 
 
+def get_frequencia_aluno_serie(aluno_id: str) -> list:
+    """Retorna serie temporal completa de frequencia do aluno para grafico de linha.
+
+    Retorna lista de dicts [{data_aula: str, status: str}, ...] do mais antigo ao mais novo.
+    Limite seguro de 1000 registros (~6 anos de aulas diarias).
+    """
+    try:
+        res = (
+            supabase.from_("frequencia")
+            .select("data_aula, status")
+            .eq("aluno_id", str(aluno_id))
+            .order("data_aula", desc=False)
+            .limit(1000)
+            .execute()
+        )
+        return res.data or []
+    except Exception:
+        return []
+
+
 @st.cache_data(ttl=180, show_spinner=False)
 def get_ultima_presenca_batch(ids: tuple) -> dict:
     """

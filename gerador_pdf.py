@@ -292,17 +292,20 @@ def criar_documento_pdf(data_aula, turma):
     return bytes(saida)
 
 # ==============================================================================
-# 2. RELATÓRIO: DOSSIÊ CLÍNICO INDIVIDUAL DO ALUNO (v2 — Análise de Risco 60+)
+# 2. RELATÓRIO: DOSSIÊ CLÍNICO INDIVIDUAL DO ALUNO (v3 — Decisão Administrativa)
 # ==============================================================================
 def criar_documento_aluno_pdf(aluno_data, avaliacoes, historico, estatisticas):
     """
-    Dossie Clinico v2 — 6 secoes:
-      1. Perfil Pessoal e Biometrico (com IMC + fatores de risco)
-      2. Historico Clinico Completo (todas as medicoes)
-      3. Frequencia — grafico de barras por mes (FPDF nativo)
-      4. Diario de Aulas com Sinais de Risco (ombro/joelho/lombar)
-      5. Analise de Risco Consolidada + Recomendacoes
-      6. Resumo Executivo
+    Dossie Clinico v3 — 9 secoes para tomada de decisao administrativa:
+      1. Perfil + Painel de Indicadores (grid: freq total, freq 60d, PA, atestado)
+      2. Historico Clinico Completo (todas as medicoes com todos os campos)
+      3. Pressao Arterial — tabela historica com classificacao
+      4. Atestado Medico — vencimento e status de liberacao
+      5. Anamnese — mapa de dores e queixas registradas
+      6. Frequencia — GRAFICO DE LINHAS (inicio ate hoje, por mes)
+      7. Diario de Aulas com Sinais de Risco (ombro/joelho/lombar)
+      8. Analise de Risco Consolidada + Recomendacoes
+      9. Resumo Executivo
     """
     import unicodedata
     from collections import defaultdict
@@ -314,6 +317,25 @@ def criar_documento_aluno_pdf(aluno_data, avaliacoes, historico, estatisticas):
         historico = historico.to_dict("records")
     avaliacoes = avaliacoes or []
     historico  = historico  or []
+    aluno_id   = str(aluno_data.get("id", ""))
+
+    # ── Busca de dados adicionais (PA, atestado, anamnese, frequência timeline)
+    try:
+        from database import (
+            get_registros_pa,
+            get_atestados_temporarios,
+            buscar_historico_dores,
+            get_frequencia_aluno_serie,
+        )
+        registros_pa    = get_registros_pa(aluno_id, limit=20) if aluno_id else []
+        atestados_df    = get_atestados_temporarios(aluno_id) if aluno_id else None
+        historico_dores = buscar_historico_dores(aluno_id)    if aluno_id else []
+        freq_serie      = get_frequencia_aluno_serie(aluno_id) if aluno_id else []
+    except Exception:
+        registros_pa    = []
+        atestados_df    = None
+        historico_dores = []
+        freq_serie      = []
 
     # ── Palavras-chave de risco ───────────────────────────────────────────────
     _KW_OMBRO_ALTO = [
@@ -425,6 +447,71 @@ def criar_documento_aluno_pdf(aluno_data, avaliacoes, historico, estatisticas):
         pdf.multi_cell(0, 5, limpar_texto(str(valor)))
         pdf.set_text_color(0, 0, 0)
 
+    # ── Pré-computações ───────────────────────────────────────────────────────
+    hoje       = datetime.date.today()
+    peso       = _safe_float(aluno_data.get("peso"))
+    altura     = _safe_float(aluno_data.get("altura"))
+    imc_str, imc_class_str = "Nao calculado", ""
+    if peso > 0 and altura > 0.5:
+        imc           = peso / (altura ** 2)
+        imc_str       = f"{imc:.1f} kg/m2"
+        imc_class_str = _imc_class(imc)
+
+    pres_total = estatisticas.get("presentes", 0)   if estatisticas else 0
+    faltas     = estatisticas.get("faltas",    0)   if estatisticas else 0
+    pct        = estatisticas.get("percentual", 0.0) if estatisticas else 0.0
+
+    cutoff_60 = hoje - datetime.timedelta(days=60)
+    pres_60, total_60 = 0, 0
+    for _r in freq_serie:
+        try:
+            _d = datetime.date.fromisoformat(str(_r.get("data_aula", ""))[:10])
+            if _d >= cutoff_60:
+                total_60 += 1
+                if _r.get("status") == "PRESENTE":
+                    pres_60 += 1
+        except Exception:
+            pass
+    pct_60 = (pres_60 / total_60 * 100) if total_60 > 0 else 0.0
+
+    nasc = aluno_data.get("data_nascimento")
+    nasc_str = "Nao informado"
+    if pd.notna(nasc) and str(nasc).strip():
+        try:
+            dt_nasc  = pd.to_datetime(nasc).date()
+            idade_a  = hoje.year - dt_nasc.year - ((hoje.month, hoje.day) < (dt_nasc.month, dt_nasc.day))
+            nasc_str = f"{dt_nasc.strftime('%d/%m/%Y')} ({idade_a} anos)"
+        except Exception:
+            pass
+
+    ultima_pa = registros_pa[0] if registros_pa else None
+
+    _PA_COR = {
+        "normal":   (34, 139, 34),
+        "elevada":  (220, 120, 0),
+        "estagio1": (200, 60,  0),
+        "estagio2": (180, 0,   0),
+        "crise":    (100, 0,   0),
+    }
+    _PA_LABEL = {
+        "normal":   "Normal",
+        "elevada":  "Elevada",
+        "estagio1": "Estagio 1",
+        "estagio2": "Estagio 2",
+        "crise":    "Crise Hipertensiva",
+    }
+
+    # Atestado de aptidão física mais recente
+    atestado_apt = None
+    if isinstance(atestados_df, pd.DataFrame) and not atestados_df.empty:
+        _col_tipo = "tipo_atestado"
+        if _col_tipo in atestados_df.columns:
+            _apt = atestados_df[atestados_df[_col_tipo] == "aptidao_fisica"]
+            _apt = _apt if not _apt.empty else atestados_df
+        else:
+            _apt = atestados_df
+        atestado_apt = _apt.iloc[0].to_dict()
+
     # ── Construção do PDF ─────────────────────────────────────────────────────
     pdf = PDF()
     pdf.add_page()
@@ -436,15 +523,15 @@ def criar_documento_aluno_pdf(aluno_data, avaliacoes, historico, estatisticas):
     pdf.set_font("Arial", "", 9)
     pdf.set_text_color(120, 120, 120)
     pdf.cell(0, 5,
-             limpar_texto(f"Gerado em: {datetime.date.today().strftime('%d/%m/%Y')}  |  Sistema IMBRA — Esporte e Saude 60+"),
+             limpar_texto(f"Gerado em: {hoje.strftime('%d/%m/%Y')}  |  Sistema IMBRA — Esporte e Saude 60+"),
              align="C", ln=1)
     pdf.set_text_color(0, 0, 0)
     pdf.ln(2)
 
     # ══════════════════════════════════════════════════════════════════════════
-    # 1. PERFIL PESSOAL E BIOMÉTRICO
+    # 1. PERFIL + PAINEL DE INDICADORES
     # ══════════════════════════════════════════════════════════════════════════
-    _secao(pdf, 1, "Perfil Pessoal e Biometrico")
+    _secao(pdf, 1, "Perfil Pessoal + Painel de Indicadores")
 
     y_foto = pdf.get_y()
     foto_url = aluno_data.get("foto_url")
@@ -462,61 +549,93 @@ def criar_documento_aluno_pdf(aluno_data, avaliacoes, historico, estatisticas):
                 except Exception:
                     pass
 
-    # ── Dados básicos ─────────────────────────────────────────────────────────
-    nasc = aluno_data.get("data_nascimento")
-    nasc_str, idade = "Nao informado", None
-    if pd.notna(nasc) and str(nasc).strip():
-        try:
-            dt_nasc = pd.to_datetime(nasc).date()
-            hoje = datetime.date.today()
-            idade = hoje.year - dt_nasc.year - ((hoje.month, hoje.day) < (dt_nasc.month, dt_nasc.day))
-            nasc_str = f"{dt_nasc.strftime('%d/%m/%Y')} ({idade} anos)"
-        except Exception:
-            pass
-
-    peso   = _safe_float(aluno_data.get("peso"))
-    altura = _safe_float(aluno_data.get("altura"))
-    imc_str, imc_class_str = "Nao calculado", ""
-    if peso > 0 and altura > 0.5:
-        imc = peso / (altura ** 2)
-        imc_str       = f"{imc:.1f} kg/m²"
-        imc_class_str = _imc_class(imc)
-
-    pres_total = estatisticas.get("presentes", 0)  if estatisticas else 0
-    faltas     = estatisticas.get("faltas",    0)   if estatisticas else 0
-    pct        = estatisticas.get("percentual", 0.0) if estatisticas else 0.0
-
-    _kv(pdf, "Nome",   aluno_data.get("nome", "Nao informado"))
-    _kv(pdf, "Turma",  aluno_data.get("turma", "Nao informado"))
+    _kv(pdf, "Nome",      aluno_data.get("nome", "Nao informado"))
+    _kv(pdf, "Turma",     aluno_data.get("turma", "Nao informado"))
     _kv(pdf, "Nascimento", nasc_str)
-    _kv(pdf, "Peso",   f"{peso:.1f} kg" if peso > 0 else "Nao informado")
-    _kv(pdf, "Altura", f"{altura:.2f} m" if altura > 0.5 else "Nao informado")
-    _kv(pdf, "IMC",    f"{imc_str}  [{imc_class_str}]" if imc_class_str else imc_str,
+    _kv(pdf, "Peso",      f"{peso:.1f} kg" if peso > 0 else "Nao informado")
+    _kv(pdf, "Altura",    f"{altura:.2f} m" if altura > 0.5 else "Nao informado")
+    _kv(pdf, "IMC",
+        f"{imc_str}  [{imc_class_str}]" if imc_class_str else imc_str,
         cor_valor=(34, 100, 34) if imc_class_str == "Normal (22-27)" else (180, 80, 0))
-    _kv(pdf, "Frequencia", f"{pres_total} presencas | {faltas} faltas | {pct:.1f}%",
-        cor_valor=(34, 139, 34) if pct >= 75 else (180, 0, 0))
 
-    # ── Fatores de risco da última avaliação ──────────────────────────────────
+    if pdf.get_y() < y_foto + 38:
+        pdf.set_y(y_foto + 40)
+
+    # Painel de indicadores — mesmas colunas da tela principal
+    pdf.ln(2)
+    col_w = 47
+    pdf.set_fill_color(230, 240, 255)
+    pdf.set_draw_color(160, 190, 230)
+    pdf.set_font("Arial", "B", 9)
+    for lb in ["Freq. Total", "Freq. 60 Dias", "Ultima PA", "Atestado Medico"]:
+        pdf.cell(col_w, 6, limpar_texto(lb), border="TLR", align="C", fill=True)
+    pdf.ln(6)
+
+    pdf.set_font("Arial", "B", 11)
+    # Col1 freq total
+    c1 = (34, 139, 34) if pct >= 75 else ((220, 120, 0) if pct >= 50 else (180, 0, 0))
+    pdf.set_text_color(*c1)
+    pdf.cell(col_w, 10, limpar_texto(f"{pres_total}x / {pct:.0f}%"), border="LR", align="C", fill=True)
+    # Col2 freq 60d
+    c2 = (34, 139, 34) if pct_60 >= 75 else ((220, 120, 0) if pct_60 >= 50 else (180, 0, 0))
+    pdf.set_text_color(*c2)
+    pdf.cell(col_w, 10, limpar_texto(f"{pres_60}x / {pct_60:.0f}%"), border="LR", align="C", fill=True)
+    # Col3 ultima PA
+    if ultima_pa:
+        _pa_cls = str(ultima_pa.get("classificacao", "")).lower()
+        pdf.set_text_color(*_PA_COR.get(_pa_cls, (100, 100, 100)))
+        _pa_txt = f"{ultima_pa.get('sistolica','?')}/{ultima_pa.get('diastolica','?')}"
+        pdf.cell(col_w, 10, limpar_texto(_pa_txt), border="LR", align="C", fill=True)
+    else:
+        pdf.set_text_color(150, 150, 150)
+        pdf.cell(col_w, 10, "Sem registro", border="LR", align="C", fill=True)
+    # Col4 atestado
+    if atestado_apt:
+        _dvenc = _safe_str(atestado_apt.get("data_vencimento", ""), "")
+        try:
+            _dv = datetime.date.fromisoformat(str(_dvenc)[:10])
+            _dd = (_dv - hoje).days
+            if _dd < 0:
+                pdf.set_text_color(180, 0, 0)
+                pdf.cell(col_w, 10, limpar_texto(f"VENCIDO {abs(_dd)}d"), border="LR", align="C", fill=True)
+            elif _dd <= 30:
+                pdf.set_text_color(220, 120, 0)
+                pdf.cell(col_w, 10, limpar_texto(f"Vence {_dd}d"), border="LR", align="C", fill=True)
+            else:
+                pdf.set_text_color(34, 139, 34)
+                pdf.cell(col_w, 10, limpar_texto(f"OK {_dv.strftime('%d/%m/%y')}"), border="LR", align="C", fill=True)
+        except Exception:
+            pdf.set_text_color(100, 100, 100)
+            pdf.cell(col_w, 10, limpar_texto(str(_dvenc)[:10]), border="LR", align="C", fill=True)
+    else:
+        pdf.set_text_color(150, 150, 150)
+        pdf.cell(col_w, 10, "Nao registrado", border="LR", align="C", fill=True)
+    pdf.set_text_color(0, 0, 0)
+    pdf.ln(10)
+    for _ in range(4):
+        pdf.cell(col_w, 1, "", border="BLR", fill=True)
+    pdf.set_draw_color(0, 0, 0)
+    pdf.ln(3)
+
+    # Fatores de risco da última avaliação
     if avaliacoes:
-        ultima = avaliacoes[0]
-        cir   = _safe_str(ultima.get("cirurgias") or ultima.get("cirurgias_lesoes"))
-        meds  = _safe_str(ultima.get("medicamentos") or ultima.get("observacoes"))
-        dor_u = int(_safe_float(ultima.get("dor_nivel") or ultima.get("nivel_dor")))
-        qued  = int(_safe_float(ultima.get("quedas_6m")))
-        pdf.ln(1)
+        ultima_av = avaliacoes[0]
+        _cir  = _safe_str(ultima_av.get("cirurgias") or ultima_av.get("cirurgias_lesoes"))
+        _meds = _safe_str(ultima_av.get("medicamentos") or ultima_av.get("observacoes"))
+        _dor_u = int(_safe_float(ultima_av.get("dor_nivel") or ultima_av.get("nivel_dor")))
+        _qued  = int(_safe_float(ultima_av.get("quedas_6m")))
         pdf.set_font("Arial", "B", 10)
         pdf.set_fill_color(255, 245, 220)
         pdf.cell(0, 6, limpar_texto("  Fatores de Risco (ultima avaliacao)"), ln=1, fill=True)
         pdf.ln(1)
-        dor_cor = (34, 139, 34) if dor_u <= 3 else ((220, 120, 0) if dor_u <= 6 else (180, 0, 0))
-        _kv(pdf, "Nivel de Dor atual", f"{dor_u}/10", cor_valor=dor_cor)
-        _kv(pdf, "Quedas (ult. 6 meses)", f"{qued} queda(s)",
-            cor_valor=(180, 0, 0) if qued > 0 else (34, 139, 34))
-        _kv(pdf, "Cirurgias / Lesoes", cir)
-        _kv(pdf, "Medicamentos / Obs.", meds)
-
-    if pdf.get_y() < y_foto + 40:
-        pdf.set_y(y_foto + 42)
+        _dor_cor = (34, 139, 34) if _dor_u <= 3 else ((220, 120, 0) if _dor_u <= 6 else (180, 0, 0))
+        _kv(pdf, "Nivel de Dor", f"{_dor_u}/10", cor_valor=_dor_cor)
+        _kv(pdf, "Quedas 6m", f"{_qued} queda(s)",
+            cor_valor=(180, 0, 0) if _qued > 0 else (34, 139, 34))
+        if _cir != "Nao informado":
+            _kv(pdf, "Cirurgias/Lesoes", _cir)
+        if _meds != "Nao informado":
+            _kv(pdf, "Medicamentos/Obs", _meds)
 
     # ══════════════════════════════════════════════════════════════════════════
     # 2. HISTÓRICO CLÍNICO COMPLETO
@@ -527,9 +646,7 @@ def criar_documento_aluno_pdf(aluno_data, avaliacoes, historico, estatisticas):
         for idx, av in enumerate(avaliacoes):
             if pdf.get_y() > 245:
                 pdf.add_page()
-
             dt_av = _dt_str(av.get("data_avaliacao", ""))
-
             pdf.set_fill_color(220, 235, 255)
             pdf.set_font("Arial", "B", 10)
             pdf.set_text_color(10, 37, 64)
@@ -553,10 +670,8 @@ def criar_documento_aluno_pdf(aluno_data, avaliacoes, historico, estatisticas):
             meds = _safe_str(av.get("medicamentos") or av.get("observacoes"))
 
             dor_cor = (34, 139, 34) if dor <= 3 else ((220, 120, 0) if dor <= 6 else (180, 0, 0))
-
             pdf.set_font("Arial", "B", 9)
             pdf.write(5, "Dor: ")
-            pdf.set_font("Arial", "B", 9)
             pdf.set_text_color(*dor_cor)
             pdf.write(5, f"{dor}/10")
             pdf.set_text_color(0, 0, 0)
@@ -564,37 +679,19 @@ def criar_documento_aluno_pdf(aluno_data, avaliacoes, historico, estatisticas):
             pdf.ln(5)
 
             pdf.set_font("Arial", "B", 9)
-            pdf.write(5, "TUG Simples: ")
+            pdf.write(5, "TUG: ")
             pdf.set_font("Arial", "", 9)
-            pdf.write(5, f"{tug1:.1f}s   ")
-            pdf.set_font("Arial", "B", 9)
-            pdf.write(5, "Cog. Animais: ")
-            pdf.set_font("Arial", "", 9)
-            pdf.write(5, f"{tug2:.1f}s   ")
-            pdf.set_font("Arial", "B", 9)
-            pdf.write(5, "Cog. Perguntas: ")
-            pdf.set_font("Arial", "", 9)
-            pdf.write(5, f"{tug3:.1f}s")
+            pdf.write(5, f"Simples {tug1:.1f}s  /  Cog.Animais {tug2:.1f}s  /  Cog.Perguntas {tug3:.1f}s")
             pdf.ln(5)
 
             pdf.set_font("Arial", "B", 9)
-            pdf.write(5, "Forca Direita: ")
+            pdf.write(5, "Forca: ")
             pdf.set_font("Arial", "", 9)
-            pdf.write(5, f"{f_d} reps   ")
+            pdf.write(5, f"Dir {f_d} reps  /  Esq {f_e} reps   |   ")
             pdf.set_font("Arial", "B", 9)
-            pdf.write(5, "Forca Esquerda: ")
+            pdf.write(5, "Mobilidade: ")
             pdf.set_font("Arial", "", 9)
-            pdf.write(5, f"{f_e} reps")
-            pdf.ln(5)
-
-            pdf.set_font("Arial", "B", 9)
-            pdf.write(5, "Mobilidade D: ")
-            pdf.set_font("Arial", "", 9)
-            pdf.write(5, f"{mob_d}   ")
-            pdf.set_font("Arial", "B", 9)
-            pdf.write(5, "Mobilidade E: ")
-            pdf.set_font("Arial", "", 9)
-            pdf.write(5, f"{mob_e}")
+            pdf.write(5, f"D {mob_d}  /  E {mob_e}")
             pdf.ln(5)
 
             pdf.set_font("Arial", "B", 9)
@@ -608,7 +705,7 @@ def criar_documento_aluno_pdf(aluno_data, avaliacoes, historico, estatisticas):
             pdf.set_font("Arial", "B", 9)
             pdf.write(5, "Urina: ")
             pdf.set_font("Arial", "", 9)
-            pdf.write(5, f"{urina}")
+            pdf.write(5, urina)
             pdf.ln(5)
 
             if cir != "Nao informado":
@@ -624,72 +721,293 @@ def criar_documento_aluno_pdf(aluno_data, avaliacoes, historico, estatisticas):
             pdf.ln(2)
     else:
         pdf.set_font("Arial", "", 10)
+        pdf.set_text_color(150, 150, 150)
         pdf.cell(0, 6, limpar_texto("Nenhuma avaliacao clinica registrada."), ln=1)
+        pdf.set_text_color(0, 0, 0)
 
     # ══════════════════════════════════════════════════════════════════════════
-    # 3. FREQUÊNCIA — GRÁFICO DE BARRAS POR MÊS (FPDF nativo)
+    # 3. PRESSÃO ARTERIAL
     # ══════════════════════════════════════════════════════════════════════════
-    _secao(pdf, 3, "Frequencia — Grafico de Presencas por Mes")
+    _secao(pdf, 3, "Pressao Arterial — Historico de Medicoes")
 
-    meses_cnt = defaultdict(int)
-    for h in historico:
-        try:
-            dt = h.get("data_aula", "")
-            if isinstance(dt, (datetime.date, datetime.datetime)):
-                chave = dt.strftime("%m/%Y")
-            else:
-                chave = datetime.datetime.strptime(str(dt)[:10], "%Y-%m-%d").strftime("%m/%Y")
-            meses_cnt[chave] += 1
-        except Exception:
-            continue
-
-    if meses_cnt:
-        meses_ord = sorted(
-            meses_cnt.keys(),
-            key=lambda x: datetime.datetime.strptime(x, "%m/%Y")
-        )
-        max_qtd  = max(meses_cnt.values()) or 1
-        bar_maxw = 120
-        bar_h    = 6
-        x_label  = 10
-        x_bar    = 50
-
+    if registros_pa:
+        pdf.set_fill_color(30, 136, 229)
+        pdf.set_text_color(255, 255, 255)
         pdf.set_font("Arial", "B", 9)
-        pdf.cell(0, 5, limpar_texto(
-            f"Total: {pres_total} presencas  |  {faltas} faltas  |  Assiduidade: {pct:.1f}%"
-        ), ln=1)
-        pdf.ln(2)
+        for _hdr, _w in [("Data", 30), ("Hora", 18), ("Sist.", 22),
+                         ("Diast.", 22), ("Pulso", 18), ("Classificacao", 0)]:
+            pdf.cell(_w, 7, _hdr, border=1, align="C", fill=True)
+        pdf.ln(7)
+        pdf.set_text_color(0, 0, 0)
 
-        for mes in meses_ord:
-            qtd   = meses_cnt[mes]
-            bar_w = max(1, int((qtd / max_qtd) * bar_maxw))
-            if pdf.get_y() > 272:
+        for rec in registros_pa[:15]:
+            if pdf.get_y() > 268:
                 pdf.add_page()
-            y_b = pdf.get_y()
+            _dt_pa = _dt_str(rec.get("data", ""))
+            _hora  = str(rec.get("hora", ""))[:5] if rec.get("hora") else "—"
+            _sis   = str(rec.get("sistolica", "—"))
+            _dia   = str(rec.get("diastolica", "—"))
+            _pul   = str(rec.get("pulso", "—")) if rec.get("pulso") else "—"
+            _clsk  = str(rec.get("classificacao", "")).lower()
+            _clslb = _PA_LABEL.get(_clsk, _clsk.title() or "—")
+            _pcor  = _PA_COR.get(_clsk, (0, 0, 0))
             pdf.set_font("Arial", "", 8)
-            pdf.set_xy(x_label, y_b)
-            pdf.cell(38, bar_h, limpar_texto(mes), align="R")
-            # Barra preenchida (azul IMBRA)
-            pdf.set_fill_color(30, 136, 229)
-            pdf.rect(x_bar, y_b + 1, bar_w, bar_h - 2, style="F")
-            # Contorno total
-            pdf.set_draw_color(100, 149, 200)
-            pdf.rect(x_bar, y_b + 1, bar_maxw, bar_h - 2)
-            pdf.set_draw_color(0, 0, 0)
-            # Quantidade
-            pdf.set_xy(x_bar + bar_maxw + 3, y_b)
+            pdf.cell(30, 6, limpar_texto(_dt_pa), border=1, align="C")
+            pdf.cell(18, 6, limpar_texto(_hora),  border=1, align="C")
+            pdf.cell(22, 6, limpar_texto(_sis),   border=1, align="C")
+            pdf.cell(22, 6, limpar_texto(_dia),   border=1, align="C")
+            pdf.cell(18, 6, limpar_texto(_pul),   border=1, align="C")
             pdf.set_font("Arial", "B", 8)
-            pdf.cell(15, bar_h, f"{qtd}x", align="L")
-            pdf.set_y(y_b + bar_h)
-        pdf.ln(3)
+            pdf.set_text_color(*_pcor)
+            pdf.cell(0, 6, limpar_texto(_clslb), border=1, align="C")
+            pdf.set_text_color(0, 0, 0)
+            pdf.ln(6)
+        pdf.ln(2)
     else:
         pdf.set_font("Arial", "", 10)
-        pdf.cell(0, 6, limpar_texto("Nenhuma presenca registrada para gerar grafico."), ln=1)
+        pdf.set_text_color(150, 150, 150)
+        pdf.cell(0, 6, limpar_texto("Nenhuma medicao de pressao arterial registrada."), ln=1)
+        pdf.set_text_color(0, 0, 0)
 
     # ══════════════════════════════════════════════════════════════════════════
-    # 4. DIÁRIO DE AULAS COM SINAIS DE RISCO CLÍNICO
+    # 4. ATESTADO MÉDICO E LIBERAÇÃO
     # ══════════════════════════════════════════════════════════════════════════
-    _secao(pdf, 4, "Diario de Aulas com Sinais de Risco Clinico")
+    _secao(pdf, 4, "Atestado Medico e Liberacao para Atividades")
+
+    _atestados_list = []
+    if isinstance(atestados_df, pd.DataFrame) and not atestados_df.empty:
+        _atestados_list = atestados_df.to_dict("records")
+
+    if _atestados_list:
+        pdf.set_fill_color(30, 136, 229)
+        pdf.set_text_color(255, 255, 255)
+        pdf.set_font("Arial", "B", 9)
+        for _hdr, _w in [("Tipo", 45), ("Dt. Registro", 35), ("Dt. Vencimento", 35), ("Status", 0)]:
+            pdf.cell(_w, 7, _hdr, border=1, align="C", fill=True)
+        pdf.ln(7)
+        pdf.set_text_color(0, 0, 0)
+        for _at in _atestados_list[:8]:
+            if pdf.get_y() > 268:
+                pdf.add_page()
+            _tipo  = _safe_str(_at.get("tipo_atestado", ""), "outro")
+            _dt_rg = _dt_str(_at.get("data_registro", ""))
+            _dvnc  = _safe_str(_at.get("data_vencimento", ""), "")
+            _vd    = _dt_str(_dvnc) if _dvnc and _dvnc != "Nao informado" else "—"
+            _stxt, _scor = "—", (100, 100, 100)
+            if _dvnc and _dvnc not in ("Nao informado", ""):
+                try:
+                    _dobj = datetime.date.fromisoformat(str(_dvnc)[:10])
+                    _diff = (_dobj - hoje).days
+                    if _diff < 0:
+                        _stxt, _scor = f"VENCIDO {abs(_diff)}d", (180, 0, 0)
+                    elif _diff <= 30:
+                        _stxt, _scor = f"Vence em {_diff}d", (220, 120, 0)
+                    else:
+                        _stxt, _scor = f"OK — {_dobj.strftime('%d/%m/%y')}", (34, 139, 34)
+                except Exception:
+                    _stxt = _vd
+            pdf.set_font("Arial", "", 8)
+            pdf.cell(45, 6, limpar_texto(_tipo[:22]),  border=1, align="C")
+            pdf.cell(35, 6, limpar_texto(_dt_rg),      border=1, align="C")
+            pdf.cell(35, 6, limpar_texto(_vd),         border=1, align="C")
+            pdf.set_font("Arial", "B", 8)
+            pdf.set_text_color(*_scor)
+            pdf.cell(0, 6, limpar_texto(_stxt), border=1, align="C")
+            pdf.set_text_color(0, 0, 0)
+            pdf.ln(6)
+        pdf.ln(2)
+    else:
+        pdf.set_font("Arial", "", 10)
+        pdf.set_text_color(150, 150, 150)
+        pdf.cell(0, 6, limpar_texto("Nenhum atestado registrado."), ln=1)
+        pdf.set_text_color(0, 0, 0)
+
+    # ══════════════════════════════════════════════════════════════════════════
+    # 5. ANAMNESE — MAPA DE DORES E QUEIXAS
+    # ══════════════════════════════════════════════════════════════════════════
+    _secao(pdf, 5, "Anamnese — Mapa de Dores e Queixas Registradas")
+
+    if historico_dores:
+        for _idx, _reg in enumerate(historico_dores[:5]):
+            if pdf.get_y() > 255:
+                pdf.add_page()
+            _dt_d    = _dt_str(_reg.get("data_avaliacao", ""))
+            _regioes = _reg.get("regioes", [])
+            if isinstance(_regioes, str):
+                try:
+                    import json as _jj
+                    _regioes = _jj.loads(_regioes)
+                except Exception:
+                    _regioes = [_regioes]
+            _obs   = _safe_str(_reg.get("observacoes", ""), "Sem observacoes")
+            _inten = _reg.get("intensidade", {})
+            pdf.set_fill_color(255, 235, 235)
+            pdf.set_font("Arial", "B", 10)
+            pdf.set_text_color(140, 0, 0)
+            pdf.cell(0, 6, limpar_texto(f"  Registro {_idx + 1}  —  {_dt_d}"), ln=1, fill=True)
+            pdf.set_text_color(0, 0, 0)
+            pdf.ln(1)
+            if _regioes:
+                pdf.set_font("Arial", "B", 9)
+                pdf.write(5, "Regioes: ")
+                pdf.set_font("Arial", "", 9)
+                pdf.multi_cell(0, 5, limpar_texto(", ".join(str(r) for r in _regioes)))
+            if isinstance(_inten, dict) and _inten:
+                pdf.set_font("Arial", "B", 9)
+                pdf.write(5, "Intensidade: ")
+                pdf.set_font("Arial", "", 9)
+                pdf.multi_cell(0, 5, limpar_texto(" | ".join(
+                    f"{k}: {v}" for k, v in list(_inten.items())[:6])))
+            if _obs != "Sem observacoes":
+                pdf.set_font("Arial", "B", 9)
+                pdf.write(5, "Observacoes: ")
+                pdf.set_font("Arial", "", 9)
+                pdf.multi_cell(0, 5, limpar_texto(_obs))
+            pdf.ln(2)
+    else:
+        pdf.set_font("Arial", "", 10)
+        pdf.set_text_color(150, 150, 150)
+        pdf.cell(0, 6, limpar_texto("Nenhuma anamnese de dores registrada."), ln=1)
+        pdf.set_text_color(0, 0, 0)
+
+    # ══════════════════════════════════════════════════════════════════════════
+    # 6. FREQUÊNCIA — GRÁFICO DE LINHAS (início → hoje)
+    # ══════════════════════════════════════════════════════════════════════════
+    _secao(pdf, 6, "Frequencia — Grafico de Linha Mensal (Inicio ate Hoje)")
+
+    _mpres  = defaultdict(int)
+    _mtotal = defaultdict(int)
+    for _r in freq_serie:
+        try:
+            _fd = datetime.date.fromisoformat(str(_r.get("data_aula", ""))[:10])
+            _ck = _fd.strftime("%Y-%m")
+            _mtotal[_ck] += 1
+            if _r.get("status") == "PRESENTE":
+                _mpres[_ck] += 1
+        except Exception:
+            pass
+
+    _meses = sorted(_mtotal.keys())
+    _mpct  = {m: (_mpres[m] / _mtotal[m] * 100) for m in _meses if _mtotal[m] > 0}
+
+    if len(_meses) >= 2:
+        _nm   = len(_meses)
+        _cl   = 28    # left margin (Y-axis labels)
+        _cw   = 162   # chart width
+        _ch   = 50    # chart height
+        _ct   = pdf.get_y() + 3
+
+        if _ct + _ch + 18 > 275:
+            pdf.add_page()
+            _ct = pdf.get_y() + 3
+
+        # Fundo
+        pdf.set_fill_color(248, 250, 255)
+        pdf.set_draw_color(180, 200, 230)
+        pdf.rect(_cl, _ct, _cw, _ch, style="FD")
+        pdf.set_draw_color(0, 0, 0)
+
+        # Grid horizontal e rótulos Y
+        for _gp in [0, 25, 50, 75, 100]:
+            _yg = _ct + _ch - (_gp / 100.0) * _ch
+            if _gp == 75:
+                pdf.set_draw_color(220, 120, 0)
+                pdf.set_line_width(0.5)
+            else:
+                pdf.set_draw_color(190, 210, 235)
+                pdf.set_line_width(0.2)
+            pdf.line(_cl, _yg, _cl + _cw, _yg)
+            pdf.set_font("Arial", "", 6)
+            pdf.set_text_color(100, 100, 100)
+            pdf.set_xy(_cl - 14, _yg - 2)
+            pdf.cell(13, 4, f"{_gp}%", align="R")
+
+        # Rótulo da linha de referência 75%
+        pdf.set_font("Arial", "I", 6)
+        pdf.set_text_color(220, 120, 0)
+        pdf.set_xy(_cl + _cw - 28, _ct + _ch * 0.25 - 4)
+        pdf.cell(28, 4, "meta 75%", align="R")
+
+        pdf.set_draw_color(0, 0, 0)
+        pdf.set_line_width(0.2)
+
+        # Coordenadas de cada ponto
+        _coords = []
+        for _i, _mes in enumerate(_meses):
+            _pct_m = _mpct.get(_mes, 0)
+            _xp = _cl + (_i / max(_nm - 1, 1)) * _cw
+            _yp = _ct + _ch - (_pct_m / 100.0) * _ch
+            _coords.append((_xp, _yp, _pct_m))
+
+        # Linhas entre pontos (azul IMBRA)
+        pdf.set_draw_color(30, 136, 229)
+        pdf.set_line_width(0.8)
+        for _i in range(1, len(_coords)):
+            pdf.line(_coords[_i-1][0], _coords[_i-1][1],
+                     _coords[_i][0],   _coords[_i][1])
+
+        # Pontos de dados (elipse preenchida)
+        pdf.set_line_width(0.2)
+        for _xp, _yp, _pct_m in _coords:
+            if _pct_m >= 75:
+                pdf.set_fill_color(34, 139, 34)
+            elif _pct_m >= 50:
+                pdf.set_fill_color(220, 120, 0)
+            else:
+                pdf.set_fill_color(180, 0, 0)
+            pdf.ellipse(_xp - 1.5, _yp - 1.5, 3, 3, style="F")
+
+        # Rótulos do eixo X
+        _step = max(1, _nm // 12)
+        pdf.set_draw_color(0, 0, 0)
+        for _i, _mes in enumerate(_meses):
+            if _i % _step == 0 or _i == _nm - 1:
+                _xp = _cl + (_i / max(_nm - 1, 1)) * _cw
+                pdf.set_font("Arial", "", 6)
+                pdf.set_text_color(80, 80, 80)
+                pdf.set_xy(_xp - 8, _ct + _ch + 1)
+                pdf.cell(16, 4, _mes[5:] + "/" + _mes[2:4], align="C")
+
+        # Legenda de cores
+        pdf.set_text_color(0, 0, 0)
+        _ly = _ct + _ch + 8
+        pdf.set_xy(_cl, _ly)
+        pdf.set_font("Arial", "B", 7)
+        pdf.write(4, "Frequencia mensal:  ")
+        pdf.set_font("Arial", "", 7)
+        pdf.set_text_color(34, 139, 34)
+        pdf.write(4, "Verde >= 75%   ")
+        pdf.set_text_color(220, 120, 0)
+        pdf.write(4, "Laranja 50-74%   ")
+        pdf.set_text_color(180, 0, 0)
+        pdf.write(4, "Vermelho < 50%")
+        pdf.set_text_color(0, 0, 0)
+        pdf.set_y(_ly + 7)
+
+        # Resumo numérico
+        pdf.set_font("Arial", "", 9)
+        pdf.multi_cell(0, 5, limpar_texto(
+            f"Total: {pres_total}x presencas  |  {faltas} faltas  |  "
+            f"Assiduidade geral: {pct:.1f}%  |  Ultimos 60 dias: {pres_60}x ({pct_60:.1f}%)"
+        ))
+
+    elif len(_meses) == 1:
+        _mes = _meses[0]
+        pdf.set_font("Arial", "", 10)
+        pdf.cell(0, 6, limpar_texto(
+            f"Apenas 1 mes de dados: {_mes} — "
+            f"{_mpres[_mes]}/{_mtotal[_mes]} aulas ({_mpct.get(_mes, 0):.1f}%)"
+        ), ln=1)
+    else:
+        pdf.set_font("Arial", "", 10)
+        pdf.set_text_color(150, 150, 150)
+        pdf.cell(0, 6, limpar_texto("Nenhum registro de frequencia para gerar grafico."), ln=1)
+        pdf.set_text_color(0, 0, 0)
+
+    # ══════════════════════════════════════════════════════════════════════════
+    # 7. DIÁRIO DE AULAS COM SINAIS DE RISCO CLÍNICO
+    # ══════════════════════════════════════════════════════════════════════════
+    _secao(pdf, 7, "Diario de Aulas com Sinais de Risco Clinico")
 
     alertas_globais = []
 
@@ -697,17 +1015,15 @@ def criar_documento_aluno_pdf(aluno_data, avaliacoes, historico, estatisticas):
         for h in historico:
             if pdf.get_y() > 248:
                 pdf.add_page()
-
             dt_h    = _dt_str(h.get("data_aula", ""))
-            obj     = _safe_str(h.get("objetivo_geral"),         "Sem objetivo registrado")
-            exc     = _safe_str(h.get("exercicios_executados"),  "")
-            foco    = _safe_str(h.get("foco_clinico_social"),    "")
-            relatos = _safe_str(h.get("relatos_melhora"),        "")
+            obj     = _safe_str(h.get("objetivo_geral"),        "Sem objetivo")
+            exc     = _safe_str(h.get("exercicios_executados"), "")
+            foco    = _safe_str(h.get("foco_clinico_social"),   "")
+            relatos = _safe_str(h.get("relatos_melhora"),       "")
 
             alertas = _risco_exercicio(exc)
             alertas_globais.extend([(dt_h, a) for a in alertas])
 
-            # Cabeçalho da aula — cor conforme risco
             fill_r = (255, 230, 230) if any(a[0] == "OMBRO-ALTO" for a in alertas) else \
                      (255, 245, 220) if alertas else (235, 245, 255)
             pdf.set_fill_color(*fill_r)
@@ -723,7 +1039,7 @@ def criar_documento_aluno_pdf(aluno_data, avaliacoes, historico, estatisticas):
 
             if exc and exc != "Nao informado":
                 pdf.set_font("Arial", "B", 9)
-                pdf.write(5, limpar_texto("Exercicios: "))
+                pdf.write(5, "Exercicios: ")
                 pdf.set_font("Arial", "", 9)
                 pdf.multi_cell(0, 5, limpar_texto(exc))
 
@@ -743,20 +1059,19 @@ def criar_documento_aluno_pdf(aluno_data, avaliacoes, historico, estatisticas):
 
             if relatos and relatos != "Nao informado":
                 pdf.set_font("Arial", "B", 9)
-                pdf.write(5, "Relatos de Melhora: ")
+                pdf.write(5, "Relatos: ")
                 pdf.set_font("Arial", "I", 9)
                 pdf.multi_cell(0, 5, limpar_texto(relatos))
                 pdf.set_font("Arial", "", 9)
-
             pdf.ln(2)
     else:
         pdf.set_font("Arial", "", 10)
         pdf.cell(0, 6, limpar_texto("Nenhuma participacao com diario registrada."), ln=1)
 
     # ══════════════════════════════════════════════════════════════════════════
-    # 5. ANÁLISE DE RISCO CONSOLIDADA
+    # 8. ANÁLISE DE RISCO CONSOLIDADA
     # ══════════════════════════════════════════════════════════════════════════
-    _secao(pdf, 5, "Analise de Risco Consolidada e Recomendacoes")
+    _secao(pdf, 8, "Analise de Risco Consolidada e Recomendacoes")
 
     codigos_encontrados = {a[0] for _, a in alertas_globais}
 
@@ -768,20 +1083,19 @@ def criar_documento_aluno_pdf(aluno_data, avaliacoes, historico, estatisticas):
         for cod in ["OMBRO-ALTO", "OMBRO-MOD", "JOELHO", "LOMBAR"]:
             if cod not in grupos:
                 continue
-            registros = grupos[cod]
+            _regs = grupos[cod]
             if pdf.get_y() > 255:
                 pdf.add_page()
             pdf.set_font("Arial", "B", 10)
             pdf.set_text_color(*_COR_RISCO.get(cod, (0, 0, 0)))
-            pdf.cell(0, 6,
-                     limpar_texto(f"{_LABEL_RISCO.get(cod, cod)}  —  {len(registros)} ocorrencia(s)"),
-                     ln=1)
+            pdf.cell(0, 6, limpar_texto(
+                f"{_LABEL_RISCO.get(cod, cod)}  —  {len(_regs)} ocorrencia(s)"), ln=1)
             pdf.set_text_color(0, 0, 0)
             pdf.set_font("Arial", "", 9)
-            for dt_h, desc in registros[:8]:
+            for dt_h, desc in _regs[:8]:
                 pdf.cell(0, 5, limpar_texto(f"    . {dt_h}: {desc}"), ln=1)
-            if len(registros) > 8:
-                pdf.cell(0, 5, limpar_texto(f"    ... e mais {len(registros) - 8} ocorrencia(s)"), ln=1)
+            if len(_regs) > 8:
+                pdf.cell(0, 5, limpar_texto(f"    ... e mais {len(_regs)-8} ocorrencia(s)"), ln=1)
             pdf.ln(2)
 
         pdf.set_font("Arial", "B", 10)
@@ -789,55 +1103,57 @@ def criar_documento_aluno_pdf(aluno_data, avaliacoes, historico, estatisticas):
         pdf.cell(0, 6, limpar_texto("Recomendacoes clinicas:"), ln=1)
         pdf.set_text_color(0, 0, 0)
         pdf.set_font("Arial", "", 9)
-
         if "OMBRO-ALTO" in codigos_encontrados:
             pdf.multi_cell(0, 5, limpar_texto(
                 "  [OMBRO] PRIORITARIO: Evitar exercicios acima da linha do ombro. "
-                "Substituir por movimentos com abducao/flexao abaixo de 90 graus. "
-                "Verificar laudo ortopedico antes de retomada."
-            ))
+                "Substituir por movimentos abaixo de 90 graus. Verificar laudo ortopedico."))
         if "OMBRO-MOD" in codigos_encontrados:
             pdf.multi_cell(0, 5, limpar_texto(
-                "  [OMBRO] Monitorar queixas durante remadas e exercicios com halteres. "
-                "Reduzir carga e amplitude ao menor sinal de dor."
-            ))
+                "  [OMBRO] Monitorar queixas em remadas e halteres. Reduzir carga ao menor sinal de dor."))
         if "JOELHO" in codigos_encontrados:
             pdf.multi_cell(0, 5, limpar_texto(
-                "  [JOELHO] Evitar agachamentos profundos e impacto. "
-                "Priorizar fortalecimento isometrico e amplitude parcial."
-            ))
+                "  [JOELHO] Evitar agachamentos profundos e impacto. Priorizar isometrico e amplitude parcial."))
         if "LOMBAR" in codigos_encontrados:
             pdf.multi_cell(0, 5, limpar_texto(
-                "  [LOMBAR] Manter coluna em posicao neutra. "
-                "Evitar flexao forcada de tronco com carga."
-            ))
+                "  [LOMBAR] Manter coluna neutra. Evitar flexao forcada de tronco com carga."))
     else:
         pdf.set_font("Arial", "", 10)
         pdf.set_text_color(34, 139, 34)
-        pdf.cell(0, 6, limpar_texto(
-            "Nenhum exercicio de risco identificado no historico registrado."
-        ), ln=1)
+        pdf.cell(0, 6, limpar_texto("Nenhum exercicio de risco identificado no historico."), ln=1)
         pdf.set_text_color(0, 0, 0)
 
     # ══════════════════════════════════════════════════════════════════════════
-    # 6. RESUMO EXECUTIVO
+    # 9. RESUMO EXECUTIVO
     # ══════════════════════════════════════════════════════════════════════════
-    _secao(pdf, 6, "Resumo Executivo — Perfil Funcional e Proxima Fase")
+    _secao(pdf, 9, "Resumo Executivo — Perfil Funcional e Proxima Fase")
 
-    # IMC
     _kv(pdf, "IMC",
-        f"{imc_str}  —  {imc_class_str}" if imc_class_str else "Nao calculado (peso/altura ausentes)",
+        f"{imc_str}  —  {imc_class_str}" if imc_class_str else "Nao calculado",
         cor_valor=(34, 100, 34) if imc_class_str == "Normal (22-27)" else (180, 80, 0))
 
-    # Frequência
-    freq_class = ("Excelente (>= 80%)" if pct >= 80
-                  else ("Regular (50-79%)" if pct >= 50 else "Baixa (< 50%)"))
+    freq_class = ("Excelente (>= 80%)" if pct >= 80 else
+                  ("Regular (50-79%)"  if pct >= 50 else "Baixa (< 50%)"))
     freq_cor   = (34, 139, 34) if pct >= 80 else ((220, 120, 0) if pct >= 50 else (180, 0, 0))
-    _kv(pdf, "Assiduidade",
-        f"{pct:.1f}%  —  {freq_class}  ({pres_total} presencas / {faltas} faltas)",
+    _kv(pdf, "Assiduidade Total",
+        f"{pct:.1f}%  —  {freq_class}  ({pres_total}x pres. / {faltas} faltas)",
         cor_valor=freq_cor)
 
-    # Tendência de dor
+    f60_class = "Excelente" if pct_60 >= 80 else ("Regular" if pct_60 >= 50 else "Baixa")
+    f60_cor   = (34, 139, 34) if pct_60 >= 80 else ((220, 120, 0) if pct_60 >= 50 else (180, 0, 0))
+    _kv(pdf, "Freq. Ultimos 60 Dias",
+        f"{pct_60:.1f}%  —  {f60_class}  ({pres_60}x em {total_60} aulas)",
+        cor_valor=f60_cor)
+
+    if ultima_pa:
+        _pa_cls = str(ultima_pa.get("classificacao", "")).lower()
+        _pa_cor = _PA_COR.get(_pa_cls, (100, 100, 100))
+        _pa_dt  = _dt_str(ultima_pa.get("data", ""))
+        _pa_lbl = _PA_LABEL.get(_pa_cls, _pa_cls.title() or "—")
+        _kv(pdf, "Ultima Pressao Arterial",
+            f"{ultima_pa.get('sistolica','?')}/{ultima_pa.get('diastolica','?')} mmHg"
+            f"  —  {_pa_lbl}  ({_pa_dt})",
+            cor_valor=_pa_cor)
+
     if len(avaliacoes) >= 2:
         dor_ini = _safe_float(avaliacoes[-1].get("dor_nivel") or avaliacoes[-1].get("nivel_dor"))
         dor_fin = _safe_float(avaliacoes[0].get("dor_nivel")  or avaliacoes[0].get("nivel_dor"))
@@ -849,39 +1165,34 @@ def criar_documento_aluno_pdf(aluno_data, avaliacoes, historico, estatisticas):
             tend, t_cor = f"Estavel ({dor_fin:.0f}/10)", (100, 100, 100)
         _kv(pdf, "Tendencia de Dor", tend, cor_valor=t_cor)
 
-    # Riscos
     if codigos_encontrados:
         _kv(pdf, "Riscos Identificados",
             ", ".join(_LABEL_RISCO.get(c, c) for c in codigos_encontrados),
             cor_valor=(180, 0, 0))
     else:
-        _kv(pdf, "Riscos Identificados", "Nenhum critico identificado no historico",
-            cor_valor=(34, 139, 34))
+        _kv(pdf, "Riscos Identificados", "Nenhum critico identificado", cor_valor=(34, 139, 34))
 
-    # Recomendações finais
     pdf.ln(3)
     pdf.set_font("Arial", "B", 10)
     pdf.set_text_color(10, 37, 64)
     pdf.cell(0, 6, limpar_texto("Recomendacoes para a proxima fase:"), ln=1)
     pdf.set_text_color(0, 0, 0)
     pdf.set_font("Arial", "", 10)
-
     recs = [
         "Monitorar nivel de dor no inicio e fim de cada aula (escala 0-10).",
-        "Registrar queixas e relatos de melhora no diario de bordo de cada sessao.",
-        "Manter frequencia acima de 75% para garantir progressao funcional continua.",
+        "Registrar queixas e relatos de melhora no diario de bordo.",
+        "Manter frequencia acima de 75% para garantir progressao funcional.",
     ]
     if "OMBRO-ALTO" in codigos_encontrados:
-        recs.insert(0, "PRIORITARIO: Revisar protocolo — exercicios acima do ombro identificados. Consultar laudo ortopedico.")
+        recs.insert(0, "PRIORITARIO: Revisar protocolo — exercicios acima do ombro identificados. Consultar laudo.")
     if "OMBRO-MOD" in codigos_encontrados or "OMBRO-ALTO" in codigos_encontrados:
-        recs.append("Considerar encaminhamento para fisioterapia de ombro se dor persistir acima de 4/10.")
+        recs.append("Considerar encaminhamento para fisioterapia se dor de ombro persistir acima de 4/10.")
     if pct < 75:
-        recs.append("Investigar motivos das faltas — considerar ligacao de acolhimento ou atendimento individual.")
+        recs.append("Investigar motivos das faltas — considerar ligacao de acolhimento.")
     if len(avaliacoes) == 0:
-        recs.append("Realizar avaliacao clinica inicial completa (medicao, TUG, forca, biofeedback).")
+        recs.append("Realizar avaliacao clinica inicial completa (TUG, forca, biofeedback).")
     elif len(avaliacoes) == 1:
         recs.append("Repetir avaliacao clinica para iniciar acompanhamento de evolucao.")
-
     for i, rec in enumerate(recs, 1):
         pdf.multi_cell(0, 5, limpar_texto(f"  {i}. {rec}"))
 
