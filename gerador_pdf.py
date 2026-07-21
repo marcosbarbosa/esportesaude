@@ -818,7 +818,14 @@ def criar_documento_aluno_pdf(aluno_data, avaliacoes, historico, estatisticas):
                 if _m_ev: _ev_cs = _m_ev.group(1).strip()
                 if _m_ex: _ex_cs = _m_ex.group(1).strip()
             if not (_ev_cs or _ex_cs):
+                # Busca exata primeiro, depois parcial (ex: "Colesterol" → "Colesterol Alto / Dislipidemia")
                 _loc = _DICAS_LOCAL_CS.get(_tnome)
+                if not _loc:
+                    _tnome_low = _tnome.lower()
+                    for _k, _v in _DICAS_LOCAL_CS.items():
+                        if _tnome_low in _k.lower() or _k.lower().startswith(_tnome_low[:8]):
+                            _loc = _v
+                            break
                 if _loc:
                     _ev_cs, _ex_cs = _loc
 
