@@ -1482,12 +1482,48 @@ def criar_documento_aluno_pdf(aluno_data, avaliacoes, historico, estatisticas):
                     pdf.set_xy(_cx, _cy + 0.3)
                     pdf.cell(_cw_cell - 0.2, _top_h - 0.3, str(_dd), align="C")
 
-                    # ── Temperatura (zona inferior, branco) ───────────────────
+                    # ── Temperatura (zona inferior) — ícone + número ─────────
+                    _bx_c = _cx + (_cw_cell - 0.2) / 2   # centro X da célula
+                    _icon_y = _cy + _top_h + 0.55          # Y centro do ícone
+                    _num_y  = _cy + _top_h + _bot_h * 0.50 # Y linha do número
+
                     if _tv_c is not None:
+                        if _tv_c >= _temp_limiar:
+                            # ── Sol (calor) ─────────────────────────────────
+                            _sr = 0.50  # raio do disco solar
+                            pdf.set_fill_color(255, 230, 80)   # amarelo-ouro
+                            pdf.set_draw_color(255, 230, 80)
+                            pdf.ellipse(_bx_c - _sr, _icon_y - _sr,
+                                        _sr * 2, _sr * 2, style="F")
+                            # Raios do sol (4 traços curtos ao redor)
+                            pdf.set_draw_color(255, 230, 80)
+                            pdf.set_line_width(0.18)
+                            _ray = 0.45   # comprimento do raio além do disco
+                            _gap = _sr + 0.12
+                            for _dx, _dy in [(0,-1),(0,1),(-1,0),(1,0)]:
+                                pdf.line(_bx_c + _dx*_gap,      _icon_y + _dy*_gap,
+                                         _bx_c + _dx*(_gap+_ray), _icon_y + _dy*(_gap+_ray))
+                        else:
+                            # ── Floco de neve (frio) ────────────────────────
+                            pdf.set_draw_color(200, 230, 255)  # azul-gelo
+                            pdf.set_line_width(0.20)
+                            _fl = 0.65   # meio-comprimento dos braços
+                            # 3 eixos cruzados: |  —  /  (asterisco de 6 pontas)
+                            pdf.line(_bx_c,       _icon_y - _fl, _bx_c,       _icon_y + _fl)
+                            pdf.line(_bx_c - _fl, _icon_y,       _bx_c + _fl, _icon_y)
+                            _fd = _fl * 0.72  # diagonal 45°
+                            pdf.line(_bx_c - _fd, _icon_y - _fd, _bx_c + _fd, _icon_y + _fd)
+                            pdf.line(_bx_c + _fd, _icon_y - _fd, _bx_c - _fd, _icon_y + _fd)
+                            # Pontinho central de contraste
+                            pdf.set_fill_color(220, 240, 255)
+                            pdf.set_draw_color(220, 240, 255)
+                            pdf.ellipse(_bx_c - 0.18, _icon_y - 0.18, 0.36, 0.36, style="F")
+
+                        # ── Número da temperatura ────────────────────────────
                         pdf.set_font("Arial", "B", 3.0)
                         pdf.set_text_color(255, 255, 255)
-                        pdf.set_xy(_cx, _cy + _top_h + 0.2)
-                        pdf.cell(_cw_cell - 0.2, _bot_h - 0.2,
+                        pdf.set_xy(_cx, _num_y)
+                        pdf.cell(_cw_cell - 0.2, _bot_h - (_num_y - (_cy + _top_h)) - 0.1,
                                  f"{int(round(_tv_c))}\xb0", align="C")
                 else:
                     # Dia sem aula: quadrado cinza muito claro
