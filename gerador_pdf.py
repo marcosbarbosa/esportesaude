@@ -292,159 +292,606 @@ def criar_documento_pdf(data_aula, turma):
     return bytes(saida)
 
 # ==============================================================================
-# 2. RELATÓRIO: DOSSIÊ DO ALUNO (INDIVIDUAL)
+# 2. RELATÓRIO: DOSSIÊ CLÍNICO INDIVIDUAL DO ALUNO (v2 — Análise de Risco 60+)
 # ==============================================================================
 def criar_documento_aluno_pdf(aluno_data, avaliacoes, historico, estatisticas):
+    """
+    Dossie Clinico v2 — 6 secoes:
+      1. Perfil Pessoal e Biometrico (com IMC + fatores de risco)
+      2. Historico Clinico Completo (todas as medicoes)
+      3. Frequencia — grafico de barras por mes (FPDF nativo)
+      4. Diario de Aulas com Sinais de Risco (ombro/joelho/lombar)
+      5. Analise de Risco Consolidada + Recomendacoes
+      6. Resumo Executivo
+    """
+    import unicodedata
+    from collections import defaultdict
+
+    # ── Normalização de tipos ─────────────────────────────────────────────────
+    if isinstance(avaliacoes, pd.DataFrame):
+        avaliacoes = avaliacoes.to_dict("records")
+    if isinstance(historico, pd.DataFrame):
+        historico = historico.to_dict("records")
+    avaliacoes = avaliacoes or []
+    historico  = historico  or []
+
+    # ── Palavras-chave de risco ───────────────────────────────────────────────
+    _KW_OMBRO_ALTO = [
+        "elevacao lateral", "elevacao frontal", "elevacao", "acima da cabeca",
+        "acima do ombro", "desenvolvimento", "press militar", "ombro acima",
+        "bastao acima", "remada alta", "frontal acima", "lateral acima",
+    ]
+    _KW_OMBRO_MOD = [
+        "remada", "elastico", "haltere", "halter", "supino",
+        "rosca", "triceps", "biceps", "puxada", "ombro",
+    ]
+    _KW_JOELHO = [
+        "agachamento profundo", "agachamento", "salto", "corrida", "impacto",
+        "flexao profunda", "pliometria", "step", "leg press", "extensao joelho",
+    ]
+    _KW_LOMBAR = [
+        "flexao de tronco", "inclinacao", "dead lift", "peso morto",
+        "hiperextensao", "abdominal dinamico", "prancha dinamica",
+    ]
+    _COR_RISCO  = {
+        "OMBRO-ALTO": (180, 0,   0),
+        "OMBRO-MOD":  (200, 100, 0),
+        "JOELHO":     (140, 0,   140),
+        "LOMBAR":     (100, 80,  0),
+    }
+    _LABEL_RISCO = {
+        "OMBRO-ALTO": "[RISCO ALTO - OMBRO]",
+        "OMBRO-MOD":  "[RISCO MODERADO - OMBRO]",
+        "JOELHO":     "[ATENCAO - JOELHO]",
+        "LOMBAR":     "[ATENCAO - LOMBAR]",
+    }
+
+    def _normalizar(txt):
+        return "".join(
+            c for c in unicodedata.normalize("NFKD", str(txt).lower())
+            if not unicodedata.combining(c)
+        )
+
+    def _risco_exercicio(texto):
+        """Retorna lista de (codigo, descricao) de alertas para o texto de exercicios."""
+        if not texto:
+            return []
+        t = _normalizar(texto)
+        alertas = []
+        for kw in _KW_OMBRO_ALTO:
+            if kw in t:
+                alertas.append(("OMBRO-ALTO", "Exercicio acima da linha do ombro: " + kw.title()))
+                break
+        for kw in _KW_OMBRO_MOD:
+            if kw in t and not any(a[0] == "OMBRO-ALTO" for a in alertas):
+                alertas.append(("OMBRO-MOD", "Exercicio com solicitacao do ombro: " + kw.title()))
+                break
+        for kw in _KW_JOELHO:
+            if kw in t:
+                alertas.append(("JOELHO", "Exercicio de impacto/flexao no joelho: " + kw.title()))
+                break
+        for kw in _KW_LOMBAR:
+            if kw in t:
+                alertas.append(("LOMBAR", "Exercicio com carga na lombar: " + kw.title()))
+                break
+        return alertas
+
+    def _imc_class(imc):
+        if imc < 22:  return "Baixo peso (< 22)"
+        if imc < 27:  return "Normal (22-27)"
+        if imc < 30:  return "Sobrepeso (27-30)"
+        if imc < 35:  return "Obesidade I (30-35)"
+        return "Obesidade II/III (>= 35)"
+
+    def _safe_float(v, default=0.0):
+        try:
+            import math
+            f = float(v)
+            return default if (math.isnan(f) or math.isinf(f)) else f
+        except Exception:
+            return default
+
+    def _safe_str(v, default="Nao informado"):
+        s = str(v).strip() if v is not None else ""
+        return s if s and s.lower() not in ("nan", "none", "null", "") else default
+
+    def _dt_str(v):
+        if isinstance(v, (datetime.date, datetime.datetime)):
+            return v.strftime("%d/%m/%Y")
+        if isinstance(v, str) and len(v) >= 10:
+            try:
+                return datetime.datetime.strptime(v[:10], "%Y-%m-%d").strftime("%d/%m/%Y")
+            except Exception:
+                pass
+        return str(v)
+
+    def _secao(pdf, numero, titulo):
+        if pdf.get_y() > 255:
+            pdf.add_page()
+        pdf.ln(4)
+        pdf.set_fill_color(10, 37, 64)
+        pdf.set_text_color(255, 255, 255)
+        pdf.set_font("Arial", "B", 11)
+        pdf.cell(0, 8, limpar_texto(f"  {numero}. {titulo}"), ln=1, fill=True)
+        pdf.set_text_color(0, 0, 0)
+        pdf.ln(3)
+
+    def _kv(pdf, chave, valor, negrito_valor=False, cor_valor=None):
+        pdf.set_font("Arial", "B", 10)
+        pdf.write(5, limpar_texto(chave + ": "))
+        pdf.set_font("Arial", "B" if negrito_valor else "", 10)
+        if cor_valor:
+            pdf.set_text_color(*cor_valor)
+        pdf.multi_cell(0, 5, limpar_texto(str(valor)))
+        pdf.set_text_color(0, 0, 0)
+
+    # ── Construção do PDF ─────────────────────────────────────────────────────
     pdf = PDF()
     pdf.add_page()
-
-    # --- CABEÇALHO ---
     _cabecalho_padrao(pdf)
-    pdf.set_font("Arial", "B", 12)
-    pdf.set_text_color(0, 0, 0)
+
+    pdf.set_font("Arial", "B", 13)
+    pdf.set_text_color(10, 37, 64)
     pdf.cell(0, 8, limpar_texto("DOSSIE CLINICO E DESPORTIVO DO ALUNO"), align="C", ln=1)
-    pdf.ln(4)
+    pdf.set_font("Arial", "", 9)
+    pdf.set_text_color(120, 120, 120)
+    pdf.cell(0, 5,
+             limpar_texto(f"Gerado em: {datetime.date.today().strftime('%d/%m/%Y')}  |  Sistema IMBRA — Esporte e Saude 60+"),
+             align="C", ln=1)
+    pdf.set_text_color(0, 0, 0)
+    pdf.ln(2)
 
-    # --- 1. PERFIL PESSOAL ---
-    pdf.set_fill_color(240, 240, 240)
-    pdf.set_font("Arial", "B", 12)
-    pdf.cell(0, 8, limpar_texto(" 1. Perfil Pessoal e Biométrico"), ln=1, fill=True)
-    pdf.ln(4)
+    # ══════════════════════════════════════════════════════════════════════════
+    # 1. PERFIL PESSOAL E BIOMÉTRICO
+    # ══════════════════════════════════════════════════════════════════════════
+    _secao(pdf, 1, "Perfil Pessoal e Biometrico")
 
-    y_atual = pdf.get_y()
-
+    y_foto = pdf.get_y()
     foto_url = aluno_data.get("foto_url")
-    if pd.notna(foto_url):
-        tmp = baixar_imagem_temp(foto_url)
-        if tmp:
-            pdf.image(tmp, x=160, y=y_atual, w=35, h=35)
-            pdf.rect(160, y_atual, 35, 35)
+    if pd.notna(foto_url) and str(foto_url).strip() not in ("", "nan", "none", "null"):
+        foto_tmp = baixar_imagem_supabase(str(foto_url)) or baixar_imagem_temp(str(foto_url))
+        if foto_tmp:
+            try:
+                pdf.image(foto_tmp, x=163, y=y_foto, w=35, h=35)
+                pdf.rect(163, y_foto, 35, 35)
+            except Exception:
+                pass
+            finally:
+                try:
+                    os.remove(foto_tmp)
+                except Exception:
+                    pass
 
-    pdf.set_xy(10, y_atual)
-
-    pdf.set_font("Arial", "B", 11)
-    pdf.cell(15, 6, "Nome: ")
-    pdf.set_font("Arial", "", 11)
-    pdf.cell(0, 6, limpar_texto(aluno_data.get("nome", "")), ln=1)
-
-    pdf.set_font("Arial", "B", 11)
-    pdf.cell(16, 6, "Turma: ")
-    pdf.set_font("Arial", "", 11)
-    pdf.cell(0, 6, limpar_texto(aluno_data.get("turma", "")), ln=1)
-
+    # ── Dados básicos ─────────────────────────────────────────────────────────
     nasc = aluno_data.get("data_nascimento")
-    nasc_str = "Nao informado"
+    nasc_str, idade = "Nao informado", None
     if pd.notna(nasc) and str(nasc).strip():
         try:
             dt_nasc = pd.to_datetime(nasc).date()
-            idade = datetime.date.today().year - dt_nasc.year
+            hoje = datetime.date.today()
+            idade = hoje.year - dt_nasc.year - ((hoje.month, hoje.day) < (dt_nasc.month, dt_nasc.day))
             nasc_str = f"{dt_nasc.strftime('%d/%m/%Y')} ({idade} anos)"
-        except: pass
+        except Exception:
+            pass
 
-    pdf.set_font("Arial", "B", 11)
-    pdf.cell(28, 6, "Nascimento: ")
-    pdf.set_font("Arial", "", 11)
-    pdf.cell(0, 6, limpar_texto(nasc_str), ln=1)
+    peso   = _safe_float(aluno_data.get("peso"))
+    altura = _safe_float(aluno_data.get("altura"))
+    imc_str, imc_class_str = "Nao calculado", ""
+    if peso > 0 and altura > 0.5:
+        imc = peso / (altura ** 2)
+        imc_str       = f"{imc:.1f} kg/m²"
+        imc_class_str = _imc_class(imc)
 
-    peso = aluno_data.get("peso", "N/A")
-    altura = aluno_data.get("altura", "N/A")
-    pdf.set_font("Arial", "B", 11)
-    pdf.cell(13, 6, "Peso: ")
-    pdf.set_font("Arial", "", 11)
-    pdf.cell(25, 6, f"{peso} kg")
+    pres_total = estatisticas.get("presentes", 0)  if estatisticas else 0
+    faltas     = estatisticas.get("faltas",    0)   if estatisticas else 0
+    pct        = estatisticas.get("percentual", 0.0) if estatisticas else 0.0
 
-    pdf.set_font("Arial", "B", 11)
-    pdf.cell(15, 6, "Altura: ")
-    pdf.set_font("Arial", "", 11)
-    pdf.cell(0, 6, f"{altura} m", ln=1)
+    _kv(pdf, "Nome",   aluno_data.get("nome", "Nao informado"))
+    _kv(pdf, "Turma",  aluno_data.get("turma", "Nao informado"))
+    _kv(pdf, "Nascimento", nasc_str)
+    _kv(pdf, "Peso",   f"{peso:.1f} kg" if peso > 0 else "Nao informado")
+    _kv(pdf, "Altura", f"{altura:.2f} m" if altura > 0.5 else "Nao informado")
+    _kv(pdf, "IMC",    f"{imc_str}  [{imc_class_str}]" if imc_class_str else imc_str,
+        cor_valor=(34, 100, 34) if imc_class_str == "Normal (22-27)" else (180, 80, 0))
+    _kv(pdf, "Frequencia", f"{pres_total} presencas | {faltas} faltas | {pct:.1f}%",
+        cor_valor=(34, 139, 34) if pct >= 75 else (180, 0, 0))
 
-    pdf.ln(3)
-    pdf.set_font("Arial", "B", 11)
-    pdf.set_text_color(30, 136, 229)
-    pdf.cell(42, 6, limpar_texto("Total de Presenças: "))
-    pdf.set_font("Arial", "B", 12)
-    presencas = estatisticas.get("presentes", 0) if estatisticas else 0
-    pdf.cell(0, 6, limpar_texto(f"{presencas} aulas concluidas"), ln=1)
-    pdf.set_text_color(0, 0, 0)
+    # ── Fatores de risco da última avaliação ──────────────────────────────────
+    if avaliacoes:
+        ultima = avaliacoes[0]
+        cir   = _safe_str(ultima.get("cirurgias") or ultima.get("cirurgias_lesoes"))
+        meds  = _safe_str(ultima.get("medicamentos") or ultima.get("observacoes"))
+        dor_u = int(_safe_float(ultima.get("dor_nivel") or ultima.get("nivel_dor")))
+        qued  = int(_safe_float(ultima.get("quedas_6m")))
+        pdf.ln(1)
+        pdf.set_font("Arial", "B", 10)
+        pdf.set_fill_color(255, 245, 220)
+        pdf.cell(0, 6, limpar_texto("  Fatores de Risco (ultima avaliacao)"), ln=1, fill=True)
+        pdf.ln(1)
+        dor_cor = (34, 139, 34) if dor_u <= 3 else ((220, 120, 0) if dor_u <= 6 else (180, 0, 0))
+        _kv(pdf, "Nivel de Dor atual", f"{dor_u}/10", cor_valor=dor_cor)
+        _kv(pdf, "Quedas (ult. 6 meses)", f"{qued} queda(s)",
+            cor_valor=(180, 0, 0) if qued > 0 else (34, 139, 34))
+        _kv(pdf, "Cirurgias / Lesoes", cir)
+        _kv(pdf, "Medicamentos / Obs.", meds)
 
-    if pdf.get_y() < y_atual + 40:
-        pdf.set_y(y_atual + 45)
+    if pdf.get_y() < y_foto + 40:
+        pdf.set_y(y_foto + 42)
+
+    # ══════════════════════════════════════════════════════════════════════════
+    # 2. HISTÓRICO CLÍNICO COMPLETO
+    # ══════════════════════════════════════════════════════════════════════════
+    _secao(pdf, 2, "Historico Clinico Completo — Todas as Medicoes")
+
+    if avaliacoes:
+        for idx, av in enumerate(avaliacoes):
+            if pdf.get_y() > 245:
+                pdf.add_page()
+
+            dt_av = _dt_str(av.get("data_avaliacao", ""))
+
+            pdf.set_fill_color(220, 235, 255)
+            pdf.set_font("Arial", "B", 10)
+            pdf.set_text_color(10, 37, 64)
+            pdf.cell(0, 6, limpar_texto(f"  Avaliacao #{idx + 1}  —  {dt_av}"), ln=1, fill=True)
+            pdf.set_text_color(0, 0, 0)
+            pdf.ln(1)
+
+            dor  = int(_safe_float(av.get("dor_nivel")  or av.get("nivel_dor")))
+            tug1 = _safe_float(av.get("tug_simples")    or av.get("tug_segundos"))
+            tug2 = _safe_float(av.get("tug_cog_animais"))
+            tug3 = _safe_float(av.get("tug_cog_perguntas"))
+            qued = int(_safe_float(av.get("quedas_6m")))
+            f_d  = int(_safe_float(av.get("forca_dir")  or av.get("simetria_dir")))
+            f_e  = int(_safe_float(av.get("forca_esq")  or av.get("simetria_esq")))
+            mob_d   = _safe_str(av.get("mobilidade_pes_dir"), "—")
+            mob_e   = _safe_str(av.get("mobilidade_pes_esq"), "—")
+            borg    = _safe_str(av.get("borg"),    "—")
+            bristol = _safe_str(av.get("bristol"), "—")
+            urina   = _safe_str(av.get("urina"),   "—")
+            cir  = _safe_str(av.get("cirurgias")    or av.get("cirurgias_lesoes"))
+            meds = _safe_str(av.get("medicamentos") or av.get("observacoes"))
+
+            dor_cor = (34, 139, 34) if dor <= 3 else ((220, 120, 0) if dor <= 6 else (180, 0, 0))
+
+            pdf.set_font("Arial", "B", 9)
+            pdf.write(5, "Dor: ")
+            pdf.set_font("Arial", "B", 9)
+            pdf.set_text_color(*dor_cor)
+            pdf.write(5, f"{dor}/10")
+            pdf.set_text_color(0, 0, 0)
+            pdf.write(5, f"   |   Quedas 6m: {qued}")
+            pdf.ln(5)
+
+            pdf.set_font("Arial", "B", 9)
+            pdf.write(5, "TUG Simples: ")
+            pdf.set_font("Arial", "", 9)
+            pdf.write(5, f"{tug1:.1f}s   ")
+            pdf.set_font("Arial", "B", 9)
+            pdf.write(5, "Cog. Animais: ")
+            pdf.set_font("Arial", "", 9)
+            pdf.write(5, f"{tug2:.1f}s   ")
+            pdf.set_font("Arial", "B", 9)
+            pdf.write(5, "Cog. Perguntas: ")
+            pdf.set_font("Arial", "", 9)
+            pdf.write(5, f"{tug3:.1f}s")
+            pdf.ln(5)
+
+            pdf.set_font("Arial", "B", 9)
+            pdf.write(5, "Forca Direita: ")
+            pdf.set_font("Arial", "", 9)
+            pdf.write(5, f"{f_d} reps   ")
+            pdf.set_font("Arial", "B", 9)
+            pdf.write(5, "Forca Esquerda: ")
+            pdf.set_font("Arial", "", 9)
+            pdf.write(5, f"{f_e} reps")
+            pdf.ln(5)
+
+            pdf.set_font("Arial", "B", 9)
+            pdf.write(5, "Mobilidade D: ")
+            pdf.set_font("Arial", "", 9)
+            pdf.write(5, f"{mob_d}   ")
+            pdf.set_font("Arial", "B", 9)
+            pdf.write(5, "Mobilidade E: ")
+            pdf.set_font("Arial", "", 9)
+            pdf.write(5, f"{mob_e}")
+            pdf.ln(5)
+
+            pdf.set_font("Arial", "B", 9)
+            pdf.write(5, "Borg: ")
+            pdf.set_font("Arial", "", 9)
+            pdf.write(5, f"{borg}   ")
+            pdf.set_font("Arial", "B", 9)
+            pdf.write(5, "Bristol: ")
+            pdf.set_font("Arial", "", 9)
+            pdf.write(5, f"{bristol}   ")
+            pdf.set_font("Arial", "B", 9)
+            pdf.write(5, "Urina: ")
+            pdf.set_font("Arial", "", 9)
+            pdf.write(5, f"{urina}")
+            pdf.ln(5)
+
+            if cir != "Nao informado":
+                pdf.set_font("Arial", "B", 9)
+                pdf.write(5, "Cirurgias/Lesoes: ")
+                pdf.set_font("Arial", "", 9)
+                pdf.multi_cell(0, 5, limpar_texto(cir))
+            if meds != "Nao informado":
+                pdf.set_font("Arial", "B", 9)
+                pdf.write(5, "Medicamentos/Obs: ")
+                pdf.set_font("Arial", "", 9)
+                pdf.multi_cell(0, 5, limpar_texto(meds))
+            pdf.ln(2)
     else:
-        pdf.ln(5)
+        pdf.set_font("Arial", "", 10)
+        pdf.cell(0, 6, limpar_texto("Nenhuma avaliacao clinica registrada."), ln=1)
 
-    # --- 2. HISTÓRICO CLÍNICO E BIOFEEDBACK (NOVO) ---
-    pdf.set_font("Arial", "B", 12)
-    pdf.set_fill_color(240, 240, 240)
-    pdf.cell(0, 8, limpar_texto(" 2. Histórico Clínico e Biofeedback"), ln=1, fill=True)
-    pdf.ln(4)
+    # ══════════════════════════════════════════════════════════════════════════
+    # 3. FREQUÊNCIA — GRÁFICO DE BARRAS POR MÊS (FPDF nativo)
+    # ══════════════════════════════════════════════════════════════════════════
+    _secao(pdf, 3, "Frequencia — Grafico de Presencas por Mes")
 
-    # 🚀 FIX PANDAS: Converte o DataFrame para lista de dicionários com segurança
-    if isinstance(avaliacoes, pd.DataFrame):
-        avaliacoes = avaliacoes.to_dict('records')
+    meses_cnt = defaultdict(int)
+    for h in historico:
+        try:
+            dt = h.get("data_aula", "")
+            if isinstance(dt, (datetime.date, datetime.datetime)):
+                chave = dt.strftime("%m/%Y")
+            else:
+                chave = datetime.datetime.strptime(str(dt)[:10], "%Y-%m-%d").strftime("%m/%Y")
+            meses_cnt[chave] += 1
+        except Exception:
+            continue
 
-    if avaliacoes and len(avaliacoes) > 0:
-        for av in avaliacoes:
-            dt_av = av.get("data_avaliacao", "Data não informada")
-            if isinstance(dt_av, datetime.date) or isinstance(dt_av, datetime.datetime):
-                dt_av = dt_av.strftime("%d/%m/%Y")
+    if meses_cnt:
+        meses_ord = sorted(
+            meses_cnt.keys(),
+            key=lambda x: datetime.datetime.strptime(x, "%m/%Y")
+        )
+        max_qtd  = max(meses_cnt.values()) or 1
+        bar_maxw = 120
+        bar_h    = 6
+        x_label  = 10
+        x_bar    = 50
 
-            dor = av.get("nivel_dor", "N/A")
-            tug = av.get("tug", "N/A")
-            simetria = av.get("simetria_forca", "N/A")
-
-            pdf.set_font("Arial", "B", 11)
-            pdf.cell(0, 6, limpar_texto(f"Data da Avaliação: {dt_av}"), ln=1)
-
-            pdf.set_font("Arial", "", 11)
-            texto_bio = f"Nível de Dor: {dor}/10   |   Equilíbrio (TUG): {tug}s   |   Simetria: {simetria}"
-            pdf.multi_cell(0, 6, limpar_texto(texto_bio), align="L")
-            pdf.ln(3)
-    else:
-        pdf.set_font("Arial", "", 11)
-        pdf.cell(0, 8, limpar_texto("Nenhuma avaliação clínica registada."), ln=1)
+        pdf.set_font("Arial", "B", 9)
+        pdf.cell(0, 5, limpar_texto(
+            f"Total: {pres_total} presencas  |  {faltas} faltas  |  Assiduidade: {pct:.1f}%"
+        ), ln=1)
         pdf.ln(2)
 
-    # --- 3. DIÁRIO DE BORDO (AULAS) ---
-    pdf.set_font("Arial", "B", 12)
-    pdf.set_fill_color(240, 240, 240)
-    pdf.cell(0, 8, limpar_texto(" 3. Diário de Bordo (Aulas e Exercícios)"), ln=1, fill=True)
-    pdf.ln(4)
+        for mes in meses_ord:
+            qtd   = meses_cnt[mes]
+            bar_w = max(1, int((qtd / max_qtd) * bar_maxw))
+            if pdf.get_y() > 272:
+                pdf.add_page()
+            y_b = pdf.get_y()
+            pdf.set_font("Arial", "", 8)
+            pdf.set_xy(x_label, y_b)
+            pdf.cell(38, bar_h, limpar_texto(mes), align="R")
+            # Barra preenchida (azul IMBRA)
+            pdf.set_fill_color(30, 136, 229)
+            pdf.rect(x_bar, y_b + 1, bar_w, bar_h - 2, style="F")
+            # Contorno total
+            pdf.set_draw_color(100, 149, 200)
+            pdf.rect(x_bar, y_b + 1, bar_maxw, bar_h - 2)
+            pdf.set_draw_color(0, 0, 0)
+            # Quantidade
+            pdf.set_xy(x_bar + bar_maxw + 3, y_b)
+            pdf.set_font("Arial", "B", 8)
+            pdf.cell(15, bar_h, f"{qtd}x", align="L")
+            pdf.set_y(y_b + bar_h)
+        pdf.ln(3)
+    else:
+        pdf.set_font("Arial", "", 10)
+        pdf.cell(0, 6, limpar_texto("Nenhuma presenca registrada para gerar grafico."), ln=1)
 
-    # 🚀 FIX PANDAS: Converte o DataFrame para lista de dicionários com segurança
-    if isinstance(historico, pd.DataFrame):
-        historico = historico.to_dict('records')
+    # ══════════════════════════════════════════════════════════════════════════
+    # 4. DIÁRIO DE AULAS COM SINAIS DE RISCO CLÍNICO
+    # ══════════════════════════════════════════════════════════════════════════
+    _secao(pdf, 4, "Diario de Aulas com Sinais de Risco Clinico")
 
-    if historico and len(historico) > 0:
+    alertas_globais = []
+
+    if historico:
         for h in historico:
-            data_aula = h.get('data_aula', '')
-            if isinstance(data_aula, datetime.date) or isinstance(data_aula, datetime.datetime):
-                data_aula = data_aula.strftime("%d/%m/%Y")
+            if pdf.get_y() > 248:
+                pdf.add_page()
 
-            pdf.set_font("Arial", "B", 12)
-            pdf.set_text_color(30, 136, 229) # Azulzinho para a data
-            pdf.cell(0, 8, limpar_texto(f"Aula de {data_aula}:"), ln=1)
+            dt_h    = _dt_str(h.get("data_aula", ""))
+            obj     = _safe_str(h.get("objetivo_geral"),         "Sem objetivo registrado")
+            exc     = _safe_str(h.get("exercicios_executados"),  "")
+            foco    = _safe_str(h.get("foco_clinico_social"),    "")
+            relatos = _safe_str(h.get("relatos_melhora"),        "")
+
+            alertas = _risco_exercicio(exc)
+            alertas_globais.extend([(dt_h, a) for a in alertas])
+
+            # Cabeçalho da aula — cor conforme risco
+            fill_r = (255, 230, 230) if any(a[0] == "OMBRO-ALTO" for a in alertas) else \
+                     (255, 245, 220) if alertas else (235, 245, 255)
+            pdf.set_fill_color(*fill_r)
+            pdf.set_font("Arial", "B", 10)
+            pdf.set_text_color(30, 136, 229)
+            pdf.cell(0, 6, limpar_texto(f"  Aula de {dt_h}"), ln=1, fill=True)
             pdf.set_text_color(0, 0, 0)
 
-            pdf.set_font("Arial", "", 11)
-            obj = h.get("objetivo_geral")
-            exc = h.get("exercicios_executados")
+            pdf.set_font("Arial", "B", 9)
+            pdf.write(5, "Objetivo: ")
+            pdf.set_font("Arial", "", 9)
+            pdf.multi_cell(0, 5, limpar_texto(obj))
 
-            if obj:
-                pdf.set_font("Arial", "B", 11)
-                pdf.write(6, "Objetivo: ")
-                pdf.set_font("Arial", "", 11)
-                pdf.multi_cell(0, 6, limpar_texto(obj), align="J")
+            if exc and exc != "Nao informado":
+                pdf.set_font("Arial", "B", 9)
+                pdf.write(5, limpar_texto("Exercicios: "))
+                pdf.set_font("Arial", "", 9)
+                pdf.multi_cell(0, 5, limpar_texto(exc))
 
-            if exc:
-                pdf.set_font("Arial", "B", 11)
-                pdf.write(6, limpar_texto("Exercícios: "))
-                pdf.set_font("Arial", "", 11)
-                pdf.multi_cell(0, 6, limpar_texto(exc), align="J")
+            for codigo, descricao in alertas:
+                pdf.set_font("Arial", "B", 9)
+                pdf.set_text_color(*_COR_RISCO.get(codigo, (150, 0, 0)))
+                pdf.write(5, limpar_texto(f"  {_LABEL_RISCO.get(codigo, '[RISCO]')} "))
+                pdf.set_font("Arial", "", 9)
+                pdf.multi_cell(0, 5, limpar_texto(descricao))
+                pdf.set_text_color(0, 0, 0)
 
-            pdf.ln(4)
+            if foco and foco != "Nao informado":
+                pdf.set_font("Arial", "B", 9)
+                pdf.write(5, "Foco Clinico: ")
+                pdf.set_font("Arial", "", 9)
+                pdf.multi_cell(0, 5, limpar_texto(foco))
+
+            if relatos and relatos != "Nao informado":
+                pdf.set_font("Arial", "B", 9)
+                pdf.write(5, "Relatos de Melhora: ")
+                pdf.set_font("Arial", "I", 9)
+                pdf.multi_cell(0, 5, limpar_texto(relatos))
+                pdf.set_font("Arial", "", 9)
+
+            pdf.ln(2)
     else:
-        pdf.set_font("Arial", "", 11)
-        pdf.cell(0, 8, limpar_texto("Nenhuma participação com diário registada."), ln=1)
+        pdf.set_font("Arial", "", 10)
+        pdf.cell(0, 6, limpar_texto("Nenhuma participacao com diario registrada."), ln=1)
+
+    # ══════════════════════════════════════════════════════════════════════════
+    # 5. ANÁLISE DE RISCO CONSOLIDADA
+    # ══════════════════════════════════════════════════════════════════════════
+    _secao(pdf, 5, "Analise de Risco Consolidada e Recomendacoes")
+
+    codigos_encontrados = {a[0] for _, a in alertas_globais}
+
+    if alertas_globais:
+        grupos = defaultdict(list)
+        for dt_h, (codigo, descricao) in alertas_globais:
+            grupos[codigo].append((dt_h, descricao))
+
+        for cod in ["OMBRO-ALTO", "OMBRO-MOD", "JOELHO", "LOMBAR"]:
+            if cod not in grupos:
+                continue
+            registros = grupos[cod]
+            if pdf.get_y() > 255:
+                pdf.add_page()
+            pdf.set_font("Arial", "B", 10)
+            pdf.set_text_color(*_COR_RISCO.get(cod, (0, 0, 0)))
+            pdf.cell(0, 6,
+                     limpar_texto(f"{_LABEL_RISCO.get(cod, cod)}  —  {len(registros)} ocorrencia(s)"),
+                     ln=1)
+            pdf.set_text_color(0, 0, 0)
+            pdf.set_font("Arial", "", 9)
+            for dt_h, desc in registros[:8]:
+                pdf.cell(0, 5, limpar_texto(f"    . {dt_h}: {desc}"), ln=1)
+            if len(registros) > 8:
+                pdf.cell(0, 5, limpar_texto(f"    ... e mais {len(registros) - 8} ocorrencia(s)"), ln=1)
+            pdf.ln(2)
+
+        pdf.set_font("Arial", "B", 10)
+        pdf.set_text_color(10, 37, 64)
+        pdf.cell(0, 6, limpar_texto("Recomendacoes clinicas:"), ln=1)
+        pdf.set_text_color(0, 0, 0)
+        pdf.set_font("Arial", "", 9)
+
+        if "OMBRO-ALTO" in codigos_encontrados:
+            pdf.multi_cell(0, 5, limpar_texto(
+                "  [OMBRO] PRIORITARIO: Evitar exercicios acima da linha do ombro. "
+                "Substituir por movimentos com abducao/flexao abaixo de 90 graus. "
+                "Verificar laudo ortopedico antes de retomada."
+            ))
+        if "OMBRO-MOD" in codigos_encontrados:
+            pdf.multi_cell(0, 5, limpar_texto(
+                "  [OMBRO] Monitorar queixas durante remadas e exercicios com halteres. "
+                "Reduzir carga e amplitude ao menor sinal de dor."
+            ))
+        if "JOELHO" in codigos_encontrados:
+            pdf.multi_cell(0, 5, limpar_texto(
+                "  [JOELHO] Evitar agachamentos profundos e impacto. "
+                "Priorizar fortalecimento isometrico e amplitude parcial."
+            ))
+        if "LOMBAR" in codigos_encontrados:
+            pdf.multi_cell(0, 5, limpar_texto(
+                "  [LOMBAR] Manter coluna em posicao neutra. "
+                "Evitar flexao forcada de tronco com carga."
+            ))
+    else:
+        pdf.set_font("Arial", "", 10)
+        pdf.set_text_color(34, 139, 34)
+        pdf.cell(0, 6, limpar_texto(
+            "Nenhum exercicio de risco identificado no historico registrado."
+        ), ln=1)
+        pdf.set_text_color(0, 0, 0)
+
+    # ══════════════════════════════════════════════════════════════════════════
+    # 6. RESUMO EXECUTIVO
+    # ══════════════════════════════════════════════════════════════════════════
+    _secao(pdf, 6, "Resumo Executivo — Perfil Funcional e Proxima Fase")
+
+    # IMC
+    _kv(pdf, "IMC",
+        f"{imc_str}  —  {imc_class_str}" if imc_class_str else "Nao calculado (peso/altura ausentes)",
+        cor_valor=(34, 100, 34) if imc_class_str == "Normal (22-27)" else (180, 80, 0))
+
+    # Frequência
+    freq_class = ("Excelente (>= 80%)" if pct >= 80
+                  else ("Regular (50-79%)" if pct >= 50 else "Baixa (< 50%)"))
+    freq_cor   = (34, 139, 34) if pct >= 80 else ((220, 120, 0) if pct >= 50 else (180, 0, 0))
+    _kv(pdf, "Assiduidade",
+        f"{pct:.1f}%  —  {freq_class}  ({pres_total} presencas / {faltas} faltas)",
+        cor_valor=freq_cor)
+
+    # Tendência de dor
+    if len(avaliacoes) >= 2:
+        dor_ini = _safe_float(avaliacoes[-1].get("dor_nivel") or avaliacoes[-1].get("nivel_dor"))
+        dor_fin = _safe_float(avaliacoes[0].get("dor_nivel")  or avaliacoes[0].get("nivel_dor"))
+        if dor_fin < dor_ini:
+            tend, t_cor = f"Melhora ({dor_ini:.0f}/10 -> {dor_fin:.0f}/10)", (34, 139, 34)
+        elif dor_fin > dor_ini:
+            tend, t_cor = f"Piora ({dor_ini:.0f}/10 -> {dor_fin:.0f}/10)", (180, 0, 0)
+        else:
+            tend, t_cor = f"Estavel ({dor_fin:.0f}/10)", (100, 100, 100)
+        _kv(pdf, "Tendencia de Dor", tend, cor_valor=t_cor)
+
+    # Riscos
+    if codigos_encontrados:
+        _kv(pdf, "Riscos Identificados",
+            ", ".join(_LABEL_RISCO.get(c, c) for c in codigos_encontrados),
+            cor_valor=(180, 0, 0))
+    else:
+        _kv(pdf, "Riscos Identificados", "Nenhum critico identificado no historico",
+            cor_valor=(34, 139, 34))
+
+    # Recomendações finais
+    pdf.ln(3)
+    pdf.set_font("Arial", "B", 10)
+    pdf.set_text_color(10, 37, 64)
+    pdf.cell(0, 6, limpar_texto("Recomendacoes para a proxima fase:"), ln=1)
+    pdf.set_text_color(0, 0, 0)
+    pdf.set_font("Arial", "", 10)
+
+    recs = [
+        "Monitorar nivel de dor no inicio e fim de cada aula (escala 0-10).",
+        "Registrar queixas e relatos de melhora no diario de bordo de cada sessao.",
+        "Manter frequencia acima de 75% para garantir progressao funcional continua.",
+    ]
+    if "OMBRO-ALTO" in codigos_encontrados:
+        recs.insert(0, "PRIORITARIO: Revisar protocolo — exercicios acima do ombro identificados. Consultar laudo ortopedico.")
+    if "OMBRO-MOD" in codigos_encontrados or "OMBRO-ALTO" in codigos_encontrados:
+        recs.append("Considerar encaminhamento para fisioterapia de ombro se dor persistir acima de 4/10.")
+    if pct < 75:
+        recs.append("Investigar motivos das faltas — considerar ligacao de acolhimento ou atendimento individual.")
+    if len(avaliacoes) == 0:
+        recs.append("Realizar avaliacao clinica inicial completa (medicao, TUG, forca, biofeedback).")
+    elif len(avaliacoes) == 1:
+        recs.append("Repetir avaliacao clinica para iniciar acompanhamento de evolucao.")
+
+    for i, rec in enumerate(recs, 1):
+        pdf.multi_cell(0, 5, limpar_texto(f"  {i}. {rec}"))
+
+    pdf.ln(5)
+    pdf.set_font("Arial", "I", 8)
+    pdf.set_text_color(150, 150, 150)
+    pdf.multi_cell(0, 5, limpar_texto(
+        "Este dossie foi gerado automaticamente pelo sistema IMBRA com base nos dados clinicos e de frequencia "
+        "registrados pelos profissionais responsaveis. Nao substitui avaliacao medica presencial."
+    ))
 
     saida = pdf.output(dest="S")
     if isinstance(saida, str):
