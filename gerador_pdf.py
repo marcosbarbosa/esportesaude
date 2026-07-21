@@ -453,16 +453,16 @@ def criar_documento_aluno_pdf(aluno_data, avaliacoes, historico, estatisticas):
         "hiperextensao", "abdominal dinamico", "prancha dinamica",
     ]
     _COR_RISCO  = {
-        "OMBRO-ALTO": (180, 0,   0),
-        "OMBRO-MOD":  (200, 100, 0),
-        "JOELHO":     (140, 0,   140),
-        "LOMBAR":     (100, 80,  0),
+        "OMBRO-ALTO": (30,  100, 180),   # azul — foco tecnico ombro (maior atencao)
+        "OMBRO-MOD":  (80,  140, 210),   # azul claro — foco tecnico ombro
+        "JOELHO":     (130, 60,  160),   # roxo — foco tecnico joelho
+        "LOMBAR":     (34,  120, 80),    # verde escuro — foco tecnico lombar
     }
     _LABEL_RISCO = {
-        "OMBRO-ALTO": "[RISCO ALTO - OMBRO]",
-        "OMBRO-MOD":  "[RISCO MODERADO - OMBRO]",
-        "JOELHO":     "[ATENCAO - JOELHO]",
-        "LOMBAR":     "[ATENCAO - LOMBAR]",
+        "OMBRO-ALTO": "[FOCO TECNICO - OMBRO (controle de amplitude)]",
+        "OMBRO-MOD":  "[FOCO TECNICO - OMBRO (supervisao)]",
+        "JOELHO":     "[FOCO TECNICO - JOELHO (cuidado na execucao)]",
+        "LOMBAR":     "[FOCO TECNICO - LOMBAR (coluna neutra)]",
     }
 
     def _normalizar(txt):
@@ -925,9 +925,9 @@ def criar_documento_aluno_pdf(aluno_data, avaliacoes, historico, estatisticas):
         pdf.set_text_color(0, 0, 0)
 
     # ══════════════════════════════════════════════════════════════════════════
-    # 6. FREQUÊNCIA — GRÁFICO DE LINHAS (início → hoje)
+    # 6. FREQUÊNCIA — ASSIDUIDADE E FOCO TECNICO
     # ══════════════════════════════════════════════════════════════════════════
-    _secao(pdf, 6, "Frequencia - Grafico de Barras Mensais (Inicio ate Hoje)")
+    _secao(pdf, 6, "Frequencia - Assiduidade e Foco Tecnico")
 
     _mpres  = defaultdict(int)
     _mtotal = defaultdict(int)
@@ -1058,10 +1058,334 @@ def criar_documento_aluno_pdf(aluno_data, avaliacoes, historico, estatisticas):
         pdf.cell(0, 6, limpar_texto("Nenhum registro de frequencia para gerar grafico."), ln=1)
         pdf.set_text_color(0, 0, 0)
 
+    # ── 6B. BARRAS SEMANAIS — Presencas x Faltas por semana ─────────────────
+    pdf.ln(3)
+    pdf.set_font("Arial", "B", 8)
+    pdf.set_text_color(10, 37, 64)
+    pdf.set_x(14)
+    pdf.cell(0, 5, limpar_texto("Frequencia Semanal — Presencas vs Faltas (cada barra = 1 semana)"), ln=1)
+    pdf.set_text_color(0, 0, 0)
+
+    # Agrupar freq_serie por semana ISO
+    _sem_data   = defaultdict(lambda: {"P": 0, "A": 0, "J": 0})
+    _sem_labels = {}
+    for _r6b in (freq_serie or []):
+        try:
+            _fd6 = datetime.date.fromisoformat(str(_r6b.get("data_aula",""))[:10])
+            _yw  = (_fd6.isocalendar()[0], _fd6.isocalendar()[1])
+            if _yw not in _sem_labels:
+                _sem_labels[_yw] = _fd6.strftime("%d/%m")
+            _st6 = str(_r6b.get("status","")).upper()
+            if   _st6 == "PRESENTE":     _sem_data[_yw]["P"] += 1
+            elif _st6 == "JUSTIFICADA":  _sem_data[_yw]["J"] += 1
+            else:                         _sem_data[_yw]["A"] += 1
+        except Exception:
+            pass
+    _sem_keys = sorted(_sem_labels.keys())
+
+    if _sem_keys:
+        _sw_n  = len(_sem_keys)
+        _sw_cl = 28
+        _sw_cw = 162
+        _sw_ch = 42
+        _sw_mx = 5   # max dias por semana (referencia)
+        _sw_ct = pdf.get_y() + 2
+        if _sw_ct + _sw_ch + 22 > 275:
+            pdf.add_page()
+            _sw_ct = pdf.get_y() + 2
+
+        pdf.set_fill_color(248, 250, 255)
+        pdf.set_draw_color(180, 200, 230)
+        pdf.rect(_sw_cl, _sw_ct, _sw_cw, _sw_ch, style="FD")
+
+        # Grid horizontal + labels Y
+        for _gv in range(0, _sw_mx + 1):
+            _yg6 = _sw_ct + _sw_ch - (_gv / _sw_mx) * _sw_ch
+            if _gv == 4:
+                pdf.set_draw_color(220, 120, 0)
+                pdf.set_line_width(0.45)
+            else:
+                pdf.set_draw_color(190, 210, 235)
+                pdf.set_line_width(0.2)
+            pdf.line(_sw_cl, _yg6, _sw_cl + _sw_cw, _yg6)
+            pdf.set_font("Arial", "", 5)
+            pdf.set_text_color(100, 100, 100)
+            pdf.set_xy(_sw_cl - 9, _yg6 - 2)
+            pdf.cell(8, 4, str(_gv) + "d", align="R")
+
+        # Label "meta 4 dias"
+        _ref6_y = _sw_ct + _sw_ch - (4 / _sw_mx) * _sw_ch
+        pdf.set_font("Arial", "I", 5)
+        pdf.set_text_color(220, 120, 0)
+        pdf.set_xy(_sw_cl + _sw_cw - 22, _ref6_y - 4)
+        pdf.cell(22, 3.5, "meta 4 dias/sem", align="R")
+
+        _sw_slot = _sw_cw / _sw_n
+        _sw_bar  = max(1.0, _sw_slot * 0.78)
+        _sw_gap  = (_sw_slot - _sw_bar) / 2
+        _step6   = max(1, _sw_n // 18)
+
+        for _i6, _yw6 in enumerate(_sem_keys):
+            _sd6  = _sem_data[_yw6]
+            _np6  = _sd6["P"]; _na6 = _sd6["A"]; _nj6 = _sd6["J"]
+            _bx6  = _sw_cl + _i6 * _sw_slot + _sw_gap
+            _cy6  = _sw_ct + _sw_ch
+
+            # Barras empilhadas: verde (P), vermelho (A), amarelo (J) — de baixo pra cima
+            for (_nv6, _clr6) in [(_np6, (34, 139, 34)), (_na6, (180, 0, 0)), (_nj6, (210, 170, 0))]:
+                if _nv6 > 0:
+                    _bh6  = (_nv6 / _sw_mx) * _sw_ch
+                    _cy6 -= _bh6
+                    pdf.set_fill_color(*_clr6)
+                    pdf.set_draw_color(220, 225, 235)
+                    pdf.set_line_width(0.1)
+                    pdf.rect(_bx6, _cy6, _sw_bar, _bh6, style="FD")
+
+            # Borda vermelha em semanas com >= 2 faltas
+            if _na6 >= 2:
+                _tot6 = _np6 + _na6 + _nj6
+                _by6t = _sw_ct + _sw_ch - (_tot6 / _sw_mx) * _sw_ch
+                pdf.set_draw_color(180, 0, 0)
+                pdf.set_line_width(0.6)
+                pdf.rect(_bx6 - 0.4, _by6t - 0.4, _sw_bar + 0.8, (_tot6 / _sw_mx) * _sw_ch + 0.4, style="D")
+                pdf.set_line_width(0.1)
+
+            # Label eixo X
+            if _i6 % _step6 == 0 or _i6 == _sw_n - 1:
+                pdf.set_font("Arial", "", 4.5)
+                pdf.set_text_color(80, 80, 80)
+                pdf.set_xy(_bx6 - 1.5, _sw_ct + _sw_ch + 1.5)
+                pdf.cell(_sw_bar + 3, 3, _sem_labels.get(_yw6, ""), align="C")
+
+        # Legenda
+        _sw_ly = _sw_ct + _sw_ch + 8
+        pdf.set_xy(_sw_cl, _sw_ly)
+        pdf.set_font("Arial", "B", 7)
+        pdf.set_text_color(0, 0, 0)
+        pdf.write(4, "Semanal: ")
+        pdf.set_font("Arial", "", 7)
+        pdf.set_text_color(34, 139, 34);  pdf.write(4, "Verde = Presente  ")
+        pdf.set_text_color(180, 0, 0);    pdf.write(4, "Vermelho = Falta  ")
+        pdf.set_text_color(210, 170, 0);  pdf.write(4, "Amarelo = Justificada  ")
+        pdf.set_text_color(220, 120, 0);  pdf.write(4, "  |  Linha laranja = meta 4 dias  ")
+        pdf.set_font("Arial", "I", 6.5)
+        pdf.set_text_color(150, 0, 0)
+        pdf.write(4, "  Borda vermelha = semana com >= 2 faltas")
+        pdf.set_text_color(0, 0, 0)
+        pdf.set_y(_sw_ly + 7)
+
+    # ── 6C. CALENDARIO HEATMAP — presencas diarias por mes ──────────────────
+    pdf.ln(3)
+    pdf.set_font("Arial", "B", 8)
+    pdf.set_text_color(10, 37, 64)
+    pdf.set_x(14)
+    pdf.cell(0, 5, limpar_texto("Calendario de Presencas — cada celula = 1 dia de aula"), ln=1)
+    pdf.set_text_color(0, 0, 0)
+
+    # Montar mapa de data -> {status, foco_ombro, foco_joelho, foco_lombar}
+    _cal_map = {}
+    for _rc in (freq_serie or []):
+        _dc = str(_rc.get("data_aula",""))[:10]
+        if len(_dc) == 10:
+            _cal_map[_dc] = {
+                "status": str(_rc.get("status","")).upper(),
+                "fo": False, "fj": False, "fl": False,
+            }
+    for _hc in (historico or []):
+        _dc2 = str(_hc.get("data_aula",""))[:10]
+        _exc2 = _safe_str(_hc.get("exercicios_executados"), "")
+        for _cod2, _ in _risco_exercicio(_exc2):
+            if _dc2 in _cal_map:
+                if "OMBRO"  in _cod2: _cal_map[_dc2]["fo"] = True
+                elif "JOELHO" in _cod2: _cal_map[_dc2]["fj"] = True
+                elif "LOMBAR" in _cod2: _cal_map[_dc2]["fl"] = True
+
+    _cal_meses_k = sorted({d[:7] for d in _cal_map.keys() if len(d) == 10})
+    _MES_PT_CAL  = {"01":"Jan","02":"Fev","03":"Mar","04":"Abr","05":"Mai","06":"Jun",
+                    "07":"Jul","08":"Ago","09":"Set","10":"Out","11":"Nov","12":"Dez"}
+
+    if _cal_meses_k:
+        _cw_lbl  = 14   # largura do label do mes
+        _cw_grid = 172  # largura da area de dias (1-31)
+        _cw_cell = _cw_grid / 31
+        _ch_row  = 6.5  # altura de cada linha de mes
+        _ct_cal  = pdf.get_y() + 2
+        _n_meses = len(_cal_meses_k)
+
+        if _ct_cal + _n_meses * _ch_row + 18 > 275:
+            pdf.add_page()
+            _ct_cal = pdf.get_y() + 2
+
+        # Fundo geral
+        _cal_tot_h = _n_meses * _ch_row + 2
+        pdf.set_fill_color(245, 248, 255)
+        pdf.set_draw_color(180, 200, 230)
+        pdf.rect(10, _ct_cal, _cw_lbl + _cw_grid + 4, _cal_tot_h, style="FD")
+
+        # Cabecalho de dias (1-31)
+        pdf.set_font("Arial", "", 3.8)
+        pdf.set_text_color(120, 120, 140)
+        for _dd_h in range(1, 32):
+            _cx_h = 10 + _cw_lbl + 2 + (_dd_h - 1) * _cw_cell
+            pdf.set_xy(_cx_h, _ct_cal + 0.2)
+            pdf.cell(_cw_cell, 2.5, str(_dd_h), align="C")
+
+        for _ri, _mk in enumerate(_cal_meses_k):
+            _row_y = _ct_cal + 2.5 + _ri * _ch_row
+            # Label do mes
+            _m_nm = _MES_PT_CAL.get(_mk[5:], _mk[5:]) + "/" + _mk[2:4]
+            pdf.set_font("Arial", "B", 5.5)
+            pdf.set_text_color(30, 50, 90)
+            pdf.set_xy(10, _row_y + 0.5)
+            pdf.cell(_cw_lbl, _ch_row - 1, _m_nm, align="C")
+
+            # Celulas de dias
+            for _dd in range(1, 32):
+                _dc3 = f"{_mk}-{_dd:02d}"
+                _cx  = 10 + _cw_lbl + 2 + (_dd - 1) * _cw_cell
+                _cy  = _row_y + 0.3
+
+                if _dc3 in _cal_map:
+                    _entry = _cal_map[_dc3]
+                    _st3   = _entry["status"]
+                    if   _st3 == "PRESENTE":    _fc = (34, 139, 34)
+                    elif _st3 == "JUSTIFICADA": _fc = (200, 160, 0)
+                    else:                        _fc = (180, 0, 0)
+                    pdf.set_fill_color(*_fc)
+                    pdf.set_draw_color(230, 230, 230)
+                    pdf.set_line_width(0.1)
+                    pdf.rect(_cx, _cy, _cw_cell - 0.2, _ch_row - 1.2, style="FD")
+
+                    # Borda laranja = foco tecnico
+                    if _entry.get("fo") or _entry.get("fj") or _entry.get("fl"):
+                        pdf.set_draw_color(255, 130, 0)
+                        pdf.set_line_width(0.5)
+                        pdf.rect(_cx, _cy, _cw_cell - 0.2, _ch_row - 1.2, style="D")
+                        pdf.set_line_width(0.1)
+
+                    # Numero do dia
+                    pdf.set_font("Arial", "", 3.2)
+                    pdf.set_text_color(255, 255, 255)
+                    pdf.set_xy(_cx, _cy + (_ch_row - 1.2 - 3.2) / 2)
+                    pdf.cell(_cw_cell - 0.2, 3.2, str(_dd), align="C")
+                else:
+                    # Dia sem aula: quadrado cinza muito claro
+                    pdf.set_fill_color(235, 235, 242)
+                    pdf.set_draw_color(220, 220, 228)
+                    pdf.set_line_width(0.05)
+                    pdf.rect(_cx, _cy, _cw_cell - 0.2, _ch_row - 1.2, style="FD")
+
+        # Legenda do calendario
+        _cal_ly = _ct_cal + _cal_tot_h + 3
+        pdf.set_xy(10, _cal_ly)
+        pdf.set_font("Arial", "", 6.5)
+        pdf.set_text_color(34, 139, 34);  pdf.write(4, "Verde = Presente  ")
+        pdf.set_text_color(180, 0, 0);    pdf.write(4, "Vermelho = Falta  ")
+        pdf.set_text_color(200, 160, 0);  pdf.write(4, "Amarelo = Justificada  ")
+        pdf.set_text_color(240, 130, 80); pdf.write(4, "Cinza = sem aula  ")
+        pdf.set_text_color(255, 130, 0);  pdf.write(4, "  Borda laranja = aula com foco tecnico (ombro/joelho/lombar)")
+        pdf.set_text_color(0, 0, 0)
+        pdf.set_y(_cal_ly + 7)
+
+    # ── 6D. FOCO TECNICO POR MES — barras por segmento ─────────────────────
+    # Acumular aulas de foco tecnico por mes a partir do historico
+    _ft_mes  = defaultdict(lambda: {"O": 0, "J": 0, "L": 0})
+    for _hft in (historico or []):
+        _exc_ft = _safe_str(_hft.get("exercicios_executados"), "")
+        _d_ft   = str(_hft.get("data_aula",""))[:7]
+        for _cod_ft, _ in _risco_exercicio(_exc_ft):
+            if "OMBRO"  in _cod_ft: _ft_mes[_d_ft]["O"] += 1
+            elif "JOELHO" in _cod_ft: _ft_mes[_d_ft]["J"] += 1
+            elif "LOMBAR" in _cod_ft: _ft_mes[_d_ft]["L"] += 1
+
+    _ft_meses_k = sorted(_ft_mes.keys())
+    _ft_max_val = max((max(v.values()) for v in _ft_mes.values()), default=0) if _ft_mes else 0
+
+    if _ft_meses_k and _ft_max_val > 0:
+        pdf.ln(3)
+        pdf.set_font("Arial", "B", 8)
+        pdf.set_text_color(10, 37, 64)
+        pdf.set_x(14)
+        pdf.cell(0, 5, limpar_texto("Aulas com Foco Tecnico por Segmento e Mes (Ombro / Joelho / Lombar)"), ln=1)
+        pdf.set_text_color(0, 0, 0)
+
+        _ft_n   = len(_ft_meses_k)
+        _ft_cl  = 28;  _ft_cw = 162;  _ft_ch = 38
+        _ft_ct  = pdf.get_y() + 2
+        _ft_top = max(_ft_max_val, 3)
+
+        if _ft_ct + _ft_ch + 22 > 275:
+            pdf.add_page()
+            _ft_ct = pdf.get_y() + 2
+
+        pdf.set_fill_color(248, 250, 255)
+        pdf.set_draw_color(180, 200, 230)
+        pdf.rect(_ft_cl, _ft_ct, _ft_cw, _ft_ch, style="FD")
+
+        # Grid horizontal + labels Y
+        for _gft in range(0, _ft_top + 1):
+            _yg_ft = _ft_ct + _ft_ch - (_gft / _ft_top) * _ft_ch
+            pdf.set_draw_color(190, 210, 235)
+            pdf.set_line_width(0.2)
+            pdf.line(_ft_cl, _yg_ft, _ft_cl + _ft_cw, _yg_ft)
+            pdf.set_font("Arial", "", 5)
+            pdf.set_text_color(100, 100, 100)
+            pdf.set_xy(_ft_cl - 9, _yg_ft - 2)
+            pdf.cell(8, 4, str(_gft), align="R")
+
+        _ft_slot = _ft_cw / _ft_n
+        _ft_sub  = max(0.8, min(4.0, _ft_slot * 0.78 / 3))
+        _ft_gap  = (_ft_slot - 3 * _ft_sub) / 2
+
+        _ft_clrs = {"O": (30, 100, 180), "J": (130, 60, 160), "L": (34, 130, 80)}
+
+        for _i_ft, _mk_ft in enumerate(_ft_meses_k):
+            _fd_ft  = _ft_mes[_mk_ft]
+            _bx_ft0 = _ft_cl + _i_ft * _ft_slot + _ft_gap
+            for _si, (_seg_k, _clr_ft) in enumerate([("O", _ft_clrs["O"]),
+                                                      ("J", _ft_clrs["J"]),
+                                                      ("L", _ft_clrs["L"])]):
+                _nft = _fd_ft.get(_seg_k, 0)
+                if _nft > 0:
+                    _bh_ft = (_nft / _ft_top) * _ft_ch
+                    _bx_ft = _bx_ft0 + _si * _ft_sub
+                    _by_ft = _ft_ct + _ft_ch - _bh_ft
+                    pdf.set_fill_color(*_clr_ft)
+                    pdf.set_draw_color(220, 225, 235)
+                    pdf.set_line_width(0.1)
+                    pdf.rect(_bx_ft, _by_ft, _ft_sub, _bh_ft, style="FD")
+                    if _bh_ft >= 5:
+                        pdf.set_font("Arial", "B", 3.5)
+                        pdf.set_text_color(255, 255, 255)
+                        pdf.set_xy(_bx_ft, _by_ft + 0.8)
+                        pdf.cell(_ft_sub, 3, str(_nft), align="C")
+
+            # Label eixo X
+            pdf.set_font("Arial", "", 5)
+            pdf.set_text_color(80, 80, 80)
+            pdf.set_xy(_ft_cl + _i_ft * _ft_slot, _ft_ct + _ft_ch + 1.5)
+            pdf.cell(_ft_slot, 3.5, _mk_ft[5:] + "/" + _mk_ft[2:4], align="C")
+
+        # Legenda
+        _ft_ly = _ft_ct + _ft_ch + 8
+        pdf.set_xy(_ft_cl, _ft_ly)
+        pdf.set_font("Arial", "B", 7)
+        pdf.set_text_color(0, 0, 0)
+        pdf.write(4, "Foco tecnico: ")
+        pdf.set_font("Arial", "", 7)
+        pdf.set_text_color(30, 100, 180);   pdf.write(4, "Azul = Ombro  ")
+        pdf.set_text_color(130, 60, 160);   pdf.write(4, "Roxo = Joelho  ")
+        pdf.set_text_color(34, 130, 80);    pdf.write(4, "Verde = Lombar  ")
+        pdf.set_font("Arial", "I", 6.5)
+        pdf.set_text_color(80, 80, 100)
+        pdf.write(4, "  (aulas educativas com maior supervisao tecnica de amplitude)")
+        pdf.set_text_color(0, 0, 0)
+        pdf.set_y(_ft_ly + 7)
+
     # ══════════════════════════════════════════════════════════════════════════
-    # 7. DIÁRIO DE AULAS COM SINAIS DE RISCO CLÍNICO
+    # 7. DIÁRIO DE AULAS COM FOCO TECNICO REGISTRADO
     # ══════════════════════════════════════════════════════════════════════════
-    _secao(pdf, 7, "Diario de Aulas com Sinais de Risco Clinico")
+    _secao(pdf, 7, "Diario de Aulas com Foco Tecnico Registrado")
 
     # Pré-busca de temperatura histórica (1 chamada batch para todas as datas)
     _hora_turma = 9
@@ -1098,8 +1422,8 @@ def criar_documento_aluno_pdf(aluno_data, avaliacoes, historico, estatisticas):
             alertas = _risco_exercicio(exc)
             alertas_globais.extend([(dt_h, a) for a in alertas])
 
-            fill_r = (255, 230, 230) if any(a[0] == "OMBRO-ALTO" for a in alertas) else \
-                     (255, 245, 220) if alertas else (235, 245, 255)
+            fill_r = (225, 238, 255) if any(a[0] == "OMBRO-ALTO" for a in alertas) else \
+                     (235, 235, 255) if alertas else (235, 245, 255)
             pdf.set_fill_color(*fill_r)
             pdf.set_font("Arial", "B", 10)
             pdf.set_text_color(30, 136, 229)
@@ -1159,7 +1483,7 @@ def criar_documento_aluno_pdf(aluno_data, avaliacoes, historico, estatisticas):
     # ══════════════════════════════════════════════════════════════════════════
     # 8. ANÁLISE DE RISCO CONSOLIDADA
     # ══════════════════════════════════════════════════════════════════════════
-    _secao(pdf, 8, "Analise de Risco Consolidada e Recomendacoes")
+    _secao(pdf, 8, "Foco Tecnico - Analise Consolidada e Orientacoes")
 
     codigos_encontrados = {a[0] for _, a in alertas_globais}
 
@@ -1188,26 +1512,30 @@ def criar_documento_aluno_pdf(aluno_data, avaliacoes, historico, estatisticas):
 
         pdf.set_font("Arial", "B", 10)
         pdf.set_text_color(10, 37, 64)
-        pdf.cell(0, 6, limpar_texto("Recomendacoes clinicas:"), ln=1)
+        pdf.cell(0, 6, limpar_texto("Orientacoes tecnicas para o proximo ciclo:"), ln=1)
         pdf.set_text_color(0, 0, 0)
         pdf.set_font("Arial", "", 9)
         if "OMBRO-ALTO" in codigos_encontrados:
             _mc(pdf, 5, limpar_texto(
-                "  [OMBRO] PRIORITARIO: Evitar exercicios acima da linha do ombro. "
-                "Substituir por movimentos abaixo de 90 graus. Verificar laudo ortopedico."))
+                "  [OMBRO] Orientacao tecnica: controlar amplitude em exercicios de elevacao, "
+                "priorizando movimentos abaixo de 90 graus. Confirmar conforto com o aluno "
+                "e verificar laudo ortopedico se houver queixa de dor."))
         if "OMBRO-MOD" in codigos_encontrados:
             _mc(pdf, 5, limpar_texto(
-                "  [OMBRO] Monitorar queixas em remadas e halteres. Reduzir carga ao menor sinal de dor."))
+                "  [OMBRO] Orientacao tecnica: monitorar conforto em remadas e halteres. "
+                "Reduzir amplitude ao primeiro sinal de desconforto."))
         if "JOELHO" in codigos_encontrados:
             _mc(pdf, 5, limpar_texto(
-                "  [JOELHO] Evitar agachamentos profundos e impacto. Priorizar isometrico e amplitude parcial."))
+                "  [JOELHO] Orientacao tecnica: priorizar amplitude parcial e isometrico. "
+                "Evitar impacto excessivo — substituir por versao de baixo impacto quando necessario."))
         if "LOMBAR" in codigos_encontrados:
             _mc(pdf, 5, limpar_texto(
-                "  [LOMBAR] Manter coluna neutra. Evitar flexao forcada de tronco com carga."))
+                "  [LOMBAR] Orientacao tecnica: manter ativacao do core e coluna neutra "
+                "durante todo o exercicio. Evitar flexao forcada de tronco com carga."))
     else:
         pdf.set_font("Arial", "", 10)
         pdf.set_text_color(34, 139, 34)
-        pdf.cell(0, 6, limpar_texto("Nenhum exercicio de risco identificado no historico."), ln=1)
+        pdf.cell(0, 6, limpar_texto("Nenhuma aula com foco tecnico especifico registrada."), ln=1)
         pdf.set_text_color(0, 0, 0)
 
     # ══════════════════════════════════════════════════════════════════════════
@@ -1254,11 +1582,15 @@ def criar_documento_aluno_pdf(aluno_data, avaliacoes, historico, estatisticas):
         _kv(pdf, "Tendencia de Dor", tend, cor_valor=t_cor)
 
     if codigos_encontrados:
-        _kv(pdf, "Riscos Identificados",
-            ", ".join(_LABEL_RISCO.get(c, c) for c in codigos_encontrados),
-            cor_valor=(180, 0, 0))
+        _areas_ft = []
+        if any("OMBRO" in c for c in codigos_encontrados): _areas_ft.append("Ombro")
+        if "JOELHO" in codigos_encontrados:                 _areas_ft.append("Joelho")
+        if "LOMBAR" in codigos_encontrados:                 _areas_ft.append("Lombar")
+        _kv(pdf, "Areas com Foco Tecnico",
+            ", ".join(_areas_ft) + " (aulas educativas com maior supervisao de amplitude)",
+            cor_valor=(30, 100, 180))
     else:
-        _kv(pdf, "Riscos Identificados", "Nenhum critico identificado", cor_valor=(34, 139, 34))
+        _kv(pdf, "Areas com Foco Tecnico", "Sem registro de foco tecnico especifico", cor_valor=(34, 139, 34))
 
     pdf.ln(3)
     pdf.set_font("Arial", "B", 10)
@@ -1272,9 +1604,9 @@ def criar_documento_aluno_pdf(aluno_data, avaliacoes, historico, estatisticas):
         "Manter frequencia acima de 75% para garantir progressao funcional.",
     ]
     if "OMBRO-ALTO" in codigos_encontrados:
-        recs.insert(0, "PRIORITARIO: Revisar protocolo — exercicios acima do ombro identificados. Consultar laudo.")
+        recs.insert(0, "Orientacao tecnica: verificar amplitude em exercicios de ombro. Confirmar conforto com o aluno.")
     if "OMBRO-MOD" in codigos_encontrados or "OMBRO-ALTO" in codigos_encontrados:
-        recs.append("Considerar encaminhamento para fisioterapia se dor de ombro persistir acima de 4/10.")
+        recs.append("Encaminhar para fisioterapia se o aluno relatar dor de ombro acima de 4/10 por mais de 2 aulas.")
     if pct < 75:
         recs.append("Investigar motivos das faltas — considerar ligacao de acolhimento.")
     if len(avaliacoes) == 0:

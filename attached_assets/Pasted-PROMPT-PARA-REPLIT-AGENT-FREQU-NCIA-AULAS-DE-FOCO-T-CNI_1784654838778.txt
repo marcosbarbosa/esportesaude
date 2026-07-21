@@ -1,0 +1,264 @@
+PROMPT PARA REPLIT / AGENT – FREQUÊNCIA + AULAS DE FOCO TÉCNICO (OMBRO/JOELHO/LOMBAR) E GRÁFICOS DE BI
+
+Contexto do sistema
+
+Plataforma: MoveRight / IMBRA – Esporte e Saúde na Comunidade, com relatórios tipo “Dossiê Clínico e Desportivo do Aluno”.
+
+Cada dossiê já mostra:
+
+Perfil pessoal e clínico.
+
+Gráfico de barras mensais de frequência (ex.: Mar–Jul com 100% / 90% etc.).
+
+Diário de aulas com datas, descrição dos exercícios e marcações textuais como:
+
+[RISCO ALTO - OMBRO] Exercicio acima da linha do ombro: Elevacao
+
+[RISCO MODERADO - OMBRO] Exercicio com solicitacao do ombro: Remada
+
+[ATENCAO - JOELHO] Exercicio de impacto/flexao no joelho: Agachamento / Step / Corrida
+
+[ATENCAO - LOMBAR] Exercicio com carga na lombar: Inclinacao etc.
+
+Resumo executivo com assiduidade total, frequência últimos 60 dias e contagem de ocorrências por área (ombro, joelho, lombar).
+
+Correção conceitual IMPORTANTE
+
+As tags como [RISCO ALTO - OMBRO], [RISCO MODERADO - OMBRO], [ATENCAO - JOELHO] e [ATENCAO - LOMBAR] NÃO significam “aulas perigosas” ou “forço extremo”.
+
+Elas representam aulas em que demos maior atenção técnica e educativa a esses segmentos (ombro, joelho, lombar), com foco em segurança, ajuste de amplitude e supervisão – são momentos de foco técnico, não de risco clínico extremo.
+
+Solicitação geral
+
+Corrigir a semântica interna e externa das tags de risco, renomeando e reapresentando como “FOCO TÉCNICO” (ombro/joelho/lombar).
+
+Criar e integrar gráficos de BI (no plural) que combinem frequência diária/semanal com essas aulas de foco técnico, para apoiar decisões da equipe administrativa e clínica sobre assiduidade e programação de exercícios.
+
+Implementar tudo em Python (Streamlit + Plotly ou biblioteca equivalente), integrado às views de dossiê já existentes.
+
+1. Ajustes de dados e nomenclatura
+a) Modelo de dados
+
+Na camada de dados (por exemplo, DataFrames ou tabelas SQL), manter uma tabela de frequência por aluno com os campos mínimos:
+
+aluno_id
+
+data_aula (YYYY-MM-DD)
+
+status_presenca (PRESENTE / AUSENTE / JUSTIFICADA)
+
+turma (ex.: 08H - Seg à Sex)
+
+E uma tabela/estrutura que represente as tags de foco técnico em cada aula:
+
+aluno_id ou turma.
+
+data_aula
+
+Flags internas booleanas, com NOMES NEUTROS:
+
+foco_ombro (True/False) – derivado de [RISCO ALTO - OMBRO] e [RISCO MODERADO - OMBRO].
+
+foco_joelho (True/False) – derivado de [ATENCAO - JOELHO].
+
+foco_lombar (True/False) – derivado de [ATENCAO - LOMBAR].
+
+As strings brutas ([RISCO ALTO - OMBRO] etc.) podem continuar existindo em uma coluna de texto, mas TODOS os cálculos e gráficos devem usar esses flags foco_... com semântica de atenção técnica.
+
+b) Correção de textos no dossiê
+
+Na seção de “Riscos Identificados” / recomendações:
+
+Substituir trechos como “Riscos Identificados: [ATENCAO - JOELHO], [RISCO ALTO - OMBRO]…” por algo como:
+
+“Áreas com maior atenção técnica: ombro, joelho, lombar (aulas educativas com foco em segurança e controle de amplitude).”
+
+Ajustar recomendações para deixar claro que:
+
+São orientações de cuidado técnico (evitar amplitude acima de 90°, priorizar isométrico, manter coluna neutra etc.).
+
+Não rotular o aluno como “em risco extremo”, mas sim como alguém que recebe mais supervisão técnica nesses segmentos.
+
+2. Gráfico 1 – Barras semanais de presença × faltas
+Objetivo: identificar semanas com padrão de ausência relevante (semana inteira sem vir ou ≥ 3 faltas), ligando com o contexto de aulas de foco técnico.
+
+Cálculos:
+
+Para cada aluno e cada semana entre Março e Julho:
+
+dias_presentes = nº de dias com status_presenca = PRESENTE.
+
+dias_ausentes = nº de dias com status_presenca = AUSENTE.
+
+dias_justificados = nº de dias com status_presenca = JUSTIFICADA (opcional).
+
+E se possível, por semana:
+
+aulas_foco_ombro_semana = nº de dias com foco_ombro = True.
+
+aulas_foco_joelho_semana = nº de dias com foco_joelho = True.
+
+aulas_foco_lombar_semana = nº de dias com foco_lombar = True.
+
+Visual (Plotly/Streamlit):
+
+Eixo X: semanas (ex.: Semana 1/Mar, Semana 2/Mar… até Semana 4/Jul).
+
+Eixo Y: número de dias de aula (0–5).
+
+Barras empilhadas por semana:
+
+Verde: dias_presentes.
+
+Vermelho: dias_ausentes.
+
+Amarelo: dias_justificados.
+
+Linha de referência em 4 dias presentes (80% da semana).
+
+Destaques:
+
+Semanas com dias_ausentes >= 3 ou dias_presentes <= 2 recebem borda vermelha e label “Semana em atenção administrativa”.
+
+Tooltip ao passar o mouse mostra:
+
+Datas das faltas.
+
+Quantidade de aulas com foco em ombro/joelho/lombar naquela semana (aulas_foco_...), descritas como “aulas com maior atenção técnica”.
+
+3. Gráfico 2 – Heatmap diário (calendário de presença com foco técnico)
+Objetivo: ver padrões diários (blocos de ausência, dia da semana crítico, relação com aulas de foco técnico).
+
+Cálculos:
+
+Para cada dia de Março–Julho:
+
+status_diario:
+
+Presente.
+
+Ausente.
+
+Justificada.
+
+Sem aula (fim de semana/feriado).
+
+foco_ombro, foco_joelho, foco_lombar (True/False) conforme tabela de tags.
+
+Visual:
+
+Layout tipo calendário:
+
+Linhas: meses (Mar, Abr, Mai, Jun, Jul).
+
+Colunas: dias (1–31).
+
+Cores de célula:
+
+Verde = presente.
+
+Vermelho = ausente.
+
+Amarelo = justificada/atestado.
+
+Cinza = sem aula.
+
+Sobreposição de foco técnico:
+
+Se foco_ombro ou foco_joelho ou foco_lombar forem True naquele dia, aplicar:
+
+Borda especial (ex.: laranja) ou um pequeno símbolo no canto da célula.
+
+Legenda: “Dia com foco técnico em ombro/joelho/lombar (aula educativa com mais supervisão).”
+
+Resumo abaixo do gráfico:
+
+“Dias presentes no período”.
+
+“Dias ausentes”.
+
+“Maior sequência de dias consecutivos ausentes”.
+
+“Total de dias com foco técnico em ombro, joelho, lombar”.
+
+4. Gráfico 3 – Linha de assiduidade semanal × barras de foco técnico
+Objetivo: combinar tendência de assiduidade com intensidade de foco técnico (ombro/joelho/lombar), para ver se períodos com mais aulas de atenção técnica coincidem ou não com queda de presença.
+
+Cálculos:
+
+Para cada semana:
+
+%presenca_semana = dias_presentes / (dias_presentes + dias_ausentes + dias_justificados)
+
+aulas_foco_ombro_semana, aulas_foco_joelho_semana, aulas_foco_lombar_semana conforme seção 2.
+
+Visual:
+
+Eixo X: semanas.
+
+Eixo Y esquerdo: %presenca_semana (0–100%), exibido como linha verde.
+
+Eixo Y direito: nº de aulas de foco técnico, exibido como barras empilhadas:
+
+Vermelho (ou outra cor consistente) = nº de aulas com foco técnico em ombro.
+
+Laranja = nº de aulas com foco técnico em joelho.
+
+Azul = nº de aulas com foco técnico em lombar.
+
+Linha de meta em 75% de presença semanal (coerente com gráficos mensais que usam meta 75%).
+
+Destaques:
+
+Semanas com %presenca_semana < 75% e aulas_foco_total_semana >= 2 ganham marcador especial, com label “Semana em atenção – verificar barreiras e ajustes de programação”.
+
+Tooltip mostra:
+
+%presenca_semana.
+
+nº de dias presentes/ausentes.
+
+nº de aulas com foco técnico em cada região.
+
+5. Integração na view do dossiê e boas práticas de BI
+Integração:
+
+Localizar a view que gera o dossiê do aluno (ex.: ficha_aluno_view.py, prontuario_view.py ou similar na pasta views).
+
+Na seção onde hoje aparece “6. Frequência - Gráfico de Barras Mensais (Início até Hoje)”, adicionar:
+
+Gráfico 1 (barras semanais).
+
+Gráfico 2 (heatmap diário).
+
+Gráfico 3 (linha + barras de foco técnico).
+
+Boas práticas de visualização:
+
+Manter paleta de cores já padronizada no sistema:
+
+Verde = bom (>= 75%).
+
+Laranja = atenção (50–74%).
+
+Vermelho = baixo (< 50%).
+
+Legendas claras em português:
+
+“Presente”, “Falta”, “Justificada/Atestado”.
+
+“Aula com foco técnico em ombro/joelho/lombar (sessão educativa com maior supervisão de amplitude).”
+
+Garantir que os gráficos sejam legíveis em tablet usado na operação em campo (tamanho de fonte, contraste, tooltips) e não gerem carga excessiva de processamento.
+
+Entrega esperada:
+
+Código Python (funções de preparação de dados + funções de renderização em Streamlit/Plotly) para gerar os três gráficos a partir das tabelas de frequência e diário de aulas.
+
+Ajustes de texto no dossiê que substituem “RISCO ALTO/MODERADO/ATENCAO” por “FOCO TÉCNICO” (ombro/joelho/lombar) na interface, mantendo a ideia de cuidado e supervisão, não de perigo.
+
+Comentários sucintos no código explicando:
+
+Como as flags foco_ombro, foco_joelho, foco_lombar são extraídas das tags textuais.
+
+Como cada gráfico deve ser interpretado pela equipe (semântico de atenção técnica, não alarmismo).
