@@ -20,6 +20,66 @@ from database import (
     get_midias_diario,
 )
 
+# Coordenadas fixas de Campo Belo, São Paulo
+_LAT_CAMPO_BELO = -23.6106
+_LON_CAMPO_BELO = -46.6642
+_WEATHER_CACHE: dict = {}
+
+
+def _buscar_temperaturas_historicas(datas_iso: list, hora_turma: int = 9) -> dict:
+    """Busca temperatura histórica em Campo Belo SP para uma lista de datas.
+
+    Faz UMA chamada batch à Open-Meteo Archive API (gratuita, sem chave).
+    Retorna dict {date_str: float | None}.
+    """
+    if not datas_iso:
+        return {}
+
+    # Filtrar datas já em cache e datas futuras
+    hoje = datetime.date.today()
+    pendentes = []
+    for d in datas_iso:
+        chave = f"{d}_{hora_turma}"
+        if chave not in _WEATHER_CACHE:
+            try:
+                if datetime.date.fromisoformat(d) < hoje:
+                    pendentes.append(d)
+                else:
+                    _WEATHER_CACHE[chave] = None
+            except Exception:
+                _WEATHER_CACHE[chave] = None
+
+    if pendentes:
+        data_min = min(pendentes)
+        data_max = max(pendentes)
+        try:
+            # Archive API cobre até ~5 dias atrás; forecast API cobre os últimos 7d
+            dias_atras = (hoje - datetime.date.fromisoformat(data_max)).days
+            if dias_atras >= 5:
+                base = "https://archive-api.open-meteo.com/v1/archive"
+            else:
+                base = "https://api.open-meteo.com/v1/forecast"
+
+            url = (
+                f"{base}?latitude={_LAT_CAMPO_BELO}&longitude={_LON_CAMPO_BELO}"
+                f"&start_date={data_min}&end_date={data_max}"
+                f"&hourly=temperature_2m&timezone=America%2FSao_Paulo"
+            )
+            resp = requests.get(url, timeout=10)
+            jdata = resp.json()
+            times = jdata.get("hourly", {}).get("time", [])
+            temps = jdata.get("hourly", {}).get("temperature_2m", [])
+            time_map = {t: v for t, v in zip(times, temps)}
+
+            for d in pendentes:
+                alvo = f"{d}T{hora_turma:02d}:00"
+                _WEATHER_CACHE[f"{d}_{hora_turma}"] = time_map.get(alvo)
+        except Exception:
+            for d in pendentes:
+                _WEATHER_CACHE[f"{d}_{hora_turma}"] = None
+
+    return {d: _WEATHER_CACHE.get(f"{d}_{hora_turma}") for d in datas_iso}
+
 
 class PDF(FPDF):
     def footer(self):
@@ -1009,12 +1069,32 @@ def criar_documento_aluno_pdf(aluno_data, avaliacoes, historico, estatisticas):
     # ══════════════════════════════════════════════════════════════════════════
     _secao(pdf, 7, "Diario de Aulas com Sinais de Risco Clinico")
 
+    # Pré-busca de temperatura histórica (1 chamada batch para todas as datas)
+    _hora_turma = 9
+    _m_hora = re.search(r"(\d{1,2})H", str(aluno_data.get("turma", "")), re.IGNORECASE)
+    if _m_hora:
+        _hora_turma = int(_m_hora.group(1))
+
+    _datas_hist = []
+    for _hh in (historico or []):
+        _raw_d = str(_hh.get("data_aula", ""))[:10]
+        if len(_raw_d) == 10:
+            _datas_hist.append(_raw_d)
+
+    _temp_map: dict = {}
+    if _datas_hist:
+        try:
+            _temp_map = _buscar_temperaturas_historicas(list(set(_datas_hist)), _hora_turma)
+        except Exception:
+            _temp_map = {}
+
     alertas_globais = []
 
     if historico:
         for h in historico:
             if pdf.get_y() > 248:
                 pdf.add_page()
+            _raw_data_aula = str(h.get("data_aula", ""))[:10]
             dt_h    = _dt_str(h.get("data_aula", ""))
             obj     = _safe_str(h.get("objetivo_geral"),        "Sem objetivo")
             exc     = _safe_str(h.get("exercicios_executados"), "")
@@ -1031,6 +1111,20 @@ def criar_documento_aluno_pdf(aluno_data, avaliacoes, historico, estatisticas):
             pdf.set_text_color(30, 136, 229)
             pdf.cell(0, 6, limpar_texto(f"  Aula de {dt_h}"), ln=1, fill=True)
             pdf.set_text_color(0, 0, 0)
+
+            # Temperatura ambiente (Open-Meteo histórico)
+            _temp_val = _temp_map.get(_raw_data_aula)
+            if _temp_val is not None:
+                try:
+                    _tc = float(_temp_val)
+                    pdf.set_font("Arial", "I", 8)
+                    pdf.set_text_color(80, 80, 120)
+                    pdf.cell(0, 5, limpar_texto(
+                        f"  Temp. amb.: {_tc:.0f} graus C | Campo Belo, SP"
+                    ), ln=1)
+                    pdf.set_text_color(0, 0, 0)
+                except Exception:
+                    pass
 
             pdf.set_font("Arial", "B", 9)
             pdf.write(5, "Objetivo: ")
