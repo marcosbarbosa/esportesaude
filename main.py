@@ -555,10 +555,17 @@ st.markdown(
 [data-testid="stDecoration"]           { display: none !important; }
 [data-testid="stSpinnerContainer"]     { display: none !important; }
 [data-testid="stConnectionStatus"]     { display: none !important; }
+[data-testid="stAppRunningIndicator"]  { display: none !important; }
+[data-testid="stMainMenuPopover"]      { display: none !important; }
+[data-testid="stAppViewBlockContainer"] > div:first-child [data-testid*="Running"] { display: none !important; }
 .stAppToolbar                          { display: none !important; }
 .stToolbar                             { display: none !important; }
 #stDecoration                          { display: none !important; }
 div[class*="StatusWidget"]             { display: none !important; }
+div[class*="AppRunning"]               { display: none !important; }
+div[class*="appRunning"]               { display: none !important; }
+div[class*="runningIndicator"]         { display: none !important; }
+div[class*="RunningIndicator"]         { display: none !important; }
 .block-container {
     padding-top: 1rem !important;
     padding-left: 1.5rem !important;
