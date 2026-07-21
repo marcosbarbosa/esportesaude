@@ -1452,17 +1452,20 @@ def criar_documento_aluno_pdf(aluno_data, avaliacoes, historico, estatisticas):
                     pdf.set_line_width(0.1)
                     pdf.rect(_cx, _cy, _cw_cell - 0.2, _ch_row - 1.2, style="FD")
 
-                    # Faixa vermelha no topo = manhã de sol prometido
-                    # Critério: temp >= 15 °C às 8h E cloudcover <= 60 %
-                    _tv_c  = _temp_cal.get(_dc3)
-                    _cl_c  = _cloud_cal.get(_dc3)
-                    _sol   = (
-                        _tv_c is not None and _tv_c >= 15 and
-                        _cl_c is not None and _cl_c <= 60
-                    )
-                    if _sol:
-                        pdf.set_fill_color(230, 50, 0)
-                        pdf.rect(_cx + 0.12, _cy + 0.12, _cw_cell - 0.55, 1.0, style="F")
+                    # Faixa de temperatura na célula (sem depender de nuvens)
+                    _tv_c   = _temp_cal.get(_dc3)
+                    _cel_h  = _ch_row - 1.2   # altura total da célula
+                    if _tv_c is not None:
+                        if _tv_c >= 14:
+                            # Dia quente/morno: faixa laranja-vermelha no TOPO
+                            pdf.set_fill_color(220, 65, 0)
+                            pdf.rect(_cx + 0.12, _cy + 0.12,
+                                     _cw_cell - 0.55, 1.6, style="F")
+                        else:
+                            # Frio intenso (< 14 °C): faixa azul na BASE
+                            pdf.set_fill_color(65, 120, 215)
+                            pdf.rect(_cx + 0.12, _cy + _cel_h - 1.72,
+                                     _cw_cell - 0.55, 1.6, style="F")
 
                     # Borda laranja = foco tecnico
                     if _entry.get("fo") or _entry.get("fj") or _entry.get("fl"):
@@ -1506,7 +1509,8 @@ def criar_documento_aluno_pdf(aluno_data, avaliacoes, historico, estatisticas):
         pdf.set_text_color(200, 160, 0);  pdf.write(4, "Amarelo = Justificada  ")
         pdf.set_text_color(160, 160, 175);pdf.write(4, "Cinza = sem aula  ")
         pdf.set_text_color(255, 130, 0);  pdf.write(4, "  Borda laranja = foco tecnico  ")
-        pdf.set_text_color(230, 50, 0);   pdf.write(4, limpar_texto("  Faixa verm. = manha de sol (>= 15 graus e ceu aberto)  "))
+        pdf.set_text_color(220, 65, 0);   pdf.write(4, limpar_texto("  Faixa laranja no topo = quente (>= 14 graus)  "))
+        pdf.set_text_color(65, 120, 215); pdf.write(4, limpar_texto("  Faixa azul na base = frio (< 14 graus)  "))
         pdf.set_text_color(100, 100, 60); pdf.write(4, limpar_texto(u"  \xb0 = Temp. local (8h) - Campo Belo/SP"))
         pdf.set_text_color(0, 0, 0)
         pdf.set_y(_cal_ly + 7)
