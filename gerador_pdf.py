@@ -24,6 +24,7 @@ from database import (
 _LAT_CAMPO_BELO = -23.6106
 _LON_CAMPO_BELO = -46.6642
 _WEATHER_CACHE: dict = {}
+_CLOUD_CACHE:   dict = {}   # cache em memória: cobertura de nuvens (cloudcover 0-100%)
 
 
 def _mc(pdf, h, txt, align="L"):
@@ -142,6 +143,69 @@ def _buscar_temperaturas_historicas(datas_iso: list, hora_turma: int = 8) -> dic
         except Exception:
             pass
 
+    return resultado
+
+
+def _buscar_cloudcover_historico(datas_iso: list, hora_turma: int = 8) -> dict:
+    """Busca cobertura de nuvens (0-100 %) via Open-Meteo para cada data.
+
+    Só usa cache em memória (_CLOUD_CACHE) — sem persistência no banco.
+    Archive API para datas >= 5 dias atrás; Forecast API para datas recentes.
+    Retorna {date_str: int | None}.
+    """
+    if not datas_iso:
+        return {}
+
+    hoje = datetime.date.today()
+    resultado: dict = {}
+    sem_cache: list = []
+
+    for d in datas_iso:
+        chave = f"cl_{d}_{hora_turma}"
+        if chave in _CLOUD_CACHE:
+            resultado[d] = _CLOUD_CACHE[chave]
+        else:
+            try:
+                if datetime.date.fromisoformat(d) < hoje:
+                    sem_cache.append(d)
+                else:
+                    _CLOUD_CACHE[chave] = None
+                    resultado[d] = None
+            except Exception:
+                _CLOUD_CACHE[chave] = None
+                resultado[d] = None
+
+    if not sem_cache:
+        return resultado
+
+    _arquivo  = [d for d in sem_cache if (hoje - datetime.date.fromisoformat(d)).days >= 5]
+    _recentes = [d for d in sem_cache if (hoje - datetime.date.fromisoformat(d)).days < 5]
+
+    def _api_cloud(grupo: list, base_url: str) -> None:
+        if not grupo:
+            return
+        try:
+            url = (
+                f"{base_url}?latitude={_LAT_CAMPO_BELO}&longitude={_LON_CAMPO_BELO}"
+                f"&start_date={min(grupo)}&end_date={max(grupo)}"
+                f"&hourly=cloudcover&timezone=America%2FSao_Paulo"
+            )
+            resp = requests.get(url, timeout=12)
+            jdata = resp.json()
+            times  = jdata.get("hourly", {}).get("time", [])
+            clouds = jdata.get("hourly", {}).get("cloudcover", [])
+            tmap   = {t: v for t, v in zip(times, clouds)}
+            for d in grupo:
+                v = tmap.get(f"{d}T{hora_turma:02d}:00")
+                _CLOUD_CACHE[f"cl_{d}_{hora_turma}"] = v
+                resultado[d] = v
+        except Exception:
+            for d in grupo:
+                _CLOUD_CACHE[f"cl_{d}_{hora_turma}"] = None
+                resultado[d] = None
+
+    _api_cloud(_arquivo,  "https://archive-api.open-meteo.com/v1/archive")
+    _api_cloud(_recentes, "https://api.open-meteo.com/v1/forecast")
     return resultado
 
 
@@ -1319,12 +1383,18 @@ def criar_documento_aluno_pdf(aluno_data, avaliacoes, historico, estatisticas):
                 elif "JOELHO" in _cod2: _cal_map[_dc2]["fj"] = True
                 elif "LOMBAR" in _cod2: _cal_map[_dc2]["fl"] = True
 
-    # Buscar temperatura matutina (8h) para cada dia de aula
-    _temp_cal = {}
+    # Buscar temperatura e cobertura de nuvens matutinas (8h) para cada dia de aula
+    _datas_cal = list(_cal_map.keys())
+    _temp_cal  = {}
+    _cloud_cal = {}
     try:
-        _temp_cal = _buscar_temperaturas_historicas(list(_cal_map.keys()), hora_turma=8)
+        _temp_cal  = _buscar_temperaturas_historicas(_datas_cal, hora_turma=8)
     except Exception:
-        _temp_cal = {}
+        _temp_cal  = {}
+    try:
+        _cloud_cal = _buscar_cloudcover_historico(_datas_cal, hora_turma=8)
+    except Exception:
+        _cloud_cal = {}
 
     _cal_meses_k = sorted({d[:7] for d in _cal_map.keys() if len(d) == 10})
     _MES_PT_CAL  = {"01":"Jan","02":"Fev","03":"Mar","04":"Abr","05":"Mai","06":"Jun",
@@ -1382,9 +1452,15 @@ def criar_documento_aluno_pdf(aluno_data, avaliacoes, historico, estatisticas):
                     pdf.set_line_width(0.1)
                     pdf.rect(_cx, _cy, _cw_cell - 0.2, _ch_row - 1.2, style="FD")
 
-                    # Faixa vermelha no topo = dia de calor (temp >= 15 °C)
-                    _tv_c = _temp_cal.get(_dc3)
-                    if _tv_c is not None and _tv_c >= 15:
+                    # Faixa vermelha no topo = manhã de sol prometido
+                    # Critério: temp >= 15 °C às 8h E cloudcover <= 60 %
+                    _tv_c  = _temp_cal.get(_dc3)
+                    _cl_c  = _cloud_cal.get(_dc3)
+                    _sol   = (
+                        _tv_c is not None and _tv_c >= 15 and
+                        _cl_c is not None and _cl_c <= 60
+                    )
+                    if _sol:
                         pdf.set_fill_color(230, 50, 0)
                         pdf.rect(_cx + 0.12, _cy + 0.12, _cw_cell - 0.55, 1.0, style="F")
 
@@ -1430,7 +1506,7 @@ def criar_documento_aluno_pdf(aluno_data, avaliacoes, historico, estatisticas):
         pdf.set_text_color(200, 160, 0);  pdf.write(4, "Amarelo = Justificada  ")
         pdf.set_text_color(160, 160, 175);pdf.write(4, "Cinza = sem aula  ")
         pdf.set_text_color(255, 130, 0);  pdf.write(4, "  Borda laranja = foco tecnico  ")
-        pdf.set_text_color(230, 50, 0);   pdf.write(4, limpar_texto("  Faixa vermelha no topo = calor (>= 15 graus as 8h)  "))
+        pdf.set_text_color(230, 50, 0);   pdf.write(4, limpar_texto("  Faixa verm. = manha de sol (>= 15 graus e ceu aberto)  "))
         pdf.set_text_color(100, 100, 60); pdf.write(4, limpar_texto(u"  \xb0 = Temp. local (8h) - Campo Belo/SP"))
         pdf.set_text_color(0, 0, 0)
         pdf.set_y(_cal_ly + 7)
