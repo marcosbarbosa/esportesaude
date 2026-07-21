@@ -1146,210 +1146,82 @@ def criar_documento_aluno_pdf(aluno_data, avaliacoes, historico, estatisticas):
     # ══════════════════════════════════════════════════════════════════════════
     _secao(pdf, 6, "Frequencia - Assiduidade e Foco Tecnico")
 
-    _mpres  = defaultdict(int)
-    _mtotal = defaultdict(int)
-    for _r in freq_serie:
+    # ── 6A+6B UNIFICADO: BARRAS SEMANAIS EMPILHADAS ──────────────────────────
+    # Agrupar freq_serie por semana ISO (ano, semana)
+    _sem_data   = defaultdict(lambda: {"P": 0, "A": 0, "J": 0})
+    _sem_labels = {}
+    for _r6 in (freq_serie or []):
         try:
-            _fd = datetime.date.fromisoformat(str(_r.get("data_aula", ""))[:10])
-            _ck = _fd.strftime("%Y-%m")
-            _mtotal[_ck] += 1
-            if _r.get("status") == "PRESENTE":
-                _mpres[_ck] += 1
+            _fd6 = datetime.date.fromisoformat(str(_r6.get("data_aula",""))[:10])
+            _yw  = (_fd6.isocalendar()[0], _fd6.isocalendar()[1])
+            if _yw not in _sem_labels:
+                _sem_labels[_yw] = _fd6.strftime("%d/%m")
+            _st6 = str(_r6.get("status","")).upper()
+            if   _st6 == "PRESENTE":    _sem_data[_yw]["P"] += 1
+            elif _st6 == "JUSTIFICADA": _sem_data[_yw]["J"] += 1
+            else:                        _sem_data[_yw]["A"] += 1
         except Exception:
             pass
+    _sem_keys = sorted(_sem_labels.keys())
 
-    _meses = sorted(_mtotal.keys())
-    _mpct  = {m: (_mpres[m] / _mtotal[m] * 100) for m in _meses if _mtotal[m] > 0}
+    pdf.set_font("Arial", "B", 8)
+    pdf.set_text_color(10, 37, 64)
+    pdf.set_x(14)
+    pdf.cell(0, 5, limpar_texto("Frequencia Semanal — dias de aula por semana"), ln=1)
+    pdf.set_text_color(0, 0, 0)
 
-    if len(_meses) >= 1:
-        _nm   = len(_meses)
-        _cl   = 28    # margem esquerda (rótulos Y)
-        _cw   = 162   # largura do gráfico
-        _ch   = 45    # altura do gráfico (barras)
-        _ct   = pdf.get_y() + 3
-
-        if _ct + _ch + 22 > 275:
+    if _sem_keys:
+        _sw_n   = len(_sem_keys)
+        _sw_cl  = 28     # margem esquerda (labels Y)
+        _sw_cw  = 162    # largura total
+        _sw_ch  = 55     # altura (gráfico único, mais generoso)
+        _sw_mx  = 5      # referência: 5 dias/semana
+        _sw_ct  = pdf.get_y() + 2
+        if _sw_ct + _sw_ch + 22 > 275:
             pdf.add_page()
-            _ct = pdf.get_y() + 3
+            _sw_ct = pdf.get_y() + 2
 
         # Fundo
         pdf.set_fill_color(248, 250, 255)
         pdf.set_draw_color(180, 200, 230)
-        pdf.rect(_cl, _ct, _cw, _ch, style="FD")
+        pdf.rect(_sw_cl, _sw_ct, _sw_cw, _sw_ch, style="FD")
 
-        # Grid horizontal e rótulos Y
-        for _gp in [0, 25, 50, 75, 100]:
-            _yg = _ct + _ch - (_gp / 100.0) * _ch
-            if _gp == 75:
+        # Grid horizontal + rótulos Y (0d … 5d)
+        for _gv in range(0, _sw_mx + 1):
+            _yg6 = _sw_ct + _sw_ch - (_gv / _sw_mx) * _sw_ch
+            if _gv == 4:                         # linha de meta
                 pdf.set_draw_color(220, 120, 0)
                 pdf.set_line_width(0.5)
             else:
                 pdf.set_draw_color(190, 210, 235)
                 pdf.set_line_width(0.2)
-            pdf.line(_cl, _yg, _cl + _cw, _yg)
-            pdf.set_font("Arial", "", 6)
-            pdf.set_text_color(100, 100, 100)
-            pdf.set_xy(_cl - 14, _yg - 2)
-            pdf.cell(13, 4, f"{_gp}%", align="R")
-
-        # Rótulo "meta 75%"
-        pdf.set_font("Arial", "I", 6)
-        pdf.set_text_color(220, 120, 0)
-        pdf.set_xy(_cl + _cw - 28, _ct + _ch * 0.25 - 4)
-        pdf.cell(28, 4, "meta 75%", align="R")
-
-        # Dimensões das barras
-        _slot_w = _cw / _nm
-        _bar_w  = max(1.5, _slot_w * 0.72)
-        _gap    = (_slot_w - _bar_w) / 2
-        _show_pct = _slot_w >= 5.0  # só mostra % quando há espaço
-        _step_x = max(1, _nm // 14)  # máximo ~14 rótulos no eixo X
-
-        pdf.set_draw_color(200, 215, 230)
-        pdf.set_line_width(0.15)
-
-        for _i, _mes in enumerate(_meses):
-            _pct_m  = _mpct.get(_mes, 0)
-            _bx     = _cl + _i * _slot_w + _gap
-            _bh     = (_pct_m / 100.0) * _ch
-            _by     = _ct + _ch - _bh
-
-            # Cor da barra
-            if _pct_m >= 75:
-                pdf.set_fill_color(34, 139, 34)
-            elif _pct_m >= 50:
-                pdf.set_fill_color(220, 120, 0)
-            elif _pct_m > 0:
-                pdf.set_fill_color(180, 0, 0)
-            else:
-                pdf.set_fill_color(210, 210, 210)
-
-            if _bh > 0.3:
-                pdf.rect(_bx, _by, _bar_w, _bh, style="FD")
-
-            # Rótulo de % (dentro se barra alta, acima se baixa)
-            if _show_pct and _pct_m > 0:
-                _ps = f"{_pct_m:.0f}%"
-                pdf.set_font("Arial", "B", 5)
-                if _bh >= 7:
-                    pdf.set_text_color(255, 255, 255)
-                    pdf.set_xy(_bx - 1, _by + 1.5)
-                else:
-                    pdf.set_text_color(80, 80, 80)
-                    pdf.set_xy(_bx - 1, max(_ct + 1, _by - 4.5))
-                pdf.cell(_bar_w + 2, 3.5, _ps, align="C")
-
-            # Rótulo do eixo X
-            if _i % _step_x == 0 or _i == _nm - 1:
-                pdf.set_font("Arial", "", 5)
-                pdf.set_text_color(80, 80, 80)
-                pdf.set_xy(_bx - 2, _ct + _ch + 1.5)
-                pdf.cell(_bar_w + 4, 3.5, _mes[5:] + "/" + _mes[2:4], align="C")
-
-        # Legenda de cores
-        pdf.set_text_color(0, 0, 0)
-        _ly = _ct + _ch + 8
-        pdf.set_xy(_cl, _ly)
-        pdf.set_font("Arial", "B", 7)
-        pdf.write(4, "Frequencia mensal:  ")
-        pdf.set_font("Arial", "", 7)
-        pdf.set_text_color(34, 139, 34)
-        pdf.write(4, "Verde >= 75%   ")
-        pdf.set_text_color(220, 120, 0)
-        pdf.write(4, "Laranja 50-74%   ")
-        pdf.set_text_color(180, 0, 0)
-        pdf.write(4, "Vermelho < 50%")
-        pdf.set_text_color(0, 0, 0)
-        pdf.set_y(_ly + 7)
-
-        # Resumo numérico
-        pdf.set_font("Arial", "", 9)
-        _mc(pdf, 5, limpar_texto(
-            f"Total: {pres_total}x presencas  |  {faltas} faltas  |  "
-            f"Assiduidade geral: {pct:.1f}%  |  Ultimos 60 dias: {pres_60}x ({pct_60:.1f}%)"
-        ))
-
-    else:
-        pdf.set_font("Arial", "", 10)
-        pdf.set_text_color(150, 150, 150)
-        pdf.cell(0, 6, limpar_texto("Nenhum registro de frequencia para gerar grafico."), ln=1)
-        pdf.set_text_color(0, 0, 0)
-
-    # ── 6B. BARRAS SEMANAIS — Presencas x Faltas por semana ─────────────────
-    pdf.ln(3)
-    pdf.set_font("Arial", "B", 8)
-    pdf.set_text_color(10, 37, 64)
-    pdf.set_x(14)
-    pdf.cell(0, 5, limpar_texto("Frequencia Semanal — Presencas vs Faltas (cada barra = 1 semana)"), ln=1)
-    pdf.set_text_color(0, 0, 0)
-
-    # Agrupar freq_serie por semana ISO
-    _sem_data   = defaultdict(lambda: {"P": 0, "A": 0, "J": 0})
-    _sem_labels = {}
-    for _r6b in (freq_serie or []):
-        try:
-            _fd6 = datetime.date.fromisoformat(str(_r6b.get("data_aula",""))[:10])
-            _yw  = (_fd6.isocalendar()[0], _fd6.isocalendar()[1])
-            if _yw not in _sem_labels:
-                _sem_labels[_yw] = _fd6.strftime("%d/%m")
-            _st6 = str(_r6b.get("status","")).upper()
-            if   _st6 == "PRESENTE":     _sem_data[_yw]["P"] += 1
-            elif _st6 == "JUSTIFICADA":  _sem_data[_yw]["J"] += 1
-            else:                         _sem_data[_yw]["A"] += 1
-        except Exception:
-            pass
-    _sem_keys = sorted(_sem_labels.keys())
-
-    if _sem_keys:
-        _sw_n  = len(_sem_keys)
-        _sw_cl = 28
-        _sw_cw = 162
-        _sw_ch = 42
-        _sw_mx = 5   # max dias por semana (referencia)
-        _sw_ct = pdf.get_y() + 2
-        if _sw_ct + _sw_ch + 22 > 275:
-            pdf.add_page()
-            _sw_ct = pdf.get_y() + 2
-
-        pdf.set_fill_color(248, 250, 255)
-        pdf.set_draw_color(180, 200, 230)
-        pdf.rect(_sw_cl, _sw_ct, _sw_cw, _sw_ch, style="FD")
-
-        # Grid horizontal + labels Y
-        for _gv in range(0, _sw_mx + 1):
-            _yg6 = _sw_ct + _sw_ch - (_gv / _sw_mx) * _sw_ch
-            if _gv == 4:
-                pdf.set_draw_color(220, 120, 0)
-                pdf.set_line_width(0.45)
-            else:
-                pdf.set_draw_color(190, 210, 235)
-                pdf.set_line_width(0.2)
             pdf.line(_sw_cl, _yg6, _sw_cl + _sw_cw, _yg6)
-            pdf.set_font("Arial", "", 5)
+            pdf.set_font("Arial", "", 5.5)
             pdf.set_text_color(100, 100, 100)
-            pdf.set_xy(_sw_cl - 9, _yg6 - 2)
-            pdf.cell(8, 4, str(_gv) + "d", align="R")
+            pdf.set_xy(_sw_cl - 10, _yg6 - 2)
+            pdf.cell(9, 4, str(_gv) + "d", align="R")
 
-        # Label "meta 4 dias"
-        _ref6_y = _sw_ct + _sw_ch - (4 / _sw_mx) * _sw_ch
-        pdf.set_font("Arial", "I", 5)
+        # Rótulo "meta 4 dias/sem"
+        _ref_y6 = _sw_ct + _sw_ch - (4 / _sw_mx) * _sw_ch
+        pdf.set_font("Arial", "I", 5.5)
         pdf.set_text_color(220, 120, 0)
-        pdf.set_xy(_sw_cl + _sw_cw - 22, _ref6_y - 4)
-        pdf.cell(22, 3.5, "meta 4 dias/sem", align="R")
+        pdf.set_xy(_sw_cl + _sw_cw - 26, _ref_y6 - 4.5)
+        pdf.cell(26, 3.5, "meta 4 dias/sem", align="R")
 
         _sw_slot = _sw_cw / _sw_n
-        _sw_bar  = max(1.0, _sw_slot * 0.78)
+        _sw_bar  = max(1.2, _sw_slot * 0.78)
         _sw_gap  = (_sw_slot - _sw_bar) / 2
         _step6   = max(1, _sw_n // 18)
 
         for _i6, _yw6 in enumerate(_sem_keys):
-            _sd6  = _sem_data[_yw6]
-            _np6  = _sd6["P"]; _na6 = _sd6["A"]; _nj6 = _sd6["J"]
+            _sd6 = _sem_data[_yw6]
+            _np6, _na6, _nj6 = _sd6["P"], _sd6["A"], _sd6["J"]
+            _tot6 = _np6 + _na6 + _nj6
             _bx6  = _sw_cl + _i6 * _sw_slot + _sw_gap
-            _cy6  = _sw_ct + _sw_ch
+            _cy6  = _sw_ct + _sw_ch   # base da barra
 
-            # Barras empilhadas: verde (P), vermelho (A), amarelo (J) — de baixo pra cima
-            for (_nv6, _clr6) in [(_np6, (34, 139, 34)), (_na6, (180, 0, 0)), (_nj6, (210, 170, 0))]:
+            # Barras empilhadas de baixo para cima: P (verde) → A (vermelho) → J (amarelo)
+            for (_nv6, _clr6) in [(_np6, (34,139,34)), (_na6, (180,0,0)), (_nj6, (210,170,0))]:
                 if _nv6 > 0:
                     _bh6  = (_nv6 / _sw_mx) * _sw_ch
                     _cy6 -= _bh6
@@ -1358,16 +1230,24 @@ def criar_documento_aluno_pdf(aluno_data, avaliacoes, historico, estatisticas):
                     pdf.set_line_width(0.1)
                     pdf.rect(_bx6, _cy6, _sw_bar, _bh6, style="FD")
 
+            # Número total de dias acima da barra (quando há espaço)
+            if _tot6 > 0 and _sw_slot >= 4.0:
+                _by6t = _sw_ct + _sw_ch - (_tot6 / _sw_mx) * _sw_ch
+                pdf.set_font("Arial", "B", 5)
+                pdf.set_text_color(40, 40, 40)
+                pdf.set_xy(_bx6 - 0.5, max(_sw_ct + 0.5, _by6t - 4.5))
+                pdf.cell(_sw_bar + 1, 3.5, str(_tot6), align="C")
+
             # Borda vermelha em semanas com >= 2 faltas
             if _na6 >= 2:
-                _tot6 = _np6 + _na6 + _nj6
                 _by6t = _sw_ct + _sw_ch - (_tot6 / _sw_mx) * _sw_ch
                 pdf.set_draw_color(180, 0, 0)
-                pdf.set_line_width(0.6)
-                pdf.rect(_bx6 - 0.4, _by6t - 0.4, _sw_bar + 0.8, (_tot6 / _sw_mx) * _sw_ch + 0.4, style="D")
+                pdf.set_line_width(0.65)
+                pdf.rect(_bx6 - 0.4, _by6t - 0.4,
+                         _sw_bar + 0.8, (_tot6 / _sw_mx) * _sw_ch + 0.4, style="D")
                 pdf.set_line_width(0.1)
 
-            # Label eixo X
+            # Rótulo eixo X (data inicial da semana)
             if _i6 % _step6 == 0 or _i6 == _sw_n - 1:
                 pdf.set_font("Arial", "", 4.5)
                 pdf.set_text_color(80, 80, 80)
@@ -1377,19 +1257,29 @@ def criar_documento_aluno_pdf(aluno_data, avaliacoes, historico, estatisticas):
         # Legenda
         _sw_ly = _sw_ct + _sw_ch + 8
         pdf.set_xy(_sw_cl, _sw_ly)
-        pdf.set_font("Arial", "B", 7)
-        pdf.set_text_color(0, 0, 0)
-        pdf.write(4, "Semanal: ")
         pdf.set_font("Arial", "", 7)
         pdf.set_text_color(34, 139, 34);  pdf.write(4, "Verde = Presente  ")
         pdf.set_text_color(180, 0, 0);    pdf.write(4, "Vermelho = Falta  ")
         pdf.set_text_color(210, 170, 0);  pdf.write(4, "Amarelo = Justificada  ")
-        pdf.set_text_color(220, 120, 0);  pdf.write(4, "  |  Linha laranja = meta 4 dias  ")
+        pdf.set_text_color(220, 120, 0);  pdf.write(4, "  |  Linha laranja = meta 4 dias/sem  ")
         pdf.set_font("Arial", "I", 6.5)
         pdf.set_text_color(150, 0, 0)
         pdf.write(4, "  Borda vermelha = semana com >= 2 faltas")
         pdf.set_text_color(0, 0, 0)
         pdf.set_y(_sw_ly + 7)
+
+    else:
+        pdf.set_font("Arial", "", 10)
+        pdf.set_text_color(150, 150, 150)
+        pdf.cell(0, 6, limpar_texto("Nenhum registro de frequencia para gerar grafico."), ln=1)
+        pdf.set_text_color(0, 0, 0)
+
+    # Resumo numérico
+    pdf.set_font("Arial", "", 9)
+    _mc(pdf, 5, limpar_texto(
+        f"Total: {pres_total}x presencas  |  {faltas} faltas  |  "
+        f"Assiduidade geral: {pct:.1f}%  |  Ultimos 60 dias: {pres_60}x ({pct_60:.1f}%)"
+    ))
 
     # ── 6C. CALENDARIO HEATMAP — presencas diarias por mes ──────────────────
     pdf.ln(3)
