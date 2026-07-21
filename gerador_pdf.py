@@ -1383,18 +1383,20 @@ def criar_documento_aluno_pdf(aluno_data, avaliacoes, historico, estatisticas):
                 elif "JOELHO" in _cod2: _cal_map[_dc2]["fj"] = True
                 elif "LOMBAR" in _cod2: _cal_map[_dc2]["fl"] = True
 
-    # Buscar temperatura e cobertura de nuvens matutinas (8h) para cada dia de aula
+    # Buscar temperatura matutina (8h) para cada dia de aula
     _datas_cal = list(_cal_map.keys())
     _temp_cal  = {}
-    _cloud_cal = {}
     try:
-        _temp_cal  = _buscar_temperaturas_historicas(_datas_cal, hora_turma=8)
+        _temp_cal = _buscar_temperaturas_historicas(_datas_cal, hora_turma=8)
     except Exception:
-        _temp_cal  = {}
+        _temp_cal = {}
+
+    # Limiar de frio configurável (padrão 14 °C)
     try:
-        _cloud_cal = _buscar_cloudcover_historico(_datas_cal, hora_turma=8)
+        from utils.identidade import get_config as _gcfg_cal
+        _temp_limiar = int(_gcfg_cal().get("temp_limiar_frio", 14))
     except Exception:
-        _cloud_cal = {}
+        _temp_limiar = 14
 
     _cal_meses_k = sorted({d[:7] for d in _cal_map.keys() if len(d) == 10})
     _MES_PT_CAL  = {"01":"Jan","02":"Fev","03":"Mar","04":"Abr","05":"Mai","06":"Jun",
@@ -1442,50 +1444,51 @@ def criar_documento_aluno_pdf(aluno_data, avaliacoes, historico, estatisticas):
                 _cy  = _row_y + 0.3
 
                 if _dc3 in _cal_map:
-                    _entry = _cal_map[_dc3]
-                    _st3   = _entry["status"]
+                    _entry  = _cal_map[_dc3]
+                    _st3    = _entry["status"]
+                    _tv_c   = _temp_cal.get(_dc3)
+                    _cel_h  = _ch_row - 1.2        # altura total: ~8.3 mm
+                    _top_h  = _cel_h * 0.48        # zona superior (frequência)
+                    _bot_h  = _cel_h - _top_h      # zona inferior (temperatura)
+
+                    # ── Zona superior: cor de frequência ─────────────────────
                     if   _st3 == "PRESENTE":    _fc = (34, 139, 34)
                     elif _st3 == "JUSTIFICADA": _fc = (200, 160, 0)
                     else:                        _fc = (180, 0, 0)
                     pdf.set_fill_color(*_fc)
-                    pdf.set_draw_color(230, 230, 230)
+                    pdf.set_draw_color(220, 220, 220)
                     pdf.set_line_width(0.1)
-                    pdf.rect(_cx, _cy, _cw_cell - 0.2, _ch_row - 1.2, style="FD")
+                    pdf.rect(_cx, _cy, _cw_cell - 0.2, _top_h, style="FD")
 
-                    # Faixa de temperatura na célula (sem depender de nuvens)
-                    _tv_c   = _temp_cal.get(_dc3)
-                    _cel_h  = _ch_row - 1.2   # altura total da célula
+                    # ── Zona inferior: cor de temperatura ─────────────────────
                     if _tv_c is not None:
-                        if _tv_c >= 14:
-                            # Dia quente/morno: faixa laranja-vermelha no TOPO
-                            pdf.set_fill_color(220, 65, 0)
-                            pdf.rect(_cx + 0.12, _cy + 0.12,
-                                     _cw_cell - 0.55, 1.6, style="F")
-                        else:
-                            # Frio intenso (< 14 °C): faixa azul na BASE
-                            pdf.set_fill_color(65, 120, 215)
-                            pdf.rect(_cx + 0.12, _cy + _cel_h - 1.72,
-                                     _cw_cell - 0.55, 1.6, style="F")
+                        _tc = (210, 75, 0) if _tv_c >= _temp_limiar else (55, 110, 205)
+                    else:
+                        _tc = (175, 175, 188)
+                    pdf.set_fill_color(*_tc)
+                    pdf.set_draw_color(220, 220, 220)
+                    pdf.rect(_cx, _cy + _top_h, _cw_cell - 0.2, _bot_h, style="FD")
 
-                    # Borda laranja = foco tecnico
+                    # ── Borda laranja = foco técnico (sobre ambas as zonas) ───
                     if _entry.get("fo") or _entry.get("fj") or _entry.get("fl"):
                         pdf.set_draw_color(255, 130, 0)
-                        pdf.set_line_width(0.5)
-                        pdf.rect(_cx, _cy, _cw_cell - 0.2, _ch_row - 1.2, style="D")
+                        pdf.set_line_width(0.55)
+                        pdf.rect(_cx, _cy, _cw_cell - 0.2, _cel_h, style="D")
                         pdf.set_line_width(0.1)
 
-                    # Numero do dia (terço superior da célula)
+                    # ── Número do dia (zona superior, branco negrito) ─────────
                     pdf.set_font("Arial", "B", 3.5)
                     pdf.set_text_color(255, 255, 255)
-                    pdf.set_xy(_cx, _cy + 1.3)
-                    pdf.cell(_cw_cell - 0.2, 3.0, str(_dd), align="C")
-                    # Temperatura às 8h (terço inferior da célula)
+                    pdf.set_xy(_cx, _cy + 0.3)
+                    pdf.cell(_cw_cell - 0.2, _top_h - 0.3, str(_dd), align="C")
+
+                    # ── Temperatura (zona inferior, branco) ───────────────────
                     if _tv_c is not None:
-                        _tv_int = int(round(_tv_c))
-                        pdf.set_font("Arial", "", 3.0)
-                        pdf.set_text_color(255, 255, 200)
-                        pdf.set_xy(_cx, _cy + 4.5)
-                        pdf.cell(_cw_cell - 0.2, 3.0, f"{_tv_int}\xb0", align="C")
+                        pdf.set_font("Arial", "B", 3.0)
+                        pdf.set_text_color(255, 255, 255)
+                        pdf.set_xy(_cx, _cy + _top_h + 0.2)
+                        pdf.cell(_cw_cell - 0.2, _bot_h - 0.2,
+                                 f"{int(round(_tv_c))}\xb0", align="C")
                 else:
                     # Dia sem aula: quadrado cinza muito claro
                     pdf.set_fill_color(235, 235, 242)
@@ -1504,14 +1507,22 @@ def criar_documento_aluno_pdf(aluno_data, avaliacoes, historico, estatisticas):
         _cal_ly = _ct_cal + _cal_tot_h + 3
         pdf.set_xy(10, _cal_ly)
         pdf.set_font("Arial", "", 6.5)
+        pdf.set_font("Arial", "B", 6.5)
+        pdf.set_text_color(0, 0, 0);      pdf.write(4, "Topo da celula — frequencia:  ")
+        pdf.set_font("Arial", "", 6.5)
         pdf.set_text_color(34, 139, 34);  pdf.write(4, "Verde = Presente  ")
         pdf.set_text_color(180, 0, 0);    pdf.write(4, "Vermelho = Falta  ")
         pdf.set_text_color(200, 160, 0);  pdf.write(4, "Amarelo = Justificada  ")
-        pdf.set_text_color(160, 160, 175);pdf.write(4, "Cinza = sem aula  ")
-        pdf.set_text_color(255, 130, 0);  pdf.write(4, "  Borda laranja = foco tecnico  ")
-        pdf.set_text_color(220, 65, 0);   pdf.write(4, limpar_texto("  Faixa laranja no topo = quente (>= 14 graus)  "))
-        pdf.set_text_color(65, 120, 215); pdf.write(4, limpar_texto("  Faixa azul na base = frio (< 14 graus)  "))
-        pdf.set_text_color(100, 100, 60); pdf.write(4, limpar_texto(u"  \xb0 = Temp. local (8h) - Campo Belo/SP"))
+        pdf.set_text_color(160, 160, 175);pdf.write(4, "Cinza = sem aula")
+        pdf.ln(4)
+        pdf.set_x(10)
+        pdf.set_font("Arial", "B", 6.5)
+        pdf.set_text_color(0, 0, 0);      pdf.write(4, limpar_texto("Base da celula — temperatura (8h):  "))
+        pdf.set_font("Arial", "", 6.5)
+        pdf.set_text_color(210, 75, 0);   pdf.write(4, limpar_texto(f"Laranja = quente (>= {_temp_limiar} graus)  "))
+        pdf.set_text_color(55, 110, 205); pdf.write(4, limpar_texto(f"Azul = frio (< {_temp_limiar} graus)  "))
+        pdf.set_text_color(255, 130, 0);  pdf.write(4, "  |  Borda laranja = foco tecnico  ")
+        pdf.set_text_color(100, 100, 60); pdf.write(4, limpar_texto("  Limiar configuravel em: Admin > Identidade Visual"))
         pdf.set_text_color(0, 0, 0)
         pdf.set_y(_cal_ly + 7)
 

@@ -52,6 +52,17 @@ def tela_identidade_visual():
 
         endereco = st.text_input("Endereço Completo", value=cfg.get("endereco", ""))
 
+        st.markdown("#### 🌡️ Configurações do Dossiê PDF")
+        temp_limiar = st.number_input(
+            "Limiar de temperatura — frio intenso (°C)",
+            min_value=0, max_value=30,
+            value=int(cfg.get("temp_limiar_frio", 14)),
+            step=1,
+            help="No Calendário de Presenças, dias com temperatura ABAIXO deste valor "
+                 "terão a metade inferior da célula em AZUL (frio). Dias ACIMA ficam em LARANJA (calor). "
+                 "Padrão: 14 °C."
+        )
+
         st.markdown("#### 🖼️ Logomarcas")
         st.caption(
             "Faça upload para substituir as imagens actuais. "
@@ -105,6 +116,7 @@ def tela_identidade_visual():
             "instagram":         instagram.strip(),
             "logo_principal":    nome_logo_p,
             "logo_secundaria":   nome_logo_s,
+            "temp_limiar_frio":  int(temp_limiar),
         }
         salvar_config(nova_cfg)
         st.success("✅ Identidade Visual actualizada! Todos os relatórios vão usar os novos dados.")

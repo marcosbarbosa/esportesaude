@@ -23,6 +23,7 @@ _DEFAULTS = {
     "instagram":         "@institutomudabrasil",
     "logo_principal":    "logo-imbra.png",
     "logo_secundaria":   "logo-secretaria.png",
+    "temp_limiar_frio":  14,
 }
 
 
