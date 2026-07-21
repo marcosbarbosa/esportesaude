@@ -3,7 +3,7 @@
 # 🏷️ CRUD de Tags Clínicas de Saúde — Painel Config (SuperAdmin)
 # ==============================================================================
 import streamlit as st
-from database import get_tags_clinicas, salvar_tag_clinica, excluir_tag_clinica, seed_tags_clinicas_padrao
+from database import get_tags_clinicas, salvar_tag_clinica, excluir_tag_clinica, seed_tags_clinicas_padrao, sincronizar_tags_clinicas
 
 _SQL_CRIACAO = """
 -- Cole este SQL no Supabase SQL Editor e execute:
@@ -47,13 +47,22 @@ def tela_tags_clinicas_config():
     # ── SQL de criação ─────────────────────────────────────────────────────────
     with st.expander("🗄️ SQL — Criar tabela no Supabase (executar uma vez)", expanded=False):
         st.code(_SQL_CRIACAO, language="sql")
-        if st.button("🌱 Inserir Tags Sugeridas (padrão)", key="seed_tags_btn"):
+        col_seed, col_sync = st.columns(2)
+        if col_seed.button("🌱 Inserir Tags Sugeridas (padrão)", key="seed_tags_btn"):
             ok, msg = seed_tags_clinicas_padrao()
             if ok:
-                st.success("✅ 8 tags padrão inseridas com sucesso!")
+                st.success("✅ Tags padrão inseridas com sucesso!")
                 st.rerun()
             else:
                 st.warning(f"ℹ️ {msg}")
+        if col_sync.button("🔄 Sincronizar / Atualizar todas as tags do sistema", key="sync_tags_btn",
+                           help="Insere tags novas (ex: Colesterol) e atualiza as existentes. Não remove tags customizadas."):
+            ok, msg = sincronizar_tags_clinicas()
+            if ok:
+                st.success(f"✅ Sincronização concluída: {msg}")
+                st.rerun()
+            else:
+                st.error(f"❌ Erro: {msg}")
 
     # ── Carregar tags ───────────────────────────────────────────────────────────
     tags = get_tags_clinicas()

@@ -3438,6 +3438,15 @@ _TAGS_PADRAO_SEED = [
          "integração sensorial. "
          "Comunicar mudanças com antecedência e manter ambiente calmo e organizado."
      )},
+    {"nome": "Colesterol Alto / Dislipidemia", "icone": "🩺", "cor": "#0891B2",
+     "tipo_alerta": "warning", "ordem": 14,
+     "dica_treino": (
+         "EVITAR: sedentarismo, alimentos ultraprocessados e gorduras saturadas/trans "
+         "(embutidos, frituras), sessões de alta intensidade isoladas sem base aeróbica consolidada. "
+         "EXECUTAR: aeróbico contínuo de moderada intensidade (caminhada, bicicleta, natação) — "
+         "principal redutor de triglicerídeos e LDL; treino de força complementar. "
+         "Monitorar perfil lipídico periodicamente e reforçar hidratação durante a sessão."
+     )},
 ]
 
 

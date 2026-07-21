@@ -691,6 +691,170 @@ def criar_documento_aluno_pdf(aluno_data, avaliacoes, historico, estatisticas):
         if _meds != "Nao informado":
             _kv(pdf, "Medicamentos/Obs", _meds)
 
+    # ── 1C. CONDIÇÕES CLÍNICAS DE SAÚDE (tags_saude + EVITAR / EXECUTAR) ─────
+    _tags_cs_raw = _safe_str(aluno_data.get("tags_saude"), "")
+    _tags_cs = [t.strip() for t in _tags_cs_raw.split(",") if t.strip()]
+
+    if _tags_cs:
+        # Fallback local (ASCII-safe) caso o banco não esteja disponivel
+        _DICAS_LOCAL_CS = {
+            "Hipertensão/Cardiopatia (inclui Arritmia)": (
+                "isometria prolongada (pranchas, rosca estatica), manobra de Valsalva "
+                "(suster a respiracao), exercicios com a cabeca abaixo da linha do coracao.",
+                "aerobico continuo de baixa-moderada intensidade, treino de forca dinamico "
+                "com respiracao fluida e pausas adequadas. Monitorar PA antes/durante/apos a sessao."
+            ),
+            "Artrose/Artrite/Condromalacia": (
+                "alto impacto (saltos, corrida intensa), agachamentos profundos que gerem dor articular.",
+                "baixo impacto (bicicleta, hidroginastica), fortalecimento isometrico leve, "
+                "mobilidade articular dentro da amplitude sem dor. Avaliar escala de dor (Borg) a cada sessao."
+            ),
+            "Diabetes Mellitus Tipo II / Pré-diabetes": (
+                "treinar em jejum prolongado, exercicios em ambientes de calor extremo "
+                "(risco de hipoglicemia/desidratacao).",
+                "aerobico combinado com treino de resistencia (melhora captacao de glicose), "
+                "foco em grandes grupos musculares. Verificar glicemia antes/apos. "
+                "Ter fonte de acucar de absorcao rapida acessivel."
+            ),
+            "Câncer (tratamento/remissão)": (
+                "exercicios exaustivos (Borg alto) em dias de fadiga pos-tratamento, "
+                "ambientes com aglomeracao se imunidade baixa.",
+                "exercicios leves a moderados para manutencao de massa magra, "
+                "alongamento e tecnicas de relaxamento. Exigir liberacao medica atualizada."
+            ),
+            "Osteoporose": (
+                "flexao extrema da coluna (abdominais tradicionais pesados), torcoes bruscas, "
+                "atividades com risco de queda.",
+                "exercicios de sustentacao de peso (musculacao, cargas leves a moderadas), "
+                "treino de equilibrio e propriocepcao."
+            ),
+            "DPOC/Asma": (
+                "ambientes muito frios ou secos, alta intensidade continua sem pausas.",
+                "exercicios com controle respiratorio (inspiracao pelo nariz, expiracao pela boca), "
+                "treino intervalado com foco na recuperacao. Monitorar saturacao de O2 e dispneia. "
+                "Manter broncodilatador acessivel."
+            ),
+            "Obesidade Grau II/III": (
+                "alto impacto articular (corrida intensa, saltos).",
+                "baixo impacto (bicicleta, caminhada, hidroginastica), progressao gradual de "
+                "carga e duracao. Monitorar FC e temperatura corporal durante toda a sessao."
+            ),
+            "Alzheimer/Demência": (
+                "ambientes desconhecidos sem supervisao, exercicios complexos de alta "
+                "coordenacao sem adaptacao.",
+                "exercicios de coordenacao simples, rotinas previsiveis e comunicacao calma. "
+                "Garantir supervisao proxima durante toda a sessao."
+            ),
+            "Hipotireoidismo / Hashimoto": (
+                "excesso de volume de treino que agrave a fadiga cronica.",
+                "treino de forca moderado (estimula o metabolismo) e aerobico constante de "
+                "intensidade controlada. Respeitar sinais de fadiga e ajustar carga conforme o dia."
+            ),
+            "Fibromialgia": (
+                "treinos longos de alta intensidade, excesso de carga excentrica "
+                "(gera muita dor muscular tardia).",
+                "aerobico de baixa intensidade, alongamentos suaves, hidroterapia. "
+                "Iniciar com volumes baixos e progredir lentamente respeitando os limites de dor."
+            ),
+            "Ansiedade / Depressão": (
+                "ambientes extremamente competitivos que causem estresse.",
+                "atividades ritmicas e ludicas, caminhadas, respiracao consciente, "
+                "exercicios em grupo para estimulo social. Promover regularidade e vinculo com a turma."
+            ),
+            "AVC Controlado": (
+                "esforcos repentinos, picos de pressao (isometria prolongada), "
+                "desequilibrios sem suporte disponivel.",
+                "exercicios focados em simetria, coordenacao motora e atividades da vida "
+                "diaria (AVD) adaptadas. Sempre com supervisao proxima e monitoramento de PA."
+            ),
+            "Autismo": (
+                "poluicao sonora ou visual excessiva (hipersensibilidade), rotinas "
+                "imprevisíveis sem aviso previo.",
+                "exercicios estruturados e previsiveis, foco em coordenacao e integracao "
+                "sensorial. Comunicar mudancas com antecedencia e manter ambiente calmo."
+            ),
+            "Colesterol Alto / Dislipidemia": (
+                "sedentarismo, alimentos ultraprocessados e gorduras saturadas/trans "
+                "(embutidos, frituras), sessoes de alta intensidade isoladas sem base aerobica.",
+                "aerobico continuo de moderada intensidade (caminhada, bicicleta, natacao) — "
+                "principal redutor de triglicerideos e LDL; treino de forca complementar. "
+                "Monitorar perfil lipidico periodicamente e reforcar hidratacao na sessao."
+            ),
+        }
+
+        # Tentar buscar dicas atualizadas do banco
+        _tags_db_cs = {}
+        try:
+            from database import get_tags_clinicas as _gtc_cs
+            for _td_cs in (_gtc_cs() or []):
+                _tags_db_cs[_td_cs.get("nome", "")] = _td_cs
+        except Exception:
+            pass
+
+        pdf.ln(4)
+        if pdf.get_y() > 230:
+            pdf.add_page()
+        pdf.set_fill_color(254, 226, 226)
+        pdf.set_draw_color(252, 165, 165)
+        pdf.set_font("Arial", "B", 11)
+        pdf.set_text_color(127, 29, 29)
+        pdf.cell(0, 7, limpar_texto("  Condicoes Clinicas de Saude — Orientacoes para o Professor"), ln=1, fill=True)
+        pdf.set_draw_color(0, 0, 0)
+        pdf.set_text_color(0, 0, 0)
+        pdf.ln(2)
+
+        import re as _re_cs
+        for _tnome in _tags_cs:
+            if pdf.get_y() > 250:
+                pdf.add_page()
+
+            # Tentar banco primeiro, fallback local
+            _db_cs = _tags_db_cs.get(_tnome, {})
+            _dica_raw = _db_cs.get("dica_treino", "")
+            _ev_cs = _ex_cs = ""
+            if _dica_raw:
+                _m_ev = _re_cs.search(r'EVITAR:\s*(.*?)(?=EXECUTAR:|$)', _dica_raw, _re_cs.DOTALL)
+                _m_ex = _re_cs.search(r'EXECUTAR:\s*(.*)', _dica_raw, _re_cs.DOTALL)
+                if _m_ev: _ev_cs = _m_ev.group(1).strip()
+                if _m_ex: _ex_cs = _m_ex.group(1).strip()
+            if not (_ev_cs or _ex_cs):
+                _loc = _DICAS_LOCAL_CS.get(_tnome)
+                if _loc:
+                    _ev_cs, _ex_cs = _loc
+
+            # ─ Cabeçalho da condição (fundo amarelo-âmbar) ─
+            pdf.set_fill_color(255, 243, 205)
+            pdf.set_draw_color(200, 160, 40)
+            pdf.set_font("Arial", "B", 10)
+            pdf.set_text_color(80, 50, 0)
+            pdf.cell(0, 6, limpar_texto(f"  {_tnome}"), ln=1, fill=True, border="B")
+            pdf.set_draw_color(0, 0, 0)
+            pdf.set_text_color(0, 0, 0)
+
+            # ─ EVITAR (texto vermelho) ─
+            if _ev_cs:
+                pdf.set_x(pdf.l_margin + 4)
+                pdf.set_font("Arial", "B", 9)
+                pdf.set_text_color(180, 0, 0)
+                pdf.write(5, "EVITAR: ")
+                pdf.set_font("Arial", "", 9)
+                pdf.set_text_color(120, 20, 20)
+                _mc_inline(pdf, 5, limpar_texto(_ev_cs))
+                pdf.set_text_color(0, 0, 0)
+
+            # ─ EXECUTAR (texto verde) ─
+            if _ex_cs:
+                pdf.set_x(pdf.l_margin + 4)
+                pdf.set_font("Arial", "B", 9)
+                pdf.set_text_color(0, 110, 0)
+                pdf.write(5, "EXECUTAR: ")
+                pdf.set_font("Arial", "", 9)
+                pdf.set_text_color(0, 70, 0)
+                _mc_inline(pdf, 5, limpar_texto(_ex_cs))
+                pdf.set_text_color(0, 0, 0)
+
+            pdf.ln(3)
+
     # ══════════════════════════════════════════════════════════════════════════
     # 2. HISTÓRICO CLÍNICO COMPLETO
     # ══════════════════════════════════════════════════════════════════════════
