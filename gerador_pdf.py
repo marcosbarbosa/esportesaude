@@ -1477,7 +1477,7 @@ def criar_documento_aluno_pdf(aluno_data, avaliacoes, historico, estatisticas):
         pdf.set_text_color(200, 160, 0);  pdf.write(4, "Amarelo = Justificada  ")
         pdf.set_text_color(160, 160, 175);pdf.write(4, "Cinza = sem aula  ")
         pdf.set_text_color(255, 130, 0);  pdf.write(4, "  Borda laranja = foco tecnico (ombro/joelho/lombar)  ")
-        pdf.set_text_color(100, 100, 60); pdf.write(4, u"  \xb0 = Temperatura local (8h) — Campo Belo/SP")
+        pdf.set_text_color(100, 100, 60); pdf.write(4, limpar_texto(u"  \xb0 = Temperatura local (8h) - Campo Belo/SP"))
         pdf.set_text_color(0, 0, 0)
         pdf.set_y(_cal_ly + 7)
 
