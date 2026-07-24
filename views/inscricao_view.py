@@ -287,6 +287,25 @@ def tela_inscricao_publica_move_right():
                     type=["jpg", "jpeg", "png", "pdf"],
                 )
 
+            # Data de emissão do atestado (para calcular vencimento = +1 ano)
+            if atestado_file:
+                _c_data_at, _c_venc_at = st.columns([2, 2])
+                data_atestado = _c_data_at.date_input(
+                    "📅 Data de emissão do atestado",
+                    value=datetime.date.today(),
+                    format="DD/MM/YYYY",
+                    key="insc_data_atestado",
+                    help="Data em que o médico assinou o atestado.",
+                )
+                _venc_calc = data_atestado + datetime.timedelta(days=365)
+                _c_venc_at.markdown(
+                    f"<div style='padding-top:28px;font-size:13px;color:#166534;'>"
+                    f"✅ Vencimento calculado: <b>{_venc_calc.strftime('%d/%m/%Y')}</b></div>",
+                    unsafe_allow_html=True,
+                )
+            else:
+                data_atestado = None
+
             st.markdown(
                 """
             <div class="caixa-lgpd">
@@ -410,6 +429,8 @@ def tela_inscricao_publica_move_right():
                             "url_rg": url_rg,
                             "url_receituario": url_receita,
                             "url_atestado_medico": url_atestado,
+                            "data_atestado": str(data_atestado) if data_atestado else None,
+                            "data_vencimento_atestado": str(data_atestado + datetime.timedelta(days=365)) if data_atestado else None,
                             "status": "Pendente",
                         }
 

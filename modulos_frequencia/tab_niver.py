@@ -30,6 +30,8 @@ from utils.niver_automatico import (
     disparar_zapi_aniversariantes,
 )
 
+from utils.feriados import obter_feriados_mes, tipo_badge, tipo_cor_texto
+
 try:
     from xhtml2pdf import pisa
     XHTML_DISPONIVEL = True
@@ -180,7 +182,35 @@ def gerar_cartaz_word_core(df_mes, titulo, subtitulo="", mensagem_cartaz=""):
 # ==============================================================================
 # 📕 MOTOR 2: GERAÇÃO DO CARTAZ ECO-PDF (LAYOUT GRIDO DE 2 COLUNAS)
 # ==============================================================================
-def gerar_cartaz_pdf_core(df_mes, titulo, subtitulo="", mensagem_cartaz=""):
+def _html_feriados_niver(feriados_mes) -> str:
+    """Gera bloco HTML com feriados/comemorações para incluir no PDF de aniversários."""
+    if not feriados_mes:
+        return ""
+    linhas = ""
+    for f in feriados_mes:
+        bg  = tipo_badge(f["tipo"])
+        cor = tipo_cor_texto(f["tipo"])
+        linhas += (
+            f"<tr>"
+            f"<td style='padding:3px 8px;font-size:10px;color:#374151;'>"
+            f"{f['data'].strftime('%d/%m')}</td>"
+            f"<td style='padding:3px 8px;'>"
+            f"<span style='background:{bg};color:{cor};font-size:9px;"
+            f"padding:1px 5px;border-radius:3px;'>{f['tipo']}</span></td>"
+            f"<td style='padding:3px 8px;font-size:10px;color:#374151;'>"
+            f"{f['emoji']} {f['nome']}</td>"
+            f"</tr>"
+        )
+    return (
+        "<div style='margin-top:22px;border-top:1.5px solid #CBD5E1;padding-top:10px;'>"
+        "<p style='font-size:11px;font-weight:bold;color:#475569;margin:0 0 6px;'>"
+        "📅 Feriados e Datas Comemorativas do Período</p>"
+        f"<table style='width:100%;border-collapse:collapse;'><tbody>{linhas}</tbody></table>"
+        "</div>"
+    )
+
+
+def gerar_cartaz_pdf_core(df_mes, titulo, subtitulo="", mensagem_cartaz="", feriados_mes=None):
     if not XHTML_DISPONIVEL:
         return None
 
@@ -277,7 +307,8 @@ def gerar_cartaz_pdf_core(df_mes, titulo, subtitulo="", mensagem_cartaz=""):
         <table class="grid-table">
             <tbody>{linhas_colunas_html}</tbody>
         </table>
-        <div class="footer-tag">Moveright™ Sistema de Gestão Integrada • {cfg.get("nome_organizacao", "Instituto Muda Brasil")}</div>
+        {_html_feriados_niver(feriados_mes)}
+    <div class="footer-tag">Moveright™ Sistema de Gestão Integrada • {cfg.get("nome_organizacao", "Instituto Muda Brasil")}</div>
     </body></html>
     """
 
@@ -344,8 +375,14 @@ def renderizar_aba_niver():
         1: "Janeiro", 2: "Fevereiro", 3: "Março", 4: "Abril", 5: "Maio", 6: "Junho",
         7: "Julho", 8: "Agosto", 9: "Setembro", 10: "Outubro", 11: "Novembro", 12: "Dezembro"
     }
-    c_mes, _, _ = st.columns([4, 1, 1], vertical_alignment="bottom")
+    c_mes, _, c_fer = st.columns([4, 1, 2], vertical_alignment="bottom")
     meses_selecionados = c_mes.multiselect("Selecionar Mês(es):", list(meses.values()), default=[meses[hoje.month]])
+    exibir_feriados_pdf = c_fer.checkbox(
+        "📅 Incluir feriados no PDF",
+        value=False,
+        key="niver_exibir_feriados_pdf",
+        help="Adiciona seção de feriados e datas comemorativas ao cartaz de aniversários.",
+    )
 
     if not meses_selecionados:
         st.warning("⚠️ Selecione pelo menos um mês para gerar o relatório.")
@@ -528,7 +565,15 @@ def renderizar_aba_niver():
     with c_botoes:
         if not df_mes.empty:
             if st.button("📕 GERAR PDF", use_container_width=True, type="primary"):
-                st.session_state.pdf_niver = gerar_cartaz_pdf_core(df_mes, titulo_doc, subtitulo_doc, mensagem_digitada)
+                _feriados_pdf = []
+                if exibir_feriados_pdf:
+                    for _mn in meses_nums:
+                        _feriados_pdf += obter_feriados_mes(_mn, hoje.year)
+                    _feriados_pdf = sorted(_feriados_pdf, key=lambda x: x["data"])
+                st.session_state.pdf_niver = gerar_cartaz_pdf_core(
+                    df_mes, titulo_doc, subtitulo_doc, mensagem_digitada,
+                    feriados_mes=_feriados_pdf or None,
+                )
 
             if "pdf_niver" in st.session_state:
                 st.download_button("📥 BAIXAR PDF", st.session_state.pdf_niver, f"Cartaz_{nome_arq}.pdf", "application/pdf", use_container_width=True)

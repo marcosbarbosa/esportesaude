@@ -5,6 +5,7 @@ import streamlit as st
 import pandas as pd
 import datetime
 from dateutil.easter import easter
+from utils.feriados import obter_feriados_periodo, tipo_badge, tipo_cor_texto, COMEMORA
 
 from database import (
     listar_datas_aulas_registradas,
@@ -333,6 +334,43 @@ def renderizar_aba_admin():
             if n_fds: partes.append(f"**{n_fds}** fim(ns) de semana")
             if n_fer: partes.append(f"**{n_fer}** feriado(s)")
             st.warning(f"⚠️ {' e '.join(partes)} com registros de aula no período — verifique.")
+
+        # ── Feriados e Comemorações do período (com e sem aula) ───────────────
+        _feriados_periodo = obter_feriados_periodo(data_ini, data_fim, incluir_comemoracoes=True)
+        if _feriados_periodo:
+            _datas_com_aula = set(str(d)[:10] for d in df_filtrado["data_date"].tolist()) if not df_filtrado.empty else set()
+            with st.expander(f"📅 Feriados e Comemorações no período ({len(_feriados_periodo)})", expanded=False):
+                _fer_h1, _fer_h2, _fer_h3, _fer_h4 = st.columns([2, 2, 2, 3])
+                for h in ["Data", "Dia", "Tipo", "Nome"]:
+                    [_fer_h1, _fer_h2, _fer_h3, _fer_h4][["Data", "Dia", "Tipo", "Nome"].index(h)].markdown(
+                        f"<small><b>{h}</b></small>", unsafe_allow_html=True
+                    )
+                for _f in reversed(_feriados_periodo):
+                    _fd = _f["data"]
+                    _tem_aula = str(_fd) in _datas_com_aula
+                    _bg_linha = "#FEF3C7" if _tem_aula else "transparent"
+                    _titulo_aula = " ⚠️ tinha aula" if _tem_aula else ""
+                    _c1, _c2, _c3, _c4 = st.columns([2, 2, 2, 3])
+                    _c1.markdown(
+                        f"<span style='font-weight:600;color:#374151;'>"
+                        f"{_fd.strftime('%d/%m/%Y')}{_titulo_aula}</span>",
+                        unsafe_allow_html=True,
+                    )
+                    _c2.markdown(
+                        f"<small style='color:#6B7280;'>"
+                        f"{_DIAS_PT.get(_fd.strftime('%A'), _fd.strftime('%A'))}</small>",
+                        unsafe_allow_html=True,
+                    )
+                    _c3.markdown(
+                        f"<span style='background:{tipo_badge(_f['tipo'])};color:{tipo_cor_texto(_f['tipo'])};"
+                        f"font-size:10px;padding:2px 6px;border-radius:4px;white-space:nowrap;'>"
+                        f"{_f['tipo']}</span>",
+                        unsafe_allow_html=True,
+                    )
+                    _c4.markdown(
+                        f"<small>{_f['emoji']} {_f['nome']}</small>",
+                        unsafe_allow_html=True,
+                    )
 
         if df_filtrado.empty:
             st.info("Nenhum registro no período selecionado.")

@@ -728,39 +728,10 @@ def renderizar_dashboard():
                 st.session_state["dash_sort_col"] = "nome"
                 st.session_state["dash_sort_asc"] = True
 
-            # ── SELETOR DE PERÍODO ──────────────────────────────────────────────────
-            PERIODOS = {
-                "Mês Atual":   "mes",
-                "30 dias":     "30d",
-                "90 dias":     "90d",
-                "Histórico":   "hist",
-            }
-            periodo_labels = list(PERIODOS.keys())
-            idx_periodo = st.session_state.get("dash_periodo_idx", 1)  # padrão: 30 dias
-
-            pc0, pc1, pc2, pc3, pc4 = st.columns([1.2, 1, 1, 1, 3])
-            pc0.markdown("<span style='font-size:12px;font-weight:700;color:#64748B;'>Período:</span>", unsafe_allow_html=True)
-            for i, (lbl, col_ref) in enumerate(zip(periodo_labels, [pc1, pc2, pc3, pc4])):
-                ativo = (idx_periodo == i)
-                estilo = "primary" if ativo else "secondary"
-                if col_ref.button(lbl, key=f"per_{i}", type=estilo, use_container_width=True):
-                    st.session_state["dash_periodo_idx"] = i
-                    st.rerun()
-
-            periodo_key = list(PERIODOS.values())[idx_periodo]
+            # Sempre exibe histórico completo
             hoje_ts = pd.Timestamp(datetime.date.today())
-            if periodo_key == "mes":
-                corte = hoje_ts.replace(day=1)
-                label_periodo = hoje_ts.strftime("Mai/%y")   # ex: Mai/26
-            elif periodo_key == "30d":
-                corte = hoje_ts - pd.Timedelta(days=30)
-                label_periodo = "30 dias"
-            elif periodo_key == "90d":
-                corte = hoje_ts - pd.Timedelta(days=90)
-                label_periodo = "90 dias"
-            else:
-                corte = None
-                label_periodo = "Histórico"
+            corte = None
+            label_periodo = "Histórico"
 
             # Recalcula métricas de frequência para o período selecionado
             if not df_freq_datado.empty and corte is not None:
