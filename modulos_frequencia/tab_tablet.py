@@ -359,6 +359,43 @@ def renderizar_aba_terminal(
             unsafe_allow_html=True,
         )
 
+    # ── LEGENDA DOS ÍCONES ────────────────────────────────────────────────────
+    try:
+        from database import get_tags_clinicas as _gtc_leg
+        _tags_leg = _gtc_leg() or []
+    except Exception:
+        _tags_leg = []
+    if not _tags_leg:
+        _tags_leg = [
+            {"nome": "Hipertensão/Cardiopatia", "icone": "🫀", "cor": "#DC2626"},
+            {"nome": "Artrose/Artrite",          "icone": "🦴", "cor": "#D97706"},
+        ]
+
+    _itens_leg = [
+        ("✓",  "#22C55E", "Presente"),
+        ("X",  "#94A3B8", "Ausente"),
+        ("⚕️", "#F59E0B", "Justificada"),
+        ("🔒", "#64748B", "Chamada bloqueada"),
+        ("🚫", "#EF4444", "LGPD – sem autorização de imagem"),
+        ("🏥", "#DC2626", "Atestado médico ativo"),
+        ("⚡", "#F59E0B", "Reavaliação pendente"),
+    ] + [(t["icone"], t.get("cor", "#6B7280"), t["nome"]) for t in _tags_leg]
+
+    _pils = "".join(
+        f"<span style='display:inline-flex;align-items:center;gap:4px;"
+        f"background:#F8FAFC;border:1px solid {cor};border-radius:20px;"
+        f"padding:2px 8px 2px 6px;font-size:11px;color:#374151;white-space:nowrap;'>"
+        f"<span style='font-size:12px;'>{ico}</span>"
+        f"<span style='color:#6B7280;'>{label}</span></span>"
+        for ico, cor, label in _itens_leg
+    )
+    st.markdown(
+        f"<div style='display:flex;flex-wrap:wrap;gap:5px;padding:6px 2px 2px 2px;"
+        f"opacity:0.85;'>{_pils}</div>",
+        unsafe_allow_html=True,
+    )
+    # ─────────────────────────────────────────────────────────────────────────
+
     st.markdown("<br>", unsafe_allow_html=True)
 
     if df_render.empty:
