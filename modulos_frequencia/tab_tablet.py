@@ -233,6 +233,29 @@ def renderizar_aba_terminal(
         overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
     }
 
+    /* 💬 TOOLTIP DE CONDIÇÕES — aparece no lugar do nome no hover */
+    .tooltip-saude {
+        position: absolute;
+        top: 172px;
+        left: 50%;
+        transform: translateX(-50%);
+        width: 148px;
+        background: rgba(15,23,42,0.91);
+        color: #E2E8F0;
+        font-size: 9.5px;
+        font-weight: 500;
+        padding: 5px 7px;
+        border-radius: 8px;
+        text-align: center;
+        line-height: 1.45;
+        z-index: 99998;
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 0.25s ease, transform 0.25s ease;
+        box-shadow: 0 4px 16px rgba(0,0,0,0.45);
+        letter-spacing: 0.2px;
+    }
+
     /* 🚀 ZOOM NO HOVER — apenas 40% maior para destacar o hover */
     [data-testid="stColumn"]:has(.celula-tablet):hover .avatar-visual {
         transform: scale(1.4) !important;
@@ -245,6 +268,9 @@ def renderizar_aba_terminal(
     [data-testid="stColumn"]:has(.celula-tablet):hover .nome-aluno {
         transform: translateY(12px);
         opacity: 0;
+    }
+    [data-testid="stColumn"]:has(.celula-tablet):hover .tooltip-saude {
+        opacity: 1;
     }
 
     /* 🟢/🔴/🟡 ESTADOS DE PRESENÇA */
@@ -562,6 +588,24 @@ def renderizar_aba_terminal(
                         f'background:linear-gradient(135deg,#3B82F6,#06B6D4);">{inic_tab}</div>'
                     )
 
+                # 💬 Tooltip — monta lista de condições do aluno
+                _tip_itens = []
+                if _nao_autoriza:
+                    _tip_itens.append("🚫 LGPD")
+                if _atestado_bloq:
+                    _tip_itens.append("🏥 Atestado ativo")
+                if _aval_pend:
+                    _tip_itens.append("⚡ Reavaliação")
+                if bloqueio_ativo:
+                    _tip_itens.append("🔒 Chamada bloqueada")
+                for _tn in _tags_tab[:5]:
+                    _tip_itens.append(_tn)
+
+                tooltip_html = ""
+                if _tip_itens:
+                    _tip_txt = ", ".join(_tip_itens)
+                    tooltip_html = f'<div class="tooltip-saude">{_tip_txt}</div>'
+
                 cartao_html_seguro = (
                     f'<div class="celula-tablet {status_class}">'
                     f'<div class="avatar-visual">'
@@ -569,6 +613,7 @@ def renderizar_aba_terminal(
                     f"</div>"
                     f'<div class="badge-status">{indicador}</div>'
                     f'<div class="nome-aluno">{nome_formatado}</div>'
+                    f"{tooltip_html}"
                     f"</div>"
                 )
 
