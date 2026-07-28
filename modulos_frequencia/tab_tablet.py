@@ -323,7 +323,8 @@ def renderizar_aba_terminal(
     _kf_pendentes = f"filtro_pendentes_{_chave_sanit}"
     _kf_presentes = f"filtro_presentes_{_chave_sanit}"
 
-    _col_fp, _col_fs, _col_fi = st.columns([3, 3, 4])
+    _kf_prontuario = f"modo_prontuario_{_chave_sanit}"
+    _col_fp, _col_fs, _col_fpr, _col_fi = st.columns([3, 3, 3, 2])
     _filtro_pendentes = _col_fp.checkbox(
         "🔴 Ocultar já registrados",
         key=_kf_pendentes,
@@ -333,8 +334,18 @@ def renderizar_aba_terminal(
         "✅ Somente presentes",
         key=_kf_presentes,
         help="Mostra apenas alunos já marcados como presentes ou justificados",
-        disabled=_filtro_pendentes,   # desativa quando o outro está ativo
+        disabled=_filtro_pendentes,
     )
+    _modo_prontuario = _col_fpr.checkbox(
+        "🩺 Abrir prontuário",
+        key=_kf_prontuario,
+        help="Ativado: clique no aluno abre o prontuário dele. Desativado: clique registra a presença.",
+    )
+    if _modo_prontuario:
+        _col_fi.markdown(
+            "<small style='color:#6366F1;font-weight:600;'>🩺 Modo prontuário ativo</small>",
+            unsafe_allow_html=True,
+        )
 
     # Conjunto de IDs já marcados (PRESENTE ou JUSTIFICADA)
     _ids_marcados = {
@@ -513,16 +524,23 @@ def renderizar_aba_terminal(
                             f"{_ico_t}</div>"
                         )
 
-                # Botão de chamada: bloqueado por admin-lock, atestado médico OU avaliação pendente
-                _botao_bloqueado = bloqueio_ativo or _atestado_bloq or _aval_pend
-                if not _botao_bloqueado:
-                    if st.button(
-                        " ", key=f"tbt_prod_{row['id']}", use_container_width=True
-                    ):
+                # Botão — comportamento bifurcado conforme modo ativo
+                _botao_bloqueado = (bloqueio_ativo or _atestado_bloq or _aval_pend) and not _modo_prontuario
+                if st.button(
+                    " ", key=f"tbt_prod_{row['id']}", use_container_width=True,
+                    disabled=_botao_bloqueado,
+                ):
+                    if _modo_prontuario:
+                        # Abre o prontuário do aluno
+                        st.session_state.aluno_prontuario = row.to_dict()
+                        st.session_state.origem_prontuario = "Frequência"
+                        st.session_state.menu_atual = "Portal do Aluno"
+                    else:
+                        # Registra presença normalmente
                         cycle_presence_btn(
                             row["id"], data_aula, status_atual, row["nome"]
                         )
-                        st.rerun()
+                    st.rerun()
 
                 if url_foto.startswith("http"):
                     inic_tab = "".join(
