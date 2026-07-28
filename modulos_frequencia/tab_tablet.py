@@ -233,27 +233,29 @@ def renderizar_aba_terminal(
         overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
     }
 
-    /* 💬 TOOLTIP DE CONDIÇÕES — aparece no lugar do nome no hover */
+    /* 💬 TOOLTIP DE CONDIÇÕES — sobrepõe a foto em círculo no hover */
     .tooltip-saude {
         position: absolute;
-        top: 172px;
-        left: 50%;
-        transform: translateX(-50%);
-        width: 148px;
-        background: rgba(15,23,42,0.91);
-        color: #E2E8F0;
-        font-size: 9.5px;
+        top: 0; left: 0;
+        width: 100%; height: 100%;
+        border-radius: 50%;
+        background: rgba(15,23,42,0.82);
+        color: #F1F5F9;
+        font-size: 9px;
         font-weight: 500;
-        padding: 5px 7px;
-        border-radius: 8px;
+        padding: 14px 10px;
         text-align: center;
-        line-height: 1.45;
-        z-index: 99998;
+        line-height: 1.5;
+        z-index: 200;
         opacity: 0;
         pointer-events: none;
-        transition: opacity 0.25s ease, transform 0.25s ease;
-        box-shadow: 0 4px 16px rgba(0,0,0,0.45);
-        letter-spacing: 0.2px;
+        transition: opacity 0.22s ease;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        overflow: hidden;
+        letter-spacing: 0.15px;
+        box-sizing: border-box;
     }
 
     /* 🚀 ZOOM NO HOVER — apenas 40% maior para destacar o hover */
@@ -395,43 +397,6 @@ def renderizar_aba_terminal(
             f"de <b>{total_alunos}</b> alunos ({_rotulo})</small>",
             unsafe_allow_html=True,
         )
-
-    # ── LEGENDA DOS ÍCONES ────────────────────────────────────────────────────
-    try:
-        from database import get_tags_clinicas as _gtc_leg
-        _tags_leg = _gtc_leg() or []
-    except Exception:
-        _tags_leg = []
-    if not _tags_leg:
-        _tags_leg = [
-            {"nome": "Hipertensão/Cardiopatia", "icone": "🫀", "cor": "#DC2626"},
-            {"nome": "Artrose/Artrite",          "icone": "🦴", "cor": "#D97706"},
-        ]
-
-    _itens_leg = [
-        ("✓",  "#22C55E", "Presente"),
-        ("X",  "#94A3B8", "Ausente"),
-        ("⚕️", "#F59E0B", "Justificada"),
-        ("🔒", "#64748B", "Chamada bloqueada"),
-        ("🚫", "#EF4444", "LGPD – sem autorização de imagem"),
-        ("🏥", "#DC2626", "Atestado médico ativo"),
-        ("⚡", "#F59E0B", "Reavaliação pendente"),
-    ] + [(t["icone"], t.get("cor", "#6B7280"), t["nome"]) for t in _tags_leg]
-
-    _pils = "".join(
-        f"<span style='display:inline-flex;align-items:center;gap:4px;"
-        f"background:#F8FAFC;border:1px solid {cor};border-radius:20px;"
-        f"padding:2px 8px 2px 6px;font-size:11px;color:#374151;white-space:nowrap;'>"
-        f"<span style='font-size:12px;'>{ico}</span>"
-        f"<span style='color:#6B7280;'>{label}</span></span>"
-        for ico, cor, label in _itens_leg
-    )
-    st.markdown(
-        f"<div style='display:flex;flex-wrap:wrap;gap:5px;padding:6px 2px 2px 2px;"
-        f"opacity:0.85;'>{_pils}</div>",
-        unsafe_allow_html=True,
-    )
-    # ─────────────────────────────────────────────────────────────────────────
 
     st.markdown("<br>", unsafe_allow_html=True)
 
@@ -610,10 +575,10 @@ def renderizar_aba_terminal(
                     f'<div class="celula-tablet {status_class}">'
                     f'<div class="avatar-visual">'
                     f"{avatar_html}{cadeado_html}{lgpd_html}{atestado_html}{aval_pend_html}{saude_html}"
+                    f"{tooltip_html}"
                     f"</div>"
                     f'<div class="badge-status">{indicador}</div>'
                     f'<div class="nome-aluno">{nome_formatado}</div>'
-                    f"{tooltip_html}"
                     f"</div>"
                 )
 
