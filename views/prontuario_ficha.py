@@ -31,6 +31,9 @@ from database import (
     buscar_aluno_por_id,
     buscar_alunos_geral,
     get_alunos_por_turma,
+    get_acoes_voluntariado,
+    get_acoes_aluno,
+    salvar_acoes_aluno,
     ADMIN_MASTER,
     supabase,
 )
@@ -1459,8 +1462,31 @@ def render_aba_social(aluno):
             index=_idx_select(OPCOES_VOL, _val(aluno, "trabalho_voluntario_interesse")),
         )
         vol_areas_ed = c11.text_input(
-            "Áreas de interesse:", value=_val(aluno, "trabalho_voluntario_areas")
+            "Observações / áreas livres:", value=_val(aluno, "trabalho_voluntario_areas"),
+            help="Campo livre complementar. Use o seletor abaixo para ações estruturadas.",
         )
+
+        # Seletor de ações voluntariadas estruturadas
+        _acoes_disponiveis = get_acoes_voluntariado()
+        if _acoes_disponiveis:
+            _acoes_dict      = {a["id"]: a for a in _acoes_disponiveis}
+            _acoes_ids_atual = get_acoes_aluno(aluno["id"])
+            _acoes_opcoes    = {a["id"]: f"{a.get('icone','🤝')} {a['nome']} — {a.get('area','')}"
+                                for a in _acoes_disponiveis}
+            vol_acoes_sel = st.multiselect(
+                "🤝 Ações em que o aluno participa/vai participar:",
+                options=list(_acoes_opcoes.keys()),
+                default=[aid for aid in _acoes_ids_atual if aid in _acoes_opcoes],
+                format_func=lambda x: _acoes_opcoes.get(x, x),
+                key="vol_acoes_multisel",
+                help="Selecione uma ou mais ações cadastradas no sistema.",
+            )
+        else:
+            vol_acoes_sel = []
+            st.caption(
+                "💡 Nenhuma ação voluntariada cadastrada. "
+                "Acesse **Gestor → Config → 🤝 Voluntariado** para criar ações."
+            )
 
         # ── Bloco 4: Anamnese Complementar ───────────────────────────────────
         st.markdown("##### 🏃 Anamnese de Atividade Física")
@@ -1497,6 +1523,8 @@ def render_aba_social(aluno):
                 }
                 sucesso, msg = atualizar_dados_sociais_aluno(aluno["id"], payload)
                 if sucesso:
+                    # Salva vínculos com ações voluntariadas
+                    salvar_acoes_aluno(aluno["id"], vol_acoes_sel)
                     st.session_state.aluno_prontuario.update(payload)
                     st.toast("Perfil social guardado! 🏘️", icon="✅")
                     time.sleep(1)

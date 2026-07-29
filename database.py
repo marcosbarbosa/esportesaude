@@ -3505,6 +3505,123 @@ def seed_tags_clinicas_padrao() -> tuple:
 
 
 # ==============================================================================
+# 🤝 AÇÕES VOLUNTARIADAS — Definições + Vínculos com Alunos
+# ==============================================================================
+
+_ACOES_VOLUNTARIADO_SEED = [
+    {"nome": "Trabalhos Manuais e Artesanato", "descricao": "Tricô, bordado, costura, origami, pintura em tecido e outras atividades manuais.", "area": "Arte e Cultura", "icone": "🧶", "cor": "#D97706", "ordem": 10},
+    {"nome": "Ensino e Educação",              "descricao": "Apoiar atividades pedagógicas, reforço escolar, alfabetização digital.",          "area": "Educação",      "icone": "📚", "cor": "#2563EB", "ordem": 20},
+    {"nome": "Saúde e Bem-estar",              "descricao": "Orientações de saúde, aferição de pressão, apoio em atividades físicas leves.",   "area": "Saúde",         "icone": "💚", "cor": "#059669", "ordem": 30},
+    {"nome": "Artes e Cultura",                "descricao": "Teatro, música, dançaterapia, exposições e apresentações culturais.",              "area": "Arte e Cultura","icone": "🎭", "cor": "#7C3AED", "ordem": 40},
+    {"nome": "Organização e Administração",    "descricao": "Recepção, cadastros, organização de eventos e arquivos.",                         "area": "Administração", "icone": "📋", "cor": "#0891B2", "ordem": 50},
+    {"nome": "Trabalho com Crianças",          "descricao": "Atividades lúdicas, recreação e suporte em eventos com crianças.",                "area": "Social",        "icone": "👶", "cor": "#EC4899", "ordem": 60},
+    {"nome": "Trabalho com Idosos",            "descricao": "Companhia, conversas, apoio em atividades e visitas.",                            "area": "Social",        "icone": "🧓", "cor": "#EA580C", "ordem": 70},
+    {"nome": "Acolhimento e Conversas",        "descricao": "Escuta ativa, suporte emocional e integração de novos participantes.",            "area": "Social",        "icone": "🤗", "cor": "#0D9488", "ordem": 80},
+    {"nome": "Eventos e Festas Sociais",       "descricao": "Organização e participação em comemorações e confraternizações.",                 "area": "Eventos",       "icone": "🎉", "cor": "#DC2626", "ordem": 90},
+    {"nome": "Decoração e Ambiente",           "descricao": "Decoração de espaços, arranjos, preparação de ambientes para eventos.",           "area": "Eventos",       "icone": "🌸", "cor": "#DB2777", "ordem": 100},
+    {"nome": "Libras e Acessibilidade",        "descricao": "Interpretação em Libras, apoio à inclusão e acessibilidade.",                    "area": "Inclusão",      "icone": "🤟", "cor": "#6366F1", "ordem": 110},
+    {"nome": "Alimentação e Culinária",        "descricao": "Preparo de lanches, organização de alimentos e orientação nutricional.",          "area": "Saúde",         "icone": "🍎", "cor": "#16A34A", "ordem": 120},
+]
+
+
+@st.cache_data(ttl=60, show_spinner=False)
+def get_acoes_voluntariado() -> list:
+    """Retorna todas as ações voluntariadas ativas ordenadas por 'ordem'."""
+    try:
+        r = (
+            supabase.table("acoes_voluntariado")
+            .select("*")
+            .eq("ativa", True)
+            .order("ordem")
+            .execute()
+        )
+        return r.data or []
+    except Exception:
+        return []
+
+
+def salvar_acao_voluntariado(dados: dict) -> tuple:
+    """Insere ou atualiza uma ação voluntariada. Se 'id' presente → update."""
+    try:
+        acao_id = dados.pop("id", None)
+        if acao_id:
+            supabase.table("acoes_voluntariado").update(dados).eq("id", acao_id).execute()
+        else:
+            dados.setdefault("ativa", True)
+            supabase.table("acoes_voluntariado").insert(dados).execute()
+        get_acoes_voluntariado.clear()
+        return True, "OK"
+    except Exception as e:
+        return False, str(e)
+
+
+def excluir_acao_voluntariado(acao_id: str) -> tuple:
+    """Remove permanentemente uma ação voluntariada pelo id."""
+    try:
+        supabase.table("acoes_voluntariado").delete().eq("id", acao_id).execute()
+        get_acoes_voluntariado.clear()
+        return True, "OK"
+    except Exception as e:
+        return False, str(e)
+
+
+def seed_acoes_voluntariado_padrao() -> tuple:
+    """Popula a tabela com as ações padrão se ainda estiver vazia."""
+    try:
+        existentes = supabase.table("acoes_voluntariado").select("id").execute()
+        if existentes.data:
+            return False, "Tabela já tem registos."
+        supabase.table("acoes_voluntariado").insert(_ACOES_VOLUNTARIADO_SEED).execute()
+        get_acoes_voluntariado.clear()
+        return True, "OK"
+    except Exception as e:
+        return False, str(e)
+
+
+@st.cache_data(ttl=60, show_spinner=False)
+def get_acoes_aluno(aluno_id: str) -> list:
+    """Retorna lista de acao_id inscritos para o aluno."""
+    try:
+        r = (
+            supabase.table("aluno_acoes_voluntariado")
+            .select("acao_id")
+            .eq("aluno_id", str(aluno_id))
+            .execute()
+        )
+        return [row["acao_id"] for row in (r.data or [])]
+    except Exception:
+        return []
+
+
+def salvar_acoes_aluno(aluno_id: str, acao_ids: list) -> tuple:
+    """Substitui as ações voluntariadas do aluno (delete + insert)."""
+    import datetime as _dt
+    try:
+        aid = str(aluno_id)
+        supabase.table("aluno_acoes_voluntariado").delete().eq("aluno_id", aid).execute()
+        if acao_ids:
+            rows = [
+                {"aluno_id": aid, "acao_id": str(aid_), "data_inscricao": str(_dt.date.today())}
+                for aid_ in acao_ids
+            ]
+            supabase.table("aluno_acoes_voluntariado").insert(rows).execute()
+        get_acoes_aluno.clear()
+        return True, "OK"
+    except Exception as e:
+        return False, str(e)
+
+
+def get_contagem_inscritos_por_acao() -> dict:
+    """Retorna {acao_id: count} com número de alunos inscritos em cada ação."""
+    try:
+        from collections import Counter
+        r = supabase.table("aluno_acoes_voluntariado").select("acao_id").execute()
+        return dict(Counter(row["acao_id"] for row in (r.data or [])))
+    except Exception:
+        return {}
+
+
+# ==============================================================================
 # 🌡️ CACHE DE TEMPERATURAS HISTÓRICAS — Open-Meteo → Supabase
 # ==============================================================================
 # SQL para criar a tabela (executar UMA VEZ no Supabase SQL Editor):

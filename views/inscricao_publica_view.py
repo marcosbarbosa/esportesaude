@@ -242,9 +242,39 @@ def tela_inscricao_publica_move_right(modo_admin=False):
             interesse_voluntario = st.radio(
                 "Tem interesse em trabalho voluntário?", ["Sim", "Não"], horizontal=True
             )
-            areas_voluntario = st.text_input(
-                "Se sim, quais áreas de trabalho voluntário você participaria? (Ex: Recepção, Artesanato, Ensinar algo)"
-            )
+            # Ações estruturadas (carregadas do banco)
+            try:
+                from database import get_acoes_voluntariado as _get_acoes_reg
+                _acoes_reg = _get_acoes_reg()
+            except Exception:
+                _acoes_reg = []
+
+            if _acoes_reg and interesse_voluntario == "Sim":
+                _acoes_reg_opts = [f"{a.get('icone','🤝')} {a['nome']}" for a in _acoes_reg]
+                _acoes_reg_sel  = st.multiselect(
+                    "Em quais ações você gostaria de participar?",
+                    options=_acoes_reg_opts,
+                    help="Pode escolher mais de uma.",
+                    key="reg_acoes_vol",
+                )
+                areas_voluntario = ", ".join(_acoes_reg_sel) if _acoes_reg_sel else ""
+                if not _acoes_reg_sel:
+                    areas_voluntario_extra = st.text_input(
+                        "Outras áreas / observações (opcional):",
+                        key="reg_acoes_vol_extra",
+                    )
+                    areas_voluntario = areas_voluntario_extra
+                else:
+                    areas_voluntario_extra = st.text_input(
+                        "Observações adicionais (opcional):",
+                        key="reg_acoes_vol_extra",
+                    )
+                    if areas_voluntario_extra:
+                        areas_voluntario += f" | {areas_voluntario_extra}"
+            else:
+                areas_voluntario = st.text_input(
+                    "Se sim, quais áreas você participaria? (Ex: Recepção, Artesanato, Ensinar algo)"
+                )
 
             # ---------------------------------------------------------
             # 5. TURMA
