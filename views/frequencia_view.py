@@ -213,8 +213,29 @@ def tela_frequencia():
         "🎂 Niver 🍰 HOJE TEM BOLO!!!" if tem_aniversariante_hoje else "🎂 Niver"
     )
 
+    # Total de alunos ativos (cache 5 min — zero custo extra)
+    try:
+        _df_total_geral = obter_todos_alunos_cache()
+        _total_geral = len(_df_total_geral) if not _df_total_geral.empty else 0
+    except Exception:
+        _total_geral = 0
+
     st.markdown(
-        "<h2 style='color: #0A2540; font-weight: 900; margin-bottom: 0px;'>📊 Gestão de Fluxo</h2>",
+        f"""
+        <div style='display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-bottom:0;'>
+          <h2 style='color:#0A2540;font-weight:900;margin:0;'>📊 Gestão de Fluxo</h2>
+          <span style='display:inline-flex;align-items:center;gap:6px;
+                       background:#EFF6FF;border:1.5px solid #BFDBFE;
+                       border-radius:24px;padding:4px 14px 4px 10px;
+                       font-size:13px;font-weight:600;color:#475569;
+                       box-shadow:0 1px 4px rgba(59,130,246,0.12);
+                       white-space:nowrap;letter-spacing:0.1px;'>
+            <span style='font-size:17px;line-height:1;'>👥</span>
+            <span style='color:#1E40AF;font-weight:900;font-size:15px;'>{_total_geral}</span>
+            <span style='color:#64748B;'>alunos ativos</span>
+          </span>
+        </div>
+        """,
         unsafe_allow_html=True,
     )
     st.markdown("<div style='height: 10px;'></div>", unsafe_allow_html=True)
