@@ -2064,6 +2064,13 @@ if st.session_state.menu_atual == "Principal":
             _hg_ini = (_hg_pg - 1) * _hg_ppp
             _df_pag = _df_grid.iloc[_hg_ini: _hg_ini + _hg_ppp]
 
+            # Pré-carrega vínculos estruturados de voluntariado (1 query, sem N+1)
+            try:
+                from database import get_acoes_todos_voluntarios as _get_acoes_vol
+                _acoes_vol_dict = _get_acoes_vol()
+            except Exception:
+                _acoes_vol_dict = {}
+
             # Gerador de PDF da lista home
             def _gerar_pdf_hg(df: pd.DataFrame) -> bytes:
                 import io as _io
@@ -2237,11 +2244,15 @@ if st.session_state.menu_atual == "Principal":
                         "a_vencer": "A vencer", "ok": "Em dia",
                     }.get(str(a.get("_anam_status") or "nunca"), "-")
                     _vol_int_pdf   = str(a.get("trabalho_voluntario_interesse") or "").strip().lower()
-                    _vol_areas_pdf = str(a.get("trabalho_voluntario_areas") or "").strip()
-                    _vol_pdf_val   = (
-                        _vol_areas_pdf[:22] if _vol_int_pdf == "sim" and _vol_areas_pdf
-                        else ("Sim" if _vol_int_pdf == "sim" else "-")
-                    )
+                    _vol_acoes_pdf = _acoes_vol_dict.get(str(a.get("id", "")), [])
+                    if _vol_acoes_pdf:
+                        # Ações estruturadas — mostra ícone+nome abreviado
+                        _vol_pdf_val = ", ".join(_vol_acoes_pdf)[:30]
+                    elif _vol_int_pdf == "sim":
+                        _fallback = str(a.get("trabalho_voluntario_areas") or "").strip()
+                        _vol_pdf_val = _fallback[:22] if _fallback else "Sim"
+                    else:
+                        _vol_pdf_val = "-"
                     _txt_vals = [
                         str(i + 1),
                         str(a.get("nome", ""))[:28],
@@ -2397,11 +2408,16 @@ if st.session_state.menu_atual == "Principal":
                         "margin-right:5px;white-space:nowrap;'>⚡🚫</abbr>"
                     ) if _aval_pend else ""
                     # Badge voluntário
-                    _vol_int_r = str(_r.get("trabalho_voluntario_interesse") or "").strip().lower()
-                    _vol_areas_r = str(_r.get("trabalho_voluntario_areas") or "").strip()
-                    _vol_title = _vol_areas_r if _vol_areas_r else "areas nao especificadas"
+                    _vol_int_r   = str(_r.get("trabalho_voluntario_interesse") or "").strip().lower()
+                    _vol_acoes_r = _acoes_vol_dict.get(str(_r.get("id", "")), [])
+                    # Tooltip: ações estruturadas > texto livre > genérico
+                    if _vol_acoes_r:
+                        _vol_title = ", ".join(_vol_acoes_r)
+                    else:
+                        _fallback_areas = str(_r.get("trabalho_voluntario_areas") or "").strip()
+                        _vol_title = _fallback_areas if _fallback_areas else "áreas não especificadas"
                     _badge_vol = (
-                        f"<abbr title='Voluntaria(o): {_vol_title}' "
+                        f"<abbr title='Voluntária(o): {_vol_title}' "
                         "style='text-decoration:none;cursor:help;"
                         "background:#F0FDF4;color:#166534;"
                         "border:1px solid #86EFAC;"
@@ -2409,15 +2425,28 @@ if st.session_state.menu_atual == "Principal":
                         "font-size:10px;font-weight:800;"
                         "margin-right:5px;white-space:nowrap;'>🤝 Vol.</abbr>"
                     ) if _vol_int_r == "sim" else ""
-                    # Linha de áreas (visível quando filtro de voluntários ativo)
-                    _vol_linha = (
-                        f"<br><span style='font-size:10px;color:#166534;font-weight:600;"
-                        f"background:#F0FDF4;border-radius:3px;padding:1px 5px;"
-                        f"display:inline-block;margin-top:2px;'>"
-                        f"🤝 {_vol_areas_r}</span>"
-                        if (_vol_int_r == "sim" and _hg_vol_filter and _vol_areas_r)
-                        else ""
-                    )
+                    # Linha de ações (visível quando filtro de voluntários ativo)
+                    if _vol_int_r == "sim" and _hg_vol_filter:
+                        if _vol_acoes_r:
+                            _pills = "".join(
+                                f"<span style='display:inline-block;margin:1px 2px 0 0;"
+                                f"font-size:10px;color:#166534;font-weight:600;"
+                                f"background:#F0FDF4;border:1px solid #86EFAC;"
+                                f"border-radius:10px;padding:1px 7px;'>{a}</span>"
+                                for a in _vol_acoes_r
+                            )
+                            _vol_linha = f"<br>{_pills}"
+                        elif str(_r.get("trabalho_voluntario_areas") or "").strip():
+                            _vol_linha = (
+                                f"<br><span style='font-size:10px;color:#166534;font-weight:600;"
+                                f"background:#F0FDF4;border-radius:3px;padding:1px 5px;"
+                                f"display:inline-block;margin-top:2px;'>"
+                                f"🤝 {_r.get('trabalho_voluntario_areas','').strip()}</span>"
+                            )
+                        else:
+                            _vol_linha = ""
+                    else:
+                        _vol_linha = ""
                     _cb.markdown(
                         f"<span style='font-size:13.5px;font-weight:700;color:#0F172A;'>"
                         f"{_badge_img}{_badge_atestado}{_badge_sem_av}{_badge_aval_pend}{_badge_vol}{_r['nome']}</span>"

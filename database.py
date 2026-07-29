@@ -3707,6 +3707,37 @@ def salvar_acoes_aluno(aluno_id: str, acao_ids: list) -> tuple:
         return False, str(e)
 
 
+@st.cache_data(ttl=120, show_spinner=False)
+def get_acoes_todos_voluntarios() -> dict:
+    """Retorna {aluno_id_str: ['🧶 Trabalhos Manuais e Artesanato', ...]} para todos
+    os alunos com vínculos — UMA query só, sem N+1 no loop do grid."""
+    try:
+        r = (
+            supabase.table("aluno_acoes_voluntariado")
+            .select("aluno_id, acoes_voluntariado(nome, icone, ordem)")
+            .execute()
+        )
+        result: dict = {}
+        for row in (r.data or []):
+            aid  = str(row["aluno_id"])
+            acao = row.get("acoes_voluntariado") or {}
+            nome = acao.get("nome", "")
+            if not nome:
+                continue
+            icone = acao.get("icone", "🤝")
+            ordem = acao.get("ordem", 99)
+            result.setdefault(aid, []).append((ordem, icone, nome))
+        # Ordena por `ordem` e formata como "🧶 Trabalhos Manuais e Artesanato"
+        for aid in result:
+            result[aid] = [
+                f"{ic} {nm}"
+                for _, ic, nm in sorted(result[aid], key=lambda x: x[0])
+            ]
+        return result
+    except Exception:
+        return {}
+
+
 def get_contagem_inscritos_por_acao() -> dict:
     """Retorna {acao_id: count} com número de alunos inscritos em cada ação."""
     try:
