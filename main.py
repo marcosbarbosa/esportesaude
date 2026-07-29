@@ -2066,8 +2066,19 @@ if st.session_state.menu_atual == "Principal":
 
             # Gerador de PDF da lista home
             def _gerar_pdf_hg(df: pd.DataFrame) -> bytes:
+                import io as _io
+                import requests as _req
                 from fpdf import FPDF
-                df = df.reset_index(drop=True)   # garante ordem exata do grid
+                from concurrent.futures import ThreadPoolExecutor
+                try:
+                    from PIL import Image as _Img, ImageDraw as _IDraw
+                    _PIL_OK = True
+                except Exception:
+                    _PIL_OK = False
+
+                df = df.reset_index(drop=True)
+
+                # ── Sanitizador Latin-1 ──────────────────────────────────
                 def _s(t):
                     return (
                         str(t)
@@ -2076,38 +2087,129 @@ if st.session_state.menu_atual == "Principal":
                         .replace("\u2019", "'").replace("\u201c", '"').replace("\u201d", '"')
                         .encode("latin-1", errors="replace").decode("latin-1")
                     )
+
+                # ── Download + crop circular ─────────────────────────────
+                def _baixar_foto_circular(url: str):
+                    if not _PIL_OK or not url or not url.startswith("http"):
+                        return None
+                    try:
+                        resp = _req.get(url, timeout=2)
+                        if resp.status_code != 200:
+                            return None
+                        img = _Img.open(_io.BytesIO(resp.content)).convert("RGBA")
+                        w, h = img.size
+                        m = min(w, h)
+                        img = img.crop(((w - m) // 2, (h - m) // 2,
+                                        (w + m) // 2, (h + m) // 2))
+                        img = img.resize((80, 80), _Img.LANCZOS)
+                        mask = _Img.new("L", (80, 80), 0)
+                        _IDraw.Draw(mask).ellipse((0, 0, 80, 80), fill=255)
+                        bg = _Img.new("RGBA", (80, 80), (255, 255, 255, 255))
+                        bg.paste(img, mask=mask)
+                        out = _io.BytesIO()
+                        bg.convert("RGB").save(out, format="JPEG", quality=75)
+                        out.seek(0)
+                        return out
+                    except Exception:
+                        return None
+
+                # ── Downloads em paralelo ────────────────────────────────
+                _foto_urls = [str(a.get("foto_url") or "").strip()
+                              for _, a in df.iterrows()]
+                _foto_cache: dict = {}
+
+                def _fetch_one(idx_url):
+                    idx, url = idx_url
+                    return idx, _baixar_foto_circular(url)
+
+                try:
+                    with ThreadPoolExecutor(max_workers=12) as _ex:
+                        for _idx, _ibuf in _ex.map(_fetch_one, enumerate(_foto_urls)):
+                            _foto_cache[_idx] = _ibuf
+                except Exception:
+                    pass
+
+                # ── Dimensões ────────────────────────────────────────────
+                _ROW_H    = 12     # altura de cada linha (mm)
+                _FOTO_W   = 12     # largura da coluna foto
+                _FOTO_SZ  = 9.5   # tamanho da imagem circular (mm)
+                _FOTO_PX  = (_FOTO_W - _FOTO_SZ) / 2   # padding horizontal
+                _FOTO_PY  = (_ROW_H - _FOTO_SZ) / 2    # padding vertical
+
                 _tot_pdf = len(df)
+
+                # ── Cabeçalho / Rodapé ───────────────────────────────────
                 class _PDFHG(FPDF):
                     def header(self):
                         self.set_font("Helvetica", "B", 13)
                         self.cell(0, 8, _s("IMBRA - Alunos Ativos"), align="C",
                                   new_x="LMARGIN", new_y="NEXT")
                         self.set_font("Helvetica", "", 8)
-                        self.cell(0, 5,
-                                  _s(f"Emitido em: {datetime.date.today().strftime('%d/%m/%Y')}  |  Total: {_tot_pdf} aluno(s)"),
-                                  align="C", new_x="LMARGIN", new_y="NEXT")
+                        self.cell(
+                            0, 5,
+                            _s(f"Emitido em: {datetime.date.today().strftime('%d/%m/%Y')}"
+                               f"  |  Total: {_tot_pdf} aluno(s)"),
+                            align="C", new_x="LMARGIN", new_y="NEXT",
+                        )
                         self.ln(2)
                     def footer(self):
                         self.set_y(-13)
                         self.set_font("Helvetica", "I", 7)
                         self.cell(0, 8, _s(f"Pag. {self.page_no()}"), align="C")
+
                 pdf = _PDFHG(orientation="L", unit="mm", format="A4")
                 pdf.add_page()
-                pdf.set_auto_page_break(True, margin=14)
-                hdrs   = ["#", "Nome", "Turma", "Aniversario", "Freq.60d", "Ultima Pres.", "Venc. Atestado", "Ult. PA", "Anamnese", "Voluntariado"]
-                widths = [8,   52,    22,      14,            13,         22,              22,                34,        38,         38]
+                pdf.set_auto_page_break(False, margin=14)
+
+                # colunas:  Foto | # | Nome | Turma | Aniv | Freq | UltPres | Venc | PA | Anam | Vol
+                _hdrs  = ["",       "#", "Nome", "Turma", "Aniversario", "Freq.60d",
+                          "Ultima Pres.", "Venc. Atestado", "Ult. PA", "Anamnese", "Voluntariado"]
+                _widths = [_FOTO_W,  6,   48,     20,      13,           12,
+                           20,            20,              28,        32,          32]
+
+                # Cabeçalho azul
                 pdf.set_font("Helvetica", "B", 8)
                 pdf.set_fill_color(30, 77, 216)
                 pdf.set_text_color(255, 255, 255)
-                for w, h in zip(widths, hdrs):
-                    pdf.cell(w, 6, _s(h), border=0, fill=True)
+                for _w, _h in zip(_widths, _hdrs):
+                    pdf.cell(_w, 6, _s(_h), border=0, fill=True)
                 pdf.ln()
+
                 pdf.set_font("Helvetica", "", 8)
                 pdf.set_text_color(15, 23, 42)
-                _hoje_pdf = datetime.date.today()
-                _meses_pdf = ["","jan","fev","mar","abr","mai","jun","jul","ago","set","out","nov","dez"]
+                _meses_pdf = ["","jan","fev","mar","abr","mai","jun",
+                              "jul","ago","set","out","nov","dez"]
+                _b_margin = 14
+
                 for i, (_, a) in enumerate(df.iterrows()):
-                    pdf.set_fill_color(239, 246, 255) if i % 2 == 0 else pdf.set_fill_color(255, 255, 255)
+                    # Quebra de página manual (rect não dispara auto-break)
+                    if pdf.get_y() + _ROW_H > pdf.h - _b_margin:
+                        pdf.add_page()
+
+                    _fr, _fg, _fb = (239, 246, 255) if i % 2 == 0 else (255, 255, 255)
+                    pdf.set_fill_color(_fr, _fg, _fb)
+                    pdf.set_text_color(15, 23, 42)
+
+                    _y0 = pdf.get_y()
+                    _x0 = pdf.l_margin
+
+                    # Célula da foto: fundo + imagem circular
+                    pdf.rect(_x0, _y0, _FOTO_W, _ROW_H, style="F")
+                    _ibuf = _foto_cache.get(i)
+                    if _ibuf:
+                        try:
+                            pdf.image(_ibuf,
+                                      x=_x0 + _FOTO_PX,
+                                      y=_y0 + _FOTO_PY,
+                                      w=_FOTO_SZ, h=_FOTO_SZ)
+                        except Exception:
+                            pass
+
+                    # Cursor após coluna foto; reaplica fill antes das células
+                    pdf.set_xy(_x0 + _FOTO_W, _y0)
+                    pdf.set_fill_color(_fr, _fg, _fb)
+
+                    # Células de texto
                     _up = a.get("ultima_presenca")
                     try:
                         _up_str = pd.Timestamp(_up).strftime("%d/%m/%y") if pd.notna(_up) and _up else "-"
@@ -2118,43 +2220,44 @@ if st.session_state.menu_atual == "Principal":
                         _dv_str = pd.Timestamp(_dv).strftime("%d/%m/%y") if pd.notna(_dv) and _dv else "-"
                     except Exception:
                         _dv_str = "-"
-                    _dn = a.get("_dia_n")
-                    _mn = a.get("_mes_n")
+                    _dn = a.get("_dia_n"); _mn = a.get("_mes_n")
                     try:
-                        _nasc_pdf = f"{int(_dn):02d}/{_meses_pdf[int(_mn)]}" if pd.notna(_dn) and pd.notna(_mn) else "-"
+                        _nasc_pdf = (f"{int(_dn):02d}/{_meses_pdf[int(_mn)]}"
+                                     if pd.notna(_dn) and pd.notna(_mn) else "-")
                     except Exception:
                         _nasc_pdf = "-"
                     _anam_dt_pdf = a.get("_anam_data")
                     try:
-                        _anam_pdf_str = (
-                            pd.Timestamp(_anam_dt_pdf).strftime("%d/%m/%y")
-                            if pd.notna(_anam_dt_pdf) else "-"
-                        )
+                        _anam_pdf_str = (pd.Timestamp(_anam_dt_pdf).strftime("%d/%m/%y")
+                                         if pd.notna(_anam_dt_pdf) else "-")
                     except Exception:
                         _anam_pdf_str = "-"
-                    _anam_st_pdf = str(a.get("_anam_status") or "nunca")
                     _anam_lbl_pdf = {
                         "nunca": "Nunca", "vencida": "Vencida",
                         "a_vencer": "A vencer", "ok": "Em dia",
-                    }.get(_anam_st_pdf, "-")
-                    _vol_int_pdf = str(a.get("trabalho_voluntario_interesse") or "").strip().lower()
+                    }.get(str(a.get("_anam_status") or "nunca"), "-")
+                    _vol_int_pdf   = str(a.get("trabalho_voluntario_interesse") or "").strip().lower()
                     _vol_areas_pdf = str(a.get("trabalho_voluntario_areas") or "").strip()
-                    _vol_pdf_val = _vol_areas_pdf[:22] if _vol_int_pdf == "sim" and _vol_areas_pdf else ("Sim" if _vol_int_pdf == "sim" else "-")
-                    vals = [
+                    _vol_pdf_val   = (
+                        _vol_areas_pdf[:22] if _vol_int_pdf == "sim" and _vol_areas_pdf
+                        else ("Sim" if _vol_int_pdf == "sim" else "-")
+                    )
+                    _txt_vals = [
                         str(i + 1),
-                        str(a.get("nome", ""))[:30],
-                        str(a.get("turma", ""))[:13],
+                        str(a.get("nome", ""))[:28],
+                        str(a.get("turma", ""))[:12],
                         _nasc_pdf,
                         str(int(a.get("total_presencas_hist", 0))),
                         _up_str,
                         _dv_str,
-                        str(a.get("_pa_txt", "") or "-")[:12],
-                        f"{_anam_pdf_str} ({_anam_lbl_pdf})"[:20],
+                        str(a.get("_pa_txt", "") or "-")[:11],
+                        f"{_anam_pdf_str} ({_anam_lbl_pdf})"[:18],
                         _vol_pdf_val,
                     ]
-                    for w, v in zip(widths, vals):
-                        pdf.cell(w, 5, _s(v), border=0, fill=True)
+                    for _w, _v in zip(_widths[1:], _txt_vals):
+                        pdf.cell(_w, _ROW_H, _s(_v), border=0, fill=True)
                     pdf.ln()
+
                 return bytes(pdf.output())
 
             # Barra de info + navegação + impressão
