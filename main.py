@@ -2015,22 +2015,58 @@ if st.session_state.menu_atual == "Principal":
             if _hg_turma != "Todas":
                 _df_grid = _df_grid[_df_grid["turma"] == _hg_turma]
 
+            # Pré-carrega vínculos estruturados de voluntariado (1 query, sem N+1)
+            try:
+                from database import get_acoes_todos_voluntarios as _get_acoes_vol
+                _acoes_vol_dict = _get_acoes_vol()
+            except Exception:
+                _acoes_vol_dict = {}
+
             # ── Filtro de voluntários ─────────────────────────────────────────
             _hg_vol_filter = st.checkbox(
                 "🤝 Somente voluntários",
                 key="hg_vol_filter",
                 help="Exibe apenas alunos que declararam interesse em trabalho voluntário",
             )
+            _hg_acao_filter: list = []
             if _hg_vol_filter:
                 _vol_col = "trabalho_voluntario_interesse"
                 if _vol_col in _df_grid.columns:
                     _df_grid = _df_grid[
                         _df_grid[_vol_col].fillna("").str.strip().str.lower() == "sim"
                     ].reset_index(drop=True)
-                    _n_vol = len(_df_grid)
-                    st.caption(
-                        f"🤝 **{_n_vol}** voluntário(s) identificado(s) na base ativa"
+
+                # Multiselect de ações — opções derivadas de todos os vínculos cadastrados
+                _opcoes_acoes = sorted({
+                    acao
+                    for acoes in _acoes_vol_dict.values()
+                    for acao in acoes
+                })
+                if _opcoes_acoes:
+                    _hg_acao_filter = st.multiselect(
+                        "🔍 Filtrar por ação voluntariada:",
+                        options=_opcoes_acoes,
+                        default=[],
+                        key="hg_acao_filter",
+                        placeholder="Todas as ações (sem filtro)",
+                        help="Mostra apenas voluntários vinculados às ações selecionadas",
                     )
+                    if _hg_acao_filter:
+                        _ids_com_acao = {
+                            aid for aid, acoes in _acoes_vol_dict.items()
+                            if any(a in _hg_acao_filter for a in acoes)
+                        }
+                        _df_grid = _df_grid[
+                            _df_grid["id"].astype(str).isin(_ids_com_acao)
+                        ].reset_index(drop=True)
+
+                _n_vol = len(_df_grid)
+                _caption_vol = f"🤝 **{_n_vol}** voluntário(s)"
+                if _hg_acao_filter:
+                    _caption_vol += f" · ação: {', '.join(_hg_acao_filter)}"
+                else:
+                    _caption_vol += " identificado(s) na base ativa"
+                st.caption(_caption_vol)
 
             # Ordenação dinâmica
             if "hg_sort_col" not in st.session_state:
@@ -2063,13 +2099,6 @@ if st.session_state.menu_atual == "Principal":
             _hg_pg  = st.session_state.hg_pg
             _hg_ini = (_hg_pg - 1) * _hg_ppp
             _df_pag = _df_grid.iloc[_hg_ini: _hg_ini + _hg_ppp]
-
-            # Pré-carrega vínculos estruturados de voluntariado (1 query, sem N+1)
-            try:
-                from database import get_acoes_todos_voluntarios as _get_acoes_vol
-                _acoes_vol_dict = _get_acoes_vol()
-            except Exception:
-                _acoes_vol_dict = {}
 
             # Gerador de PDF da lista home
             def _gerar_pdf_hg(df: pd.DataFrame) -> bytes:
