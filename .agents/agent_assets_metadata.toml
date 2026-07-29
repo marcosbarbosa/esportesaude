@@ -18,3 +18,9 @@ id = "GWUYPg4px7CPP2glbreMn"
 uri = "file://migrations/004_seed_acoes_e_vinculos.sql"
 type = "unspecified"
 title = "SQL — Ações + Vínculos (corrigido, sem ON CONFLICT)"
+
+[[outputs]]
+id = "DxsvTVJhsbPDbnVOebKTN"
+uri = "file://migrations/005_tags_clinicas_patologias_pdf.sql"
+type = "unspecified"
+title = "SQL — Tags Clínicas (novas) + Patologias de 72 alunos"

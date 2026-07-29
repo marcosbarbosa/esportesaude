@@ -3447,6 +3447,49 @@ _TAGS_PADRAO_SEED = [
          "principal redutor de triglicerídeos e LDL; treino de força complementar. "
          "Monitorar perfil lipídico periodicamente e reforçar hidratação durante a sessão."
      )},
+    {"nome": "Parkinson", "icone": "🫨", "cor": "#4F46E5",
+     "tipo_alerta": "error", "ordem": 15,
+     "dica_treino": (
+         "EVITAR: exercícios que exijam equilíbrio sem suporte, ambientes com obstáculos no chão, "
+         "movimentos bruscos e mudanças de direção rápidas. "
+         "EXECUTAR: exercícios rítmicos (dança, marcha cadenciada), treino de equilíbrio com apoio, "
+         "alongamentos de tronco e membros. "
+         "Supervisão próxima em todas as sessões. Monitorar rigidez e tremor antes de iniciar."
+     )},
+    {"nome": "Problemas na Coluna / Hérnia de Disco", "icone": "🧘", "cor": "#78716C",
+     "tipo_alerta": "warning", "ordem": 16,
+     "dica_treino": (
+         "EVITAR: flexão excessiva da coluna lombar (abdominais tradicionais, curvamento abrupto), "
+         "cargas axiais pesadas, rotações bruscas. "
+         "EXECUTAR: fortalecimento do core (prancha com tempo limitado, bird-dog), mobilidade "
+         "controlada, exercícios na água. "
+         "Toda atividade deve respeitar a amplitude sem dor. "
+         "Adaptar conforme localização (cervical/lombar) e sintomas do dia."
+     )},
+    {"nome": "Rinite / Sinusite Alérgica", "icone": "🤧", "cor": "#0EA5E9",
+     "tipo_alerta": "info", "ordem": 17,
+     "dica_treino": (
+         "EVITAR: ambientes com pó excessivo, odores fortes, ar muito seco ou frio sem "
+         "aquecimento prévio das vias aéreas. "
+         "EXECUTAR: aquecimento respiratório antes do exercício, hidratação constante. "
+         "Manter broncodilatador disponível se necessário. Adaptar intensidade em dias de crise."
+     )},
+    {"nome": "Ácido Úrico / Gota", "icone": "🦵", "cor": "#7C3AED",
+     "tipo_alerta": "warning", "ordem": 18,
+     "dica_treino": (
+         "EVITAR: exercícios de alta intensidade em períodos de crise gotosa (dor articular aguda), "
+         "desidratação. "
+         "EXECUTAR: atividades de baixo impacto (natação, bicicleta), hidratação abundante. "
+         "Em crise: suspender atividade. Fora da crise: exercício regular melhora controle metabólico."
+     )},
+    {"nome": "Tremor Essencial", "icone": "🫨", "cor": "#6B7280",
+     "tipo_alerta": "info", "ordem": 19,
+     "dica_treino": (
+         "EVITAR: exercícios que exijam precisão motora fina em situações de cansaço. "
+         "EXECUTAR: atividades rítmicas e previsíveis, exercícios de coordenação adaptados, "
+         "treino de força com movimentos amplos e controlados. "
+         "Adaptar implementos (pesos com alça, faixas elásticas) para melhorar aderência."
+     )},
 ]
 
 
