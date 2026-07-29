@@ -768,7 +768,7 @@ def render_cabecalho_aluno(aluno):
             .select("data_vencimento, data_registro") \
             .eq("aluno_id", str(aluno["id"])) \
             .eq("tipo_atestado", "aptidao_fisica") \
-            .order("created_at", desc=True) \
+            .order("data_registro", desc=True) \
             .limit(1).execute()
         _atest_rows = _atest_resp.data if _atest_resp and _atest_resp.data else []
         _atest_venc_str = _atest_rows[0].get("data_vencimento") if _atest_rows else None

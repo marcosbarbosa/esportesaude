@@ -2015,6 +2015,23 @@ if st.session_state.menu_atual == "Principal":
             if _hg_turma != "Todas":
                 _df_grid = _df_grid[_df_grid["turma"] == _hg_turma]
 
+            # ── Filtro de voluntários ─────────────────────────────────────────
+            _hg_vol_filter = st.checkbox(
+                "🤝 Somente voluntários",
+                key="hg_vol_filter",
+                help="Exibe apenas alunos que declararam interesse em trabalho voluntário",
+            )
+            if _hg_vol_filter:
+                _vol_col = "trabalho_voluntario_interesse"
+                if _vol_col in _df_grid.columns:
+                    _df_grid = _df_grid[
+                        _df_grid[_vol_col].fillna("").str.strip().str.lower() == "sim"
+                    ].reset_index(drop=True)
+                    _n_vol = len(_df_grid)
+                    st.caption(
+                        f"🤝 **{_n_vol}** voluntário(s) identificado(s) na base ativa"
+                    )
+
             # Ordenação dinâmica
             if "hg_sort_col" not in st.session_state:
                 st.session_state.hg_sort_col = "nome"
@@ -2077,8 +2094,8 @@ if st.session_state.menu_atual == "Principal":
                 pdf = _PDFHG(orientation="L", unit="mm", format="A4")
                 pdf.add_page()
                 pdf.set_auto_page_break(True, margin=14)
-                hdrs   = ["#", "Nome", "Turma", "Aniversario", "Freq.60d", "Ultima Pres.", "Venc. Atestado", "Ult. PA", "Anamnese"]
-                widths = [8,   62,    24,      16,            14,         24,              24,                40,        44]
+                hdrs   = ["#", "Nome", "Turma", "Aniversario", "Freq.60d", "Ultima Pres.", "Venc. Atestado", "Ult. PA", "Anamnese", "Voluntariado"]
+                widths = [8,   52,    22,      14,            13,         22,              22,                34,        38,         38]
                 pdf.set_font("Helvetica", "B", 8)
                 pdf.set_fill_color(30, 77, 216)
                 pdf.set_text_color(255, 255, 255)
@@ -2120,16 +2137,20 @@ if st.session_state.menu_atual == "Principal":
                         "nunca": "Nunca", "vencida": "Vencida",
                         "a_vencer": "A vencer", "ok": "Em dia",
                     }.get(_anam_st_pdf, "-")
+                    _vol_int_pdf = str(a.get("trabalho_voluntario_interesse") or "").strip().lower()
+                    _vol_areas_pdf = str(a.get("trabalho_voluntario_areas") or "").strip()
+                    _vol_pdf_val = _vol_areas_pdf[:22] if _vol_int_pdf == "sim" and _vol_areas_pdf else ("Sim" if _vol_int_pdf == "sim" else "-")
                     vals = [
                         str(i + 1),
-                        str(a.get("nome", ""))[:32],
-                        str(a.get("turma", ""))[:14],
+                        str(a.get("nome", ""))[:30],
+                        str(a.get("turma", ""))[:13],
                         _nasc_pdf,
                         str(int(a.get("total_presencas_hist", 0))),
                         _up_str,
                         _dv_str,
-                        str(a.get("_pa_txt", "") or "-")[:14],
-                        f"{_anam_pdf_str} ({_anam_lbl_pdf})"[:22],
+                        str(a.get("_pa_txt", "") or "-")[:12],
+                        f"{_anam_pdf_str} ({_anam_lbl_pdf})"[:20],
+                        _vol_pdf_val,
                     ]
                     for w, v in zip(widths, vals):
                         pdf.cell(w, 5, _s(v), border=0, fill=True)
@@ -2272,9 +2293,32 @@ if st.session_state.menu_atual == "Principal":
                         "font-size:10px;font-weight:800;"
                         "margin-right:5px;white-space:nowrap;'>⚡🚫</abbr>"
                     ) if _aval_pend else ""
+                    # Badge voluntário
+                    _vol_int_r = str(_r.get("trabalho_voluntario_interesse") or "").strip().lower()
+                    _vol_areas_r = str(_r.get("trabalho_voluntario_areas") or "").strip()
+                    _vol_title = _vol_areas_r if _vol_areas_r else "areas nao especificadas"
+                    _badge_vol = (
+                        f"<abbr title='Voluntaria(o): {_vol_title}' "
+                        "style='text-decoration:none;cursor:help;"
+                        "background:#F0FDF4;color:#166534;"
+                        "border:1px solid #86EFAC;"
+                        "border-radius:3px;padding:1px 5px;"
+                        "font-size:10px;font-weight:800;"
+                        "margin-right:5px;white-space:nowrap;'>🤝 Vol.</abbr>"
+                    ) if _vol_int_r == "sim" else ""
+                    # Linha de áreas (visível quando filtro de voluntários ativo)
+                    _vol_linha = (
+                        f"<br><span style='font-size:10px;color:#166534;font-weight:600;"
+                        f"background:#F0FDF4;border-radius:3px;padding:1px 5px;"
+                        f"display:inline-block;margin-top:2px;'>"
+                        f"🤝 {_vol_areas_r}</span>"
+                        if (_vol_int_r == "sim" and _hg_vol_filter and _vol_areas_r)
+                        else ""
+                    )
                     _cb.markdown(
                         f"<span style='font-size:13.5px;font-weight:700;color:#0F172A;'>"
-                        f"{_badge_img}{_badge_atestado}{_badge_sem_av}{_badge_aval_pend}{_r['nome']}</span>",
+                        f"{_badge_img}{_badge_atestado}{_badge_sem_av}{_badge_aval_pend}{_badge_vol}{_r['nome']}</span>"
+                        f"{_vol_linha}",
                         unsafe_allow_html=True,
                     )
 
