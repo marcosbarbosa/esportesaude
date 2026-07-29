@@ -31,3 +31,7 @@ CREATE INDEX IF NOT EXISTS idx_aluno_acoes_aluno_id
 
 CREATE INDEX IF NOT EXISTS idx_aluno_acoes_acao_id
     ON aluno_acoes_voluntariado (acao_id);
+
+-- Desabilita RLS (sistema usa anon key — padrão de todas as tabelas do IMBRA)
+ALTER TABLE acoes_voluntariado          DISABLE ROW LEVEL SECURITY;
+ALTER TABLE aluno_acoes_voluntariado    DISABLE ROW LEVEL SECURITY;

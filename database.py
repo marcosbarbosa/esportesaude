@@ -3510,18 +3510,48 @@ def seed_tags_clinicas_padrao() -> tuple:
 
 _ACOES_VOLUNTARIADO_SEED = [
     {"nome": "Trabalhos Manuais e Artesanato", "descricao": "Tricô, bordado, costura, origami, pintura em tecido e outras atividades manuais.", "area": "Arte e Cultura", "icone": "🧶", "cor": "#D97706", "ordem": 10},
-    {"nome": "Ensino e Educação",              "descricao": "Apoiar atividades pedagógicas, reforço escolar, alfabetização digital.",          "area": "Educação",      "icone": "📚", "cor": "#2563EB", "ordem": 20},
-    {"nome": "Saúde e Bem-estar",              "descricao": "Orientações de saúde, aferição de pressão, apoio em atividades físicas leves.",   "area": "Saúde",         "icone": "💚", "cor": "#059669", "ordem": 30},
-    {"nome": "Artes e Cultura",                "descricao": "Teatro, música, dançaterapia, exposições e apresentações culturais.",              "area": "Arte e Cultura","icone": "🎭", "cor": "#7C3AED", "ordem": 40},
-    {"nome": "Organização e Administração",    "descricao": "Recepção, cadastros, organização de eventos e arquivos.",                         "area": "Administração", "icone": "📋", "cor": "#0891B2", "ordem": 50},
-    {"nome": "Trabalho com Crianças",          "descricao": "Atividades lúdicas, recreação e suporte em eventos com crianças.",                "area": "Social",        "icone": "👶", "cor": "#EC4899", "ordem": 60},
-    {"nome": "Trabalho com Idosos",            "descricao": "Companhia, conversas, apoio em atividades e visitas.",                            "area": "Social",        "icone": "🧓", "cor": "#EA580C", "ordem": 70},
-    {"nome": "Acolhimento e Conversas",        "descricao": "Escuta ativa, suporte emocional e integração de novos participantes.",            "area": "Social",        "icone": "🤗", "cor": "#0D9488", "ordem": 80},
-    {"nome": "Eventos e Festas Sociais",       "descricao": "Organização e participação em comemorações e confraternizações.",                 "area": "Eventos",       "icone": "🎉", "cor": "#DC2626", "ordem": 90},
-    {"nome": "Decoração e Ambiente",           "descricao": "Decoração de espaços, arranjos, preparação de ambientes para eventos.",           "area": "Eventos",       "icone": "🌸", "cor": "#DB2777", "ordem": 100},
-    {"nome": "Libras e Acessibilidade",        "descricao": "Interpretação em Libras, apoio à inclusão e acessibilidade.",                    "area": "Inclusão",      "icone": "🤟", "cor": "#6366F1", "ordem": 110},
-    {"nome": "Alimentação e Culinária",        "descricao": "Preparo de lanches, organização de alimentos e orientação nutricional.",          "area": "Saúde",         "icone": "🍎", "cor": "#16A34A", "ordem": 120},
+    {"nome": "Ensino e Educação",              "descricao": "Apoiar atividades pedagógicas, reforço escolar, alfabetização digital.",          "area": "Educação",       "icone": "📚", "cor": "#2563EB", "ordem": 20},
+    {"nome": "Saúde e Bem-estar",              "descricao": "Orientações de saúde, aferição de pressão, apoio em atividades físicas leves.",   "area": "Saúde",          "icone": "💚", "cor": "#059669", "ordem": 30},
+    {"nome": "Artes Plásticas",                "descricao": "Pintura, desenho, escultura, artesanato artístico e exposições.",                 "area": "Arte e Cultura", "icone": "🎨", "cor": "#7C3AED", "ordem": 40},
+    {"nome": "Dançaterapia",                   "descricao": "Dançaterapia, expressão corporal e atividades terapêuticas pelo movimento.",      "area": "Saúde",          "icone": "💃", "cor": "#BE185D", "ordem": 45},
+    {"nome": "Organização e Administração",    "descricao": "Recepção, cadastros, organização de eventos e arquivos.",                         "area": "Administração",  "icone": "📋", "cor": "#0891B2", "ordem": 50},
+    {"nome": "Trabalho com Crianças",          "descricao": "Atividades lúdicas, recreação e suporte em eventos com crianças.",                "area": "Social",         "icone": "👶", "cor": "#EC4899", "ordem": 60},
+    {"nome": "Trabalho com Idosos",            "descricao": "Companhia, conversas, apoio em atividades e visitas a idosos.",                   "area": "Social",         "icone": "🧓", "cor": "#EA580C", "ordem": 70},
+    {"nome": "Acolhimento e Conversas",        "descricao": "Escuta ativa, suporte emocional e integração de novos participantes.",            "area": "Social",         "icone": "🤗", "cor": "#0D9488", "ordem": 80},
+    {"nome": "Eventos e Festas Sociais",       "descricao": "Organização e participação em comemorações e confraternizações.",                 "area": "Eventos",        "icone": "🎉", "cor": "#DC2626", "ordem": 90},
+    {"nome": "Decoração e Ambiente",           "descricao": "Decoração de espaços, arranjos, preparação de ambientes para eventos.",           "area": "Eventos",        "icone": "🌸", "cor": "#DB2777", "ordem": 100},
+    {"nome": "Libras e Acessibilidade",        "descricao": "Interpretação em Libras, apoio à inclusão e acessibilidade.",                    "area": "Inclusão",       "icone": "🤟", "cor": "#6366F1", "ordem": 110},
+    {"nome": "Alimentação e Culinária",        "descricao": "Preparo de lanches, organização de alimentos e orientação nutricional.",          "area": "Saúde",          "icone": "🍎", "cor": "#16A34A", "ordem": 120},
 ]
+
+# Mapeamento nome-fragmento → lista de ações (derivado do PDF VOLU-Alunos_Ativos_20260729)
+# Chave: fragmento inequívoco do nome do aluno (busca ilike %fragmento%)
+# Valor: lista de nomes de ações exatamente como cadastradas no seed acima
+_VINCULOS_PDF_SEED = {
+    "ADRIANA BEATRIZ PERIN":          ["Trabalhos Manuais e Artesanato"],
+    "ANA CAROLINA SANTOS MAZZA":      ["Ensino e Educação"],
+    "CARMELITA LIMA DE OLIVEIRA":      None,  # "Disponível pra várias" → todas as ações
+    "CRISTINA CESAR PENTEADO":         ["Trabalhos Manuais e Artesanato", "Acolhimento e Conversas"],
+    "DARCI RAMIL SFORCINI":            ["Eventos e Festas Sociais"],
+    "IRANDIR MENDES RIBEIRO":          ["Libras e Acessibilidade"],
+    "JERUSIA PERES":                   ["Trabalhos Manuais e Artesanato", "Organização e Administração"],
+    "JOSE ANTONIO MIGUEL RODRIGUE":    ["Saúde e Bem-estar"],
+    "JOSÉ MARCOS FERNANDES":           ["Artes Plásticas", "Ensino e Educação", "Organização e Administração"],
+    "LEILA GEORGE NASSAN FOLGOSI":     ["Trabalho com Crianças"],
+    "MAGDA MAIA MORAES":               ["Dançaterapia"],
+    "MARCIA REGINA DE SOUZA":          ["Trabalho com Crianças"],
+    "MARIA DE LOURDES PINHA":          ["Acolhimento e Conversas", "Ensino e Educação", "Trabalho com Crianças"],
+    "MARIA DO CARMO SOUZA FERRER":     ["Ensino e Educação"],
+    "MARIA DO ROSÁRIO SOUSA":          ["Ensino e Educação", "Artes Plásticas"],
+    "MARIANGELA NAPONIELLO":           ["Decoração e Ambiente", "Organização e Administração"],
+    "MEIRILANDE DO NASCIMENTO":        ["Saúde e Bem-estar"],
+    "MÁRCIA DA SILVA COIMBR":          ["Trabalhos Manuais e Artesanato", "Artes Plásticas"],
+    "SONIA MARIA FERNANDES NUNES":     ["Ensino e Educação"],
+    "SÍLVIA CRISTINA DOS SANTOS":      ["Saúde e Bem-estar"],
+    "THAIZA LEITÃO GONÇALVES":         ["Trabalho com Crianças", "Trabalho com Idosos"],
+    "THEREZA CHRISTINA PULICI":        None,  # "Todas" → todas as ações
+    "THEREZINHA NAZARÉ CURY":          ["Acolhimento e Conversas"],
+}
 
 
 @st.cache_data(ttl=60, show_spinner=False)
@@ -3574,6 +3604,72 @@ def seed_acoes_voluntariado_padrao() -> tuple:
         supabase.table("acoes_voluntariado").insert(_ACOES_VOLUNTARIADO_SEED).execute()
         get_acoes_voluntariado.clear()
         return True, "OK"
+    except Exception as e:
+        return False, str(e)
+
+
+def seed_vinculos_voluntariado_pdf() -> tuple:
+    """Vincula automaticamente alunos às ações com base no mapeamento extraído do PDF.
+
+    Retorna (ok, mensagem_resumo).
+    Usa busca ilike para encontrar alunos pelo fragmento de nome.
+    Não sobrescreve vínculos já existentes (usa upsert/insert ignorando conflito).
+    """
+    import datetime as _dt
+    try:
+        # 1. Carregar todas as ações e montar {nome: id}
+        acoes_r = supabase.table("acoes_voluntariado").select("id, nome").execute()
+        if not acoes_r.data:
+            return False, "Nenhuma ação cadastrada. Execute o seed de ações primeiro."
+        acao_por_nome: dict = {a["nome"]: a["id"] for a in acoes_r.data}
+        todas_acao_ids = list(acao_por_nome.values())
+
+        vinculados = 0
+        nao_encontrados: list[str] = []
+        rows_to_insert: list[dict] = []
+        hoje = str(_dt.date.today())
+
+        for fragmento, nomes_acoes in _VINCULOS_PDF_SEED.items():
+            # 2. Buscar aluno pelo fragmento de nome (ilike)
+            r = (
+                supabase.table("alunos")
+                .select("id, nome")
+                .ilike("nome", f"%{fragmento}%")
+                .neq("status", "Inativo")
+                .limit(1)
+                .execute()
+            )
+            if not r.data:
+                nao_encontrados.append(fragmento)
+                continue
+
+            aluno_id = str(r.data[0]["id"])
+            # None significa "todas as ações"
+            ids_acao = todas_acao_ids if nomes_acoes is None else [
+                acao_por_nome[n] for n in nomes_acoes if n in acao_por_nome
+            ]
+
+            for acao_id in ids_acao:
+                rows_to_insert.append({
+                    "aluno_id": aluno_id,
+                    "acao_id": acao_id,
+                    "data_inscricao": hoje,
+                })
+            vinculados += 1
+
+        # 3. Inserir ignorando duplicatas (on_conflict aluno_id+acao_id)
+        if rows_to_insert:
+            supabase.table("aluno_acoes_voluntariado").upsert(
+                rows_to_insert,
+                on_conflict="aluno_id,acao_id",
+                ignore_duplicates=True,
+            ).execute()
+        get_acoes_aluno.clear()
+
+        resumo = f"{vinculados} aluno(s) vinculado(s), {len(rows_to_insert)} vínculo(s) inserido(s)."
+        if nao_encontrados:
+            resumo += f" Não encontrados: {', '.join(nao_encontrados)}."
+        return True, resumo
     except Exception as e:
         return False, str(e)
 

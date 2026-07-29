@@ -8,6 +8,7 @@ from database import (
     salvar_acao_voluntariado,
     excluir_acao_voluntariado,
     seed_acoes_voluntariado_padrao,
+    seed_vinculos_voluntariado_pdf,
     get_contagem_inscritos_por_acao,
 )
 
@@ -38,6 +39,10 @@ CREATE TABLE IF NOT EXISTS aluno_acoes_voluntariado (
 
 CREATE INDEX IF NOT EXISTS idx_aluno_acoes_aluno_id ON aluno_acoes_voluntariado (aluno_id);
 CREATE INDEX IF NOT EXISTS idx_aluno_acoes_acao_id  ON aluno_acoes_voluntariado (acao_id);
+
+-- Desabilita RLS (sistema usa anon key — padrão de todas as tabelas do IMBRA)
+ALTER TABLE acoes_voluntariado          DISABLE ROW LEVEL SECURITY;
+ALTER TABLE aluno_acoes_voluntariado    DISABLE ROW LEVEL SECURITY;
 """
 
 _AREAS = ["Geral", "Arte e Cultura", "Educação", "Saúde", "Social",
@@ -68,13 +73,26 @@ def tela_voluntariado_config():
     # ── SQL de criação ─────────────────────────────────────────────────────────
     with st.expander("🗄️ SQL — Criar tabelas no Supabase (executar uma vez)", expanded=False):
         st.code(_SQL_CRIACAO, language="sql")
-        if st.button("🌱 Inserir Ações Sugeridas (padrão)", key="seed_acoes_btn"):
+        col_s1, col_s2 = st.columns(2)
+        if col_s1.button("🌱 Inserir Ações Sugeridas (padrão)", key="seed_acoes_btn",
+                         use_container_width=True):
             ok, msg = seed_acoes_voluntariado_padrao()
             if ok:
                 st.success("✅ Ações padrão inseridas com sucesso!")
                 st.rerun()
             else:
                 st.warning(f"ℹ️ {msg}")
+
+        if col_s2.button("🔗 Vincular alunos do PDF", key="seed_vinculos_btn",
+                         use_container_width=True,
+                         help="Vincula automaticamente os 23 alunos mapeados no PDF de voluntários às suas ações."):
+            with st.spinner("Buscando alunos e criando vínculos…"):
+                ok, msg = seed_vinculos_voluntariado_pdf()
+            if ok:
+                st.success(f"✅ {msg}")
+                st.rerun()
+            else:
+                st.error(f"Erro: {msg}")
 
     # ── Carregar ações e contagens ─────────────────────────────────────────────
     acoes    = get_acoes_voluntariado()
