@@ -2548,10 +2548,11 @@ if st.session_state.menu_atual == "Principal":
                     st.rerun()
 
             # ── Cabeçalho das colunas (clicável para ordenar) ──────────
-            _h0, _h1, _h2, _h3, _h4, _h5, _h5b, _h5c, _h6 = st.columns(
-                [0.5, 2.3, 1.0, 0.9, 1.7, 1.1, 1.1, 1.1, 0.9], gap="small"
+            _h0, _h1, _h2, _h3, _h4, _h5, _h5b, _h5c, _h_wap, _h6 = st.columns(
+                [0.5, 2.1, 0.9, 0.8, 1.6, 1.0, 1.0, 1.0, 0.8, 0.9], gap="small"
             )
             _h0.markdown(" ", unsafe_allow_html=True)
+            _h_wap.markdown("<span style='font-size:12px;font-weight:600;color:#475569;'>📱 WhatsApp</span>", unsafe_allow_html=True)
             _h6.markdown(" ", unsafe_allow_html=True)
 
             def _sort_btn(col_widget, label, sort_key):
@@ -2594,8 +2595,8 @@ if st.session_state.menu_atual == "Principal":
 
             for _, _r in _df_pag.iterrows():
                 with st.container(border=True):
-                    _ca, _cb, _cc, _cd, _ce, _cg, _cpa, _canam, _cf = st.columns(
-                        [0.5, 2.3, 1.0, 0.9, 1.7, 1.1, 1.1, 1.1, 0.9], gap="small",
+                    _ca, _cb, _cc, _cd, _ce, _cg, _cpa, _canam, _cwap, _cf = st.columns(
+                        [0.5, 2.1, 0.9, 0.8, 1.6, 1.0, 1.0, 1.0, 0.8, 0.9], gap="small",
                         vertical_alignment="center"
                     )
 
@@ -2952,6 +2953,22 @@ if st.session_state.menu_atual == "Principal":
                                     f"font-weight:600;'>📱 Agendar</a>"
                                 )
                     _canam.markdown(_anam_html, unsafe_allow_html=True)
+
+                    # WhatsApp
+                    _wap_v = str(_r.get("whatsapp") or "").strip()
+                    if _wap_v:
+                        _wap_digits = "".join(c for c in _wap_v if c.isdigit())
+                        _wap_intl   = _wap_digits if _wap_digits.startswith("55") else f"55{_wap_digits}"
+                        _wap_link   = f"https://wa.me/{_wap_intl}"
+                        _wap_html   = (
+                            f"<a href='{_wap_link}' target='_blank' "
+                            f"style='font-size:12px;color:#25D366;font-weight:600;"
+                            f"text-decoration:none;'>"
+                            f"📱 {_wap_v}</a>"
+                        )
+                    else:
+                        _wap_html = "<span style='color:#CBD5E1;font-size:12px;'>—</span>"
+                    _cwap.markdown(_wap_html, unsafe_allow_html=True)
 
                     # Botão Ficha
                     with _cf:
