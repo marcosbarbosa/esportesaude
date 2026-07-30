@@ -2300,10 +2300,209 @@ if st.session_state.menu_atual == "Principal":
 
                 return bytes(pdf.output())
 
-            # Barra de info + navegação + impressão
-            _hg_pdf_key = "hg_pdf_lista"
-            _pc1, _pc2, _pc3, _pc_imp = st.columns([2.5, 0.6, 0.6, 1.0], gap="small",
-                                                     vertical_alignment="center")
+            # ── Gerador de Excel da lista home ───────────────────────────
+            def _gerar_excel_hg(df: pd.DataFrame) -> bytes:
+                import io as _io
+                import openpyxl
+                from openpyxl.styles import (
+                    PatternFill, Font, Alignment, Border, Side, numbers as _opn
+                )
+                from openpyxl.utils import get_column_letter
+
+                df = df.reset_index(drop=True)
+                wb = openpyxl.Workbook()
+                ws = wb.active
+                ws.title = "Alunos Ativos"
+
+                # ── Paleta ───────────────────────────────────────────────
+                _HDR_BG   = "1E4DD8"   # azul cabeçalho
+                _HDR_FG   = "FFFFFF"
+                _EVEN_BG  = "EFF6FF"
+                _ODD_BG   = "FFFFFF"
+                _ALERT_BG = "FEF2F2"   # vermelho claro p/ atestado vencido
+                _WARN_BG  = "FFFBEB"   # amarelo claro p/ a_vencer
+                _OK_BG    = "F0FDF4"   # verde claro p/ ok
+
+                def _fill(hex_color):
+                    return PatternFill("solid", fgColor=hex_color)
+
+                thin = Side(style="thin", color="D1D5DB")
+                border = Border(left=thin, right=thin, top=thin, bottom=thin)
+
+                _meses = ["","jan","fev","mar","abr","mai","jun",
+                          "jul","ago","set","out","nov","dez"]
+
+                # ── Título e metadados ────────────────────────────────────
+                ws.merge_cells("A1:N1")
+                ws["A1"] = f"IMBRA – Alunos Ativos  |  Emitido em: {datetime.date.today().strftime('%d/%m/%Y')}  |  Total: {len(df)} aluno(s)"
+                ws["A1"].font = Font(bold=True, size=12, color=_HDR_FG)
+                ws["A1"].fill = _fill(_HDR_BG)
+                ws["A1"].alignment = Alignment(horizontal="center", vertical="center")
+                ws.row_dimensions[1].height = 22
+
+                # ── Cabeçalhos ────────────────────────────────────────────
+                _cols = [
+                    ("#",              6),
+                    ("Nome",           36),
+                    ("Turma",          14),
+                    ("Aniversário",    13),
+                    ("Freq. 60d",       9),
+                    ("Total Presenças", 14),
+                    ("Última Presença", 14),
+                    ("Venc. Atestado",  14),
+                    ("Status Atest.",   12),
+                    ("Última PA",       12),
+                    ("Anamnese Data",   13),
+                    ("Status Anam.",    12),
+                    ("Voluntariado",    28),
+                    ("Tags de Saúde",   40),
+                ]
+                for ci, (lbl, w) in enumerate(_cols, start=1):
+                    cell = ws.cell(row=2, column=ci, value=lbl)
+                    cell.font      = Font(bold=True, color=_HDR_FG, size=9)
+                    cell.fill      = _fill(_HDR_BG)
+                    cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+                    cell.border    = border
+                    ws.column_dimensions[get_column_letter(ci)].width = w
+                ws.row_dimensions[2].height = 26
+
+                # Congelar título + cabeçalho
+                ws.freeze_panes = "A3"
+
+                # ── Linhas de dados ───────────────────────────────────────
+                for i, (_, a) in enumerate(df.iterrows()):
+                    row = i + 3
+                    base_bg = _EVEN_BG if i % 2 == 0 else _ODD_BG
+
+                    # --- campos calculados ---
+                    _dn = a.get("_dia_n"); _mn = a.get("_mes_n")
+                    try:
+                        _aniv = (f"{int(_dn):02d}/{_meses[int(_mn)]}"
+                                 if pd.notna(_dn) and pd.notna(_mn) else "")
+                    except Exception:
+                        _aniv = ""
+
+                    _freq60  = int(a.get("freq_60d", 0) or 0)
+                    _tot_pr  = int(a.get("total_presencas_hist", 0) or 0)
+
+                    _up = a.get("ultima_presenca")
+                    try:
+                        _up_str = pd.Timestamp(_up).strftime("%d/%m/%Y") if pd.notna(_up) and _up else ""
+                    except Exception:
+                        _up_str = ""
+
+                    _dv = a.get("data_vencimento_atestado")
+                    try:
+                        _dv_ts = pd.Timestamp(_dv) if pd.notna(_dv) and _dv else None
+                        _dv_str = _dv_ts.strftime("%d/%m/%Y") if _dv_ts else ""
+                    except Exception:
+                        _dv_ts = None
+                        _dv_str = ""
+
+                    # Calcular status do atestado a partir da data
+                    try:
+                        if _dv_ts:
+                            _dv_dias = (_dv_ts.date() - datetime.date.today()).days
+                            if _dv_dias < 0:
+                                _atest_status = "vencido"
+                            elif _dv_dias <= 30:
+                                _atest_status = "a_vencer"
+                            else:
+                                _atest_status = "ok"
+                        else:
+                            _atest_status = ""
+                    except Exception:
+                        _atest_status = ""
+                    _atest_lbl = {
+                        "vencido": "Vencido ⚠️", "a_vencer": "A vencer",
+                        "ok": "Em dia ✓", "": "-",
+                    }.get(_atest_status, "-")
+
+                    _anam_dt = a.get("_anam_data")
+                    try:
+                        _anam_str = pd.Timestamp(_anam_dt).strftime("%d/%m/%Y") if pd.notna(_anam_dt) else ""
+                    except Exception:
+                        _anam_str = ""
+                    _anam_status = str(a.get("_anam_status") or "nunca")
+                    _anam_lbl = {
+                        "nunca": "Nunca", "vencida": "Vencida ⚠️",
+                        "a_vencer": "A vencer", "ok": "Em dia ✓",
+                    }.get(_anam_status, "-")
+
+                    _pa_txt = str(a.get("_pa_txt") or "")
+
+                    _acoes_vol = _acoes_vol_dict.get(str(a.get("id", "")), [])
+                    if _acoes_vol:
+                        _vol_str = ", ".join(_acoes_vol)
+                    else:
+                        _vol_int = str(a.get("trabalho_voluntario_interesse") or "").strip().lower()
+                        if _vol_int == "sim":
+                            _fb = str(a.get("trabalho_voluntario_areas") or "").strip()
+                            _vol_str = _fb if _fb else "Sim"
+                        else:
+                            _vol_str = ""
+
+                    _tags_str = str(a.get("tags_saude") or "")
+
+                    vals = [
+                        i + 1,
+                        str(a.get("nome", "")),
+                        str(a.get("turma", "")),
+                        _aniv,
+                        _freq60,
+                        _tot_pr,
+                        _up_str,
+                        _dv_str,
+                        _atest_lbl,
+                        _pa_txt,
+                        _anam_str,
+                        _anam_lbl,
+                        _vol_str,
+                        _tags_str,
+                    ]
+
+                    # Cor de fundo do status do atestado na coluna 8 (Venc. Atestado)
+                    _row_status_bg = base_bg
+                    _atest_cell_bg = {
+                        "vencido": _ALERT_BG, "a_vencer": _WARN_BG, "ok": _OK_BG,
+                    }.get(_atest_status, base_bg)
+                    _anam_cell_bg = {
+                        "vencida": _ALERT_BG, "a_vencer": _WARN_BG,
+                        "ok": _OK_BG, "nunca": _ALERT_BG,
+                    }.get(_anam_status, base_bg)
+
+                    for ci, val in enumerate(vals, start=1):
+                        cell = ws.cell(row=row, column=ci, value=val)
+                        cell.border    = border
+                        cell.alignment = Alignment(vertical="center",
+                                                   wrap_text=(ci in (2, 13, 14)))
+                        if ci in (8, 9):        # atestado
+                            cell.fill = _fill(_atest_cell_bg)
+                        elif ci in (11, 12):    # anamnese
+                            cell.fill = _fill(_anam_cell_bg)
+                        else:
+                            cell.fill = _fill(base_bg)
+                        if ci in (1,):
+                            cell.alignment = Alignment(horizontal="center", vertical="center")
+                        if ci in (5, 6):
+                            cell.alignment = Alignment(horizontal="center", vertical="center")
+
+                    ws.row_dimensions[row].height = 18
+
+                # ── Auto-filtro ───────────────────────────────────────────
+                ws.auto_filter.ref = f"A2:{get_column_letter(len(_cols))}2"
+
+                buf = _io.BytesIO()
+                wb.save(buf)
+                buf.seek(0)
+                return buf.getvalue()
+
+            # Barra de info + navegação + impressão + excel
+            _hg_pdf_key  = "hg_pdf_lista"
+            _hg_xlsx_key = "hg_xlsx_lista"
+            _pc1, _pc2, _pc3, _pc_imp, _pc_xl = st.columns(
+                [2.5, 0.6, 0.6, 0.9, 0.9], gap="small", vertical_alignment="center"
+            )
             _pc1.caption(f"{len(_df_grid)} aluno(s) · pág {_hg_pg}/{_hg_total}")
             if _pc2.button("◀", key="hg_prev", disabled=(_hg_pg <= 1),
                            use_container_width=True):
@@ -2313,6 +2512,8 @@ if st.session_state.menu_atual == "Principal":
                            use_container_width=True):
                 st.session_state.hg_pg += 1
                 st.rerun()
+
+            # botão PDF
             if st.session_state.get(_hg_pdf_key):
                 _pc_imp.download_button(
                     "📥 PDF",
@@ -2326,6 +2527,22 @@ if st.session_state.menu_atual == "Principal":
             else:
                 if _pc_imp.button("🖨️ Imprimir", key="hg_imp", use_container_width=True):
                     st.session_state[_hg_pdf_key] = _gerar_pdf_hg(_df_grid)
+                    st.rerun()
+
+            # botão Excel
+            if st.session_state.get(_hg_xlsx_key):
+                _pc_xl.download_button(
+                    "📥 Excel",
+                    data=st.session_state[_hg_xlsx_key],
+                    file_name=f"Alunos_Ativos_{datetime.date.today().strftime('%Y%m%d')}.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    key="hg_dl_xlsx",
+                    type="secondary",
+                    use_container_width=True,
+                )
+            else:
+                if _pc_xl.button("📊 Excel", key="hg_xl", use_container_width=True):
+                    st.session_state[_hg_xlsx_key] = _gerar_excel_hg(_df_grid)
                     st.rerun()
 
             # ── Cabeçalho das colunas (clicável para ordenar) ──────────
