@@ -2333,7 +2333,7 @@ if st.session_state.menu_atual == "Principal":
                           "jul","ago","set","out","nov","dez"]
 
                 # ── Título e metadados ────────────────────────────────────
-                ws.merge_cells("A1:N1")
+                ws.merge_cells("A1:O1")
                 ws["A1"] = f"IMBRA – Alunos Ativos  |  Emitido em: {datetime.date.today().strftime('%d/%m/%Y')}  |  Total: {len(df)} aluno(s)"
                 ws["A1"].font = Font(bold=True, size=12, color=_HDR_FG)
                 ws["A1"].fill = _fill(_HDR_BG)
@@ -2355,6 +2355,7 @@ if st.session_state.menu_atual == "Principal":
                     ("Anamnese Data",   13),
                     ("Status Anam.",    12),
                     ("Voluntariado",    28),
+                    ("WhatsApp",        16),
                     ("Tags de Saúde",   40),
                 ]
                 for ci, (lbl, w) in enumerate(_cols, start=1):
@@ -2458,6 +2459,7 @@ if st.session_state.menu_atual == "Principal":
                         _anam_str,
                         _anam_lbl,
                         _vol_str,
+                        str(a.get("whatsapp") or ""),
                         _tags_str,
                     ]
 
