@@ -806,11 +806,14 @@ if not st.session_state.usuario_logado:
                             st.session_state.usuario_nome = user.get("nome")
                             st.session_state.usuario_email = email
                             st.session_state.email_usuario = email
+                            st.session_state.usuario_id = user.get("id", "")
                             st.session_state.perfil = (
                                 "SuperAdmin"
                                 if email.lower() == ADMIN_MASTER.lower()
                                 else "Admin"
                             )
+                            # Limpa cache de permissões ao fazer login
+                            st.session_state.pop("_menu_perms_cache", None)
                             st.rerun()
                         else:
                             st.error("❌ Credenciais inválidas.")
@@ -1436,12 +1439,35 @@ CREATE POLICY "allow_all" ON dias_sem_aula
 # Executa as ferramentas de topo (Seletor de Tema e Botão do Drive) acima do menu principal
 renderizar_seletor_tema()
 
+# ── Verificação de permissão de menu ─────────────────────────────────────────
+def _menu_liberado(chave: str) -> bool:
+    """True se o menu está liberado para o usuário logado.
+    SuperAdmin sempre tem acesso total. Default sem registro = liberado.
+    """
+    if st.session_state.get("perfil") == "SuperAdmin":
+        return True
+    uid = st.session_state.get("usuario_id", "")
+    if not uid:
+        return True
+    perms = st.session_state.get("_menu_perms_cache")
+    if perms is None:
+        from database import get_menu_permissoes_usuario
+        perms = get_menu_permissoes_usuario(uid)
+        st.session_state["_menu_perms_cache"] = perms
+    return perms.get(chave, True)
+
+
+_CHAVES_MENU = {
+    "Principal":       "principal",
+    "Frequência":      "frequencia",
+    "Portal do Aluno": "portal_aluno",
+    "Relatórios & BI": "relatorios_bi",
+    "Gestor":          "gestor",
+}
+
 menu = [
-    "Principal",
-    "Frequência",
-    "Portal do Aluno",
-    "Relatórios & BI",
-    "Gestor",
+    m for m in ["Principal", "Frequência", "Portal do Aluno", "Relatórios & BI", "Gestor"]
+    if _menu_liberado(_CHAVES_MENU[m])
 ]
 menu.append("Sair")
 
@@ -3050,26 +3076,46 @@ elif st.session_state.menu_atual in (
     "Config", "Turmas", "Mensagens", "Identidade Visual", "Backup", "Mesclar Fichas",
 ):
     # ── Gestor: Radar · Satisfação · Emergência · Config (SuperAdmin) ──
-    _aba_g_nomes = ["💙 Radar", "⭐ Satisfação", "🚨 Emergência"]
     _e_super = st.session_state.get("perfil") == "SuperAdmin"
+    _aba_g_nomes = []
+    _aba_g_chaves = []
+    for _nome_g, _chave_g in [
+        ("💙 Radar", "gestor_radar"),
+        ("⭐ Satisfação", "gestor_satisfacao"),
+        ("🚨 Emergência", "gestor_emergencia"),
+    ]:
+        if _menu_liberado(_chave_g):
+            _aba_g_nomes.append(_nome_g)
+            _aba_g_chaves.append(_chave_g)
     if _e_super:
         _aba_g_nomes.append("⚙️ Config")
+        _aba_g_chaves.append("_config")
+    if not _aba_g_nomes:
+        st.info("🔒 Você não tem acesso às abas do Gestor. Contate o administrador.")
+        st.stop()
     _aba_g = st.tabs(_aba_g_nomes)
 
-    with _aba_g[0]:
-        from views.radar_acolhimento_view import tela_radar_acolhimento
-        tela_radar_acolhimento()
+    def _idx_g(chave):
+        """Retorna o índice da aba Gestor para a chave dada, ou None se não existir."""
+        return _aba_g_chaves.index(chave) if chave in _aba_g_chaves else None
 
-    with _aba_g[1]:
-        from views.relatorio_satisfacao_view import tela_relatorio_prime_satisfacao
-        tela_relatorio_prime_satisfacao()
+    if _idx_g("gestor_radar") is not None:
+        with _aba_g[_idx_g("gestor_radar")]:
+            from views.radar_acolhimento_view import tela_radar_acolhimento
+            tela_radar_acolhimento()
 
-    with _aba_g[2]:
-        from modulos_frequencia.tab_emergencia import renderizar_aba_emergencia
-        renderizar_aba_emergencia(None, "Gestor")
+    if _idx_g("gestor_satisfacao") is not None:
+        with _aba_g[_idx_g("gestor_satisfacao")]:
+            from views.relatorio_satisfacao_view import tela_relatorio_prime_satisfacao
+            tela_relatorio_prime_satisfacao()
+
+    if _idx_g("gestor_emergencia") is not None:
+        with _aba_g[_idx_g("gestor_emergencia")]:
+            from modulos_frequencia.tab_emergencia import renderizar_aba_emergencia
+            renderizar_aba_emergencia(None, "Gestor")
 
     if _e_super:
-        with _aba_g[3]:
+        with _aba_g[_idx_g("_config")]:
             _aba_cfg = st.tabs([
                 "🏫 Turmas", "💬 Mensagens", "🔔 Auto Niver", "🎨 Identidade Visual",
                 "🗄️ Bck Adm", "🔀 Mescla Cad", "📅 Calendário", "📧 Email BI",

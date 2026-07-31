@@ -1,5 +1,8 @@
 import streamlit as st
-from database import listar_usuarios_sistema, atualizar_usuario_sistema, excluir_usuario_sistema
+from database import (
+    listar_usuarios_sistema, atualizar_usuario_sistema, excluir_usuario_sistema,
+    get_menu_permissoes_usuario, set_menu_permissoes_usuario, MENU_CATALOGO,
+)
 
 ADMIN_RESTRITO = "marcosbarbosa.am@gmail.com"
 
@@ -221,3 +224,116 @@ def tela_gestao_usuarios():
             if cd2.button("Cancelar", key=f"usr_del_no_{uid}"):
                 st.session_state.pop(f"_usr_conf_del_{uid}", None)
                 st.rerun()
+
+    # ══════════════════════════════════════════════════════════════════════
+    # PERMISSÕES DE MENU
+    # ══════════════════════════════════════════════════════════════════════
+    st.markdown(
+        "<hr style='margin:28px 0 18px 0;border-color:#CBD5E1;'>",
+        unsafe_allow_html=True,
+    )
+    st.markdown(
+        """
+        <div style='background:#EFF6FF;border-left:4px solid #1D4ED8;
+                    padding:12px 16px;border-radius:6px;margin-bottom:18px;'>
+            <strong style='color:#1E3A8A;'>🔐 Permissões de Menu</strong><br>
+            <span style='color:#1D4ED8;font-size:13px;'>
+                Controle quais seções do sistema cada operador pode acessar.
+                <b>SuperAdmin</b> sempre tem acesso completo e não aparece aqui.
+                Desmarcar um menu o torna invisível para o operador.
+            </span>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    # Filtra usuários que não são o próprio SuperAdmin
+    usuarios_filtraveis = [
+        u for u in usuarios
+        if u.get("email", "").strip().lower() != ADMIN_RESTRITO.lower()
+    ]
+
+    if not usuarios_filtraveis:
+        st.info("Nenhum operador disponível para configurar permissões.")
+    else:
+        # Seletor de usuário
+        _nomes_perm = {
+            f"{u.get('nome', '—')} ({u.get('email', '—')})": u
+            for u in usuarios_filtraveis
+        }
+        _sel_label = st.selectbox(
+            "👤 Selecionar operador:",
+            options=list(_nomes_perm.keys()),
+            key="perm_usr_sel",
+        )
+        _usr_perm = _nomes_perm[_sel_label]
+        _uid_perm = _usr_perm["id"]
+        _perm_atual = get_menu_permissoes_usuario(_uid_perm)
+
+        st.markdown(
+            f"<small style='color:#64748B;'>Configurando permissões para: "
+            f"<strong>{_usr_perm.get('nome','—')}</strong> — "
+            f"perfil <em>{_usr_perm.get('perfil','—')}</em></small>",
+            unsafe_allow_html=True,
+        )
+        st.markdown("<br>", unsafe_allow_html=True)
+
+        # Checkboxes por grupo
+        _grupos = [
+            ("🗂️ Menus Principais", [
+                ("principal",     "🏠 Início"),
+                ("frequencia",    "✅ Frequência"),
+                ("portal_aluno",  "🩺 Portal do Aluno"),
+                ("relatorios_bi", "📊 Relatórios & BI"),
+            ]),
+            ("🎯 Gestor", [
+                ("gestor",             "🎯 Gestor (acesso ao menu)"),
+                ("gestor_radar",       "💙 Radar"),
+                ("gestor_satisfacao",  "⭐ Satisfação"),
+                ("gestor_emergencia",  "🚨 Emergência"),
+            ]),
+        ]
+
+        _novas_perms = {}
+        for _grupo_nome, _itens in _grupos:
+            st.markdown(
+                f"<span style='font-weight:700;color:#1E3A8A;font-size:13px;'>"
+                f"{_grupo_nome}</span>",
+                unsafe_allow_html=True,
+            )
+            _cols_perm = st.columns(4)
+            for _pi, (_chave, _label) in enumerate(_itens):
+                _val_atual = _perm_atual.get(_chave, True)  # default = liberado
+                _novo_val = _cols_perm[_pi % 4].checkbox(
+                    _label,
+                    value=_val_atual,
+                    key=f"perm_{_uid_perm}_{_chave}",
+                )
+                _novas_perms[_chave] = _novo_val
+            st.markdown("<br>", unsafe_allow_html=True)
+
+        # Aviso se Gestor desabilitado mas sub-abas habilitadas
+        if not _novas_perms.get("gestor", True) and any(
+            _novas_perms.get(k, True)
+            for k in ["gestor_radar", "gestor_satisfacao", "gestor_emergencia"]
+        ):
+            st.caption(
+                "ℹ️ Se 'Gestor (acesso ao menu)' estiver desmarcado, as sub-abas "
+                "não aparecem mesmo que estejam marcadas."
+            )
+
+        _btn_salvar_perm = st.button(
+            "💾 Salvar Permissões",
+            type="primary",
+            key=f"perm_salvar_{_uid_perm}",
+            use_container_width=False,
+        )
+        if _btn_salvar_perm:
+            _ok_perm, _msg_perm = set_menu_permissoes_usuario(_uid_perm, _novas_perms)
+            if _ok_perm:
+                st.success(f"✅ Permissões de **{_usr_perm.get('nome','—')}** salvas com sucesso!")
+                # Força recarga do cache de permissões se for o próprio usuário logado
+                if st.session_state.get("usuario_id") == _uid_perm:
+                    st.session_state.pop("_menu_perms_cache", None)
+            else:
+                st.error(f"❌ {_msg_perm}")

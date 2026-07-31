@@ -3111,6 +3111,68 @@ def get_emails_sistema() -> list:
         return []
 
 
+# ── Catálogo de menus controlados por permissão ──────────────────────────────
+MENU_CATALOGO = [
+    ("principal",          "🏠 Início"),
+    ("frequencia",         "✅ Frequência"),
+    ("portal_aluno",       "🩺 Portal do Aluno"),
+    ("relatorios_bi",      "📊 Relatórios & BI"),
+    ("gestor",             "🎯 Gestor (acesso geral)"),
+    ("gestor_radar",       "💙 Gestor → Radar"),
+    ("gestor_satisfacao",  "⭐ Gestor → Satisfação"),
+    ("gestor_emergencia",  "🚨 Gestor → Emergência"),
+]
+
+
+def get_menu_permissoes_usuario(usuario_id: str) -> dict:
+    """Retorna dict {menu_chave: bool} para o usuário.
+    Ausência de registro significa tudo liberado (True por padrão).
+    """
+    if not usuario_id:
+        return {}
+    try:
+        resp = (
+            supabase.table("configuracoes_sistema")
+            .select("valor")
+            .eq("chave", f"menu_perm_{usuario_id}")
+            .execute()
+        )
+        if resp.data:
+            import json
+            return json.loads(resp.data[0]["valor"])
+    except Exception:
+        pass
+    return {}
+
+
+def set_menu_permissoes_usuario(usuario_id: str, permissoes: dict) -> tuple:
+    """Salva dict de permissões do usuário em configuracoes_sistema.
+    Retorna (bool, mensagem).
+    """
+    import json
+    chave = f"menu_perm_{usuario_id}"
+    valor = json.dumps(permissoes, ensure_ascii=False)
+    try:
+        resp = (
+            supabase.table("configuracoes_sistema")
+            .select("id")
+            .eq("chave", chave)
+            .execute()
+        )
+        if resp.data:
+            supabase.table("configuracoes_sistema") \
+                .update({"valor": valor}) \
+                .eq("chave", chave) \
+                .execute()
+        else:
+            supabase.table("configuracoes_sistema") \
+                .insert({"chave": chave, "valor": valor}) \
+                .execute()
+        return True, "✅ Permissões salvas com sucesso."
+    except Exception as e:
+        return False, f"Erro ao salvar: {e}"
+
+
 def listar_usuarios_sistema() -> tuple:
     """Retorna (lista, erro_str) dos operadores do sistema.
     Tenta progressivamente remover colunas opcionais que ainda não existam
