@@ -2532,14 +2532,229 @@ def _pagina_capa_prestacao(pdf: FPDF, resumo: dict):
     pdf.set_text_color(0, 0, 0)
 
 
-def criar_prestacao_periodo_pdf(dias: dict, resumo: dict = None) -> bytes:
+def _pagina_satisfacao_prestacao(pdf: "FPDF", dados: dict) -> None:
+    """
+    Renderiza uma página de Satisfação & Impacto na Saúde dentro do PDF de
+    Prestação de Contas. Usa FPDF (mesma engine da capa), sem xhtml2pdf.
+
+    dados: dict retornado por obter_dados_satisfacao()
+        tx_exc, tx_dor, tx_ene, tx_imp, n_resp, trimestre, ano,
+        df_filtrado, df_com, graficos_b64
+    """
+    import base64 as _b64
+    import tempfile as _tmp
+    import os as _os
+
+    trimestre  = dados.get("trimestre", "Ano Completo")
+    ano        = dados.get("ano", datetime.date.today().year)
+    tx_exc     = dados.get("tx_exc", 0)
+    tx_dor     = dados.get("tx_dor", 0)
+    tx_ene     = dados.get("tx_ene", 0)
+    tx_imp     = dados.get("tx_imp", 0)
+    n_resp     = dados.get("n_resp", 0)
+    df         = dados.get("df_filtrado")
+    df_com     = dados.get("df_com")
+    graficos   = dados.get("graficos_b64", {})
+
+    subtitulo  = f"SATISFACAO & IMPACTO NA SAUDE — {trimestre.upper()} {ano}"
+    _cabecalho_padrao(pdf, subtitulo=subtitulo)
+
+    pdf.ln(3)
+
+    # ── Título da seção ──────────────────────────────────────────────────
+    pdf.set_font("Arial", "B", 14)
+    pdf.set_text_color(10, 37, 64)
+    pdf.cell(0, 8, limpar_texto("SATISFACAO & IMPACTO NA SAUDE"), align="C", ln=1)
+    pdf.set_font("Arial", "", 10)
+    pdf.set_text_color(100, 116, 139)
+    pdf.cell(0, 5, limpar_texto(f"Periodo: {trimestre} de {ano}  |  {n_resp} pesquisas respondidas"),
+             align="C", ln=1)
+    pdf.ln(5)
+
+    # ── KPI cards (5 colunas) ────────────────────────────────────────────
+    kpis = [
+        (f"{tx_exc}%", "Excelencia nas Aulas",  (16, 185, 129)),
+        (f"{tx_dor}%", "Alivio de Dores",        (0, 86, 179)),
+        (f"{tx_ene}%", "Mais Energia",            (245, 158, 11)),
+        (f"{tx_imp}%", "Impacto na Vida",         (139, 92, 246)),
+        (str(n_resp),  "Total Respostas",          (10, 37, 64)),
+    ]
+    card_w = 36; gap = 3
+    total_w = card_w * 5 + gap * 4
+    x0 = (210 - total_w) / 2.0
+    y0 = pdf.get_y(); card_h = 20
+    for i, (valor, label, cor) in enumerate(kpis):
+        x = x0 + i * (card_w + gap)
+        pdf.set_fill_color(*cor)
+        pdf.rect(x, y0, card_w, card_h, style="F")
+        pdf.set_text_color(255, 255, 255)
+        pdf.set_xy(x, y0 + 3)
+        pdf.set_font("Arial", "B", 16)
+        pdf.cell(card_w, 8, limpar_texto(valor), align="C")
+        pdf.set_xy(x, y0 + 12)
+        pdf.set_font("Arial", "B", 6)
+        pdf.multi_cell(card_w, 3.5, limpar_texto(label), align="C")
+    pdf.set_y(y0 + card_h + 6)
+    pdf.set_text_color(0, 0, 0)
+
+    # ── Gráficos (4 pizza) ───────────────────────────────────────────────
+    _tmp_files = []
+    chart_order = [
+        ("Sentimento_Q4", "1. Qualidade dos Professores"),
+        ("Sentimento_Q2", "2. Melhora nas Dores"),
+        ("Sentimento_Q1", "3. Disposicao e Energia"),
+        ("Sentimento_Q3", "4. Impacto na Vida"),
+    ]
+    graf_y = pdf.get_y()
+    graf_w = 44; graf_h = 35
+    graf_gap = 3
+    total_gw = graf_w * 4 + graf_gap * 3
+    gx0 = (210 - total_gw) / 2.0
+
+    if graficos:
+        pdf.set_font("Arial", "B", 9)
+        pdf.set_text_color(10, 37, 64)
+        pdf.cell(0, 5, limpar_texto("Analise Grafica"), ln=1)
+        pdf.set_text_color(0, 0, 0)
+        graf_y = pdf.get_y()
+        for gi, (col, titulo) in enumerate(chart_order):
+            b64_str = graficos.get(col)
+            gx = gx0 + gi * (graf_w + graf_gap)
+            if b64_str:
+                try:
+                    img_bytes = _b64.b64decode(b64_str)
+                    _tf = _tmp.NamedTemporaryFile(delete=False, suffix=".png")
+                    _tf.write(img_bytes); _tf.close()
+                    _tmp_files.append(_tf.name)
+                    pdf.image(_tf.name, x=gx, y=graf_y, w=graf_w, h=graf_h)
+                except Exception:
+                    pass
+            # Título sob o gráfico
+            pdf.set_xy(gx, graf_y + graf_h + 1)
+            pdf.set_font("Arial", "", 5.5)
+            pdf.cell(graf_w, 3, limpar_texto(titulo), align="C")
+        pdf.set_y(graf_y + graf_h + 6)
+
+    # ── Tabelas de sentimento (4 colunas) ────────────────────────────────
+    pdf.set_font("Arial", "B", 9)
+    pdf.set_text_color(10, 37, 64)
+    pdf.cell(0, 5, limpar_texto("Analise Detalhada por Indicador"), ln=1)
+    pdf.set_text_color(0, 0, 0)
+
+    cor_map = {
+        "Positivo (Excelente)": (16, 185, 129),
+        "Neutro (Mediano)":     (245, 158, 11),
+        "Atenção (Melhoria)":   (239, 68, 68),
+    }
+    tbl_cols = [
+        ("1. Qualidade Professores", "Sentimento_Q4"),
+        ("2. Melhora nas Dores",     "Sentimento_Q2"),
+        ("3. Disposicao e Energia",  "Sentimento_Q1"),
+        ("4. Impacto na Vida",       "Sentimento_Q3"),
+    ]
+    tbl_w = 44; tbl_gap = 3
+    total_tw = tbl_w * 4 + tbl_gap * 3
+    tx0 = (210 - total_tw) / 2.0
+    ty0 = pdf.get_y()
+
+    for ti, (label, col) in enumerate(tbl_cols):
+        tx = tx0 + ti * (tbl_w + tbl_gap)
+        cy = ty0
+        # cabeçalho da sub-tabela
+        pdf.set_xy(tx, cy)
+        pdf.set_font("Arial", "B", 6.5)
+        pdf.set_fill_color(30, 58, 95)
+        pdf.set_text_color(255, 255, 255)
+        pdf.cell(tbl_w, 5, limpar_texto(label), fill=True, border=0)
+        cy += 5
+        pdf.set_text_color(0, 0, 0)
+
+        if df is not None and col in df.columns:
+            contagem = df[col].value_counts()
+            for sent, votos in contagem.items():
+                if sent == "Sem Classificação":
+                    continue
+                pct = round(votos / n_resp * 100) if n_resp else 0
+                r, g, b = cor_map.get(sent, (100, 116, 139))
+                pdf.set_xy(tx, cy)
+                pdf.set_font("Arial", "", 6)
+                pdf.set_fill_color(r, g, b)
+                pdf.set_text_color(255, 255, 255)
+                pdf.cell(3, 4.5, "", fill=True, border=0)  # faixa de cor
+                pdf.set_text_color(30, 30, 30)
+                pdf.set_font("Arial", "", 5.5)
+                pdf.cell(tbl_w - 18, 4.5, limpar_texto(sent[:22]), border="B")
+                pdf.cell(6, 4.5, str(votos), align="C", border="B")
+                pdf.cell(9, 4.5, f"{pct}%", align="C", border="B")
+                cy += 4.5
+        else:
+            pdf.set_xy(tx, cy)
+            pdf.set_font("Arial", "I", 6)
+            pdf.cell(tbl_w, 5, "Sem dados", border=0)
+
+    pdf.set_y(ty0 + 28)
+
+    # ── Comentários (até 18, 3 colunas) ─────────────────────────────────
+    if df_com is not None and not df_com.empty:
+        pdf.ln(2)
+        pdf.set_font("Arial", "B", 9)
+        pdf.set_text_color(10, 37, 64)
+        n_com = len(df_com)
+        pdf.cell(0, 5, limpar_texto(f"Comentarios dos Alunos ({n_com})"), ln=1)
+        pdf.set_text_color(0, 0, 0)
+
+        com_w = (190 - 2 * 4) / 3   # 3 colunas
+        com_x0 = pdf.l_margin
+        com_y  = pdf.get_y()
+        row_h  = 10
+        max_com = 18
+        for ci, (_, cr) in enumerate(df_com.head(max_com).iterrows()):
+            col_idx = ci % 3
+            row_idx = ci // 3
+            cx = com_x0 + col_idx * (com_w + 4)
+            cy_c = com_y + row_idx * (row_h + 2)
+            if cy_c + row_h > pdf.h - 22:
+                break
+            turma_c = limpar_texto(str(cr.get("turma", "")).strip()[:20])
+            texto_c = limpar_texto(str(cr.get("comentario", "")).strip()[:80])
+            pdf.set_xy(cx, cy_c)
+            pdf.set_fill_color(240, 249, 255)
+            pdf.rect(cx, cy_c, com_w, row_h, style="F")
+            # borda azul esquerda
+            pdf.set_fill_color(0, 86, 179)
+            pdf.rect(cx, cy_c, 1.5, row_h, style="F")
+            pdf.set_xy(cx + 2, cy_c + 1)
+            pdf.set_font("Arial", "B", 5.5)
+            pdf.set_text_color(0, 86, 179)
+            pdf.cell(com_w - 2, 3, turma_c)
+            pdf.set_xy(cx + 2, cy_c + 4)
+            pdf.set_font("Arial", "I", 5.5)
+            pdf.set_text_color(30, 41, 59)
+            pdf.multi_cell(com_w - 2, 3, f'"{texto_c}"', border=0)
+
+    pdf.set_text_color(0, 0, 0)
+
+    # ── Limpar arquivos temporários ──────────────────────────────────────
+    for _f in _tmp_files:
+        try:
+            _os.unlink(_f)
+        except Exception:
+            pass
+
+
+def criar_prestacao_periodo_pdf(
+    dias: dict,
+    resumo: dict = None,
+    satisfacao_secoes: list = None,
+) -> bytes:
     """
     Gera PDF multi-página da Prestação de Contas por Período.
+
     dias: dict ordenado { 'YYYY-MM-DD': ['Nome1', 'Nome2', ...] }
-    resumo (opcional): dados da CAPA (totalizadores + dias sem aula). Quando
-      informado, uma folha de rosto é adicionada como primeira página.
-    Cada dia ocupa uma nova página com cabeçalho completo.
-    Sábados, domingos e feriados já devem ter sido removidos antes de chamar.
+    resumo (opcional): dados da CAPA (totalizadores + dias sem aula).
+    satisfacao_secoes (opcional): lista de dicts retornados por
+        obter_dados_satisfacao() — cada item gera uma página de satisfação
+        APÓS a capa e ANTES das páginas diárias.
     """
     import datetime as _dt
     pdf = PDF()
@@ -2548,6 +2763,11 @@ def criar_prestacao_periodo_pdf(dias: dict, resumo: dict = None) -> bytes:
     if resumo:
         pdf.add_page()
         _pagina_capa_prestacao(pdf, resumo)
+
+    for dados_sat in (satisfacao_secoes or []):
+        if dados_sat:
+            pdf.add_page()
+            _pagina_satisfacao_prestacao(pdf, dados_sat)
 
     for data_iso, nomes in dias.items():
         pdf.add_page()

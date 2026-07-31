@@ -1343,6 +1343,86 @@ def _render_pdf_options_prestacao(
              "Para períodos de um único dia é desmarcada automaticamente.",
     )
 
+    # ── Satisfação & Impacto na Saúde ─────────────────────────────────────
+    st.markdown(
+        "<hr style='margin:8px 0;border-color:#E2E8F0;'>",
+        unsafe_allow_html=True,
+    )
+    st.markdown(
+        "<span style='font-size:13px;font-weight:700;color:#0A2540;'>"
+        "⭐ Satisfação & Impacto na Saúde</span>",
+        unsafe_allow_html=True,
+    )
+
+    _ano_atual = datetime.date.today().year
+    _mes_atual = datetime.date.today().month
+    _trim_auto = (
+        "1º Trimestre" if _mes_atual <= 3 else
+        "2º Trimestre" if _mes_atual <= 6 else
+        "3º Trimestre" if _mes_atual <= 9 else
+        "4º Trimestre"
+    )
+
+    _col_sat1, _col_sat2 = st.columns(2)
+    incluir_sat_geral = _col_sat1.checkbox(
+        "📊 Incluir Satisfação (Ano Completo)",
+        value=False,
+        key="pd_sat_geral",
+        help="Adiciona uma página de Satisfação & Impacto na Saúde com os dados do ano completo.",
+    )
+    incluir_sat_periodo = _col_sat2.checkbox(
+        "📅 Incluir Satisfação (Por Trimestre)",
+        value=False,
+        key="pd_sat_periodo",
+        help="Adiciona uma página de Satisfação com o trimestre selecionado abaixo.",
+    )
+
+    _dados_sat_geral   = None
+    _dados_sat_periodo = None
+
+    if incluir_sat_geral or incluir_sat_periodo:
+        from views.relatorio_satisfacao_view import obter_dados_satisfacao
+
+    if incluir_sat_geral:
+        with st.spinner("Buscando dados de satisfação (ano completo)…"):
+            _dados_sat_geral = obter_dados_satisfacao(_ano_atual, "Ano Completo")
+        if _dados_sat_geral:
+            st.caption(
+                f"✅ Satisfação geral: {_dados_sat_geral['n_resp']} respostas em {_ano_atual} — "
+                f"Excelência {_dados_sat_geral['tx_exc']}%"
+            )
+        else:
+            st.warning(f"⚠️ Nenhuma pesquisa de satisfação encontrada para {_ano_atual}.")
+
+    if incluir_sat_periodo:
+        _trim_opts = ["1º Trimestre", "2º Trimestre", "3º Trimestre", "4º Trimestre"]
+        _trim_sel  = st.selectbox(
+            "Trimestre:",
+            options=_trim_opts,
+            index=_trim_opts.index(_trim_auto),
+            key="pd_sat_trim",
+        )
+        with st.spinner(f"Buscando dados de satisfação ({_trim_sel})…"):
+            _dados_sat_periodo = obter_dados_satisfacao(_ano_atual, _trim_sel)
+        if _dados_sat_periodo:
+            st.caption(
+                f"✅ Satisfação {_trim_sel}: {_dados_sat_periodo['n_resp']} respostas — "
+                f"Excelência {_dados_sat_periodo['tx_exc']}%"
+            )
+        else:
+            st.warning(f"⚠️ Nenhuma pesquisa encontrada para {_trim_sel} de {_ano_atual}.")
+
+    # ── Montar lista de seções de satisfação para o PDF ───────────────────
+    _satisfacao_secoes = [
+        s for s in [_dados_sat_geral, _dados_sat_periodo]
+        if s is not None
+    ]
+
+    st.markdown(
+        "<hr style='margin:8px 0;border-color:#E2E8F0;'>",
+        unsafe_allow_html=True,
+    )
+
     if somente_capa:
         _dias_pdf, _resumo_pdf = {}, resumo_capa
         _label = "📄 Baixar PDF — somente a capa"
@@ -1354,7 +1434,10 @@ def _render_pdf_options_prestacao(
         _arq   = f"Presenca_Periodo_{sufixo}.pdf"
 
     with st.spinner("Gerando PDF…"):
-        pdf_bytes = criar_prestacao_periodo_pdf(_dias_pdf, resumo=_resumo_pdf)
+        pdf_bytes = criar_prestacao_periodo_pdf(
+            _dias_pdf, resumo=_resumo_pdf,
+            satisfacao_secoes=_satisfacao_secoes or None,
+        )
 
     st.download_button(
         label=_label, data=pdf_bytes, file_name=_arq,
@@ -1362,7 +1445,7 @@ def _render_pdf_options_prestacao(
         use_container_width=True, key="pd_download",
     )
 
-    # ── Preview visual (opcional) — pode ser desligado para poupar processamento ─
+    # ── Preview visual na tela ────────────────────────────────────────────
     gerar_preview = st.checkbox(
         "🖥️ Gerar preview visual na tela",
         value=False,
@@ -1375,6 +1458,79 @@ def _render_pdf_options_prestacao(
         st.markdown("<hr style='margin:14px 0 10px 0;border-color:#E2E8F0;'>",
                     unsafe_allow_html=True)
         _render_preview_prestacao(por_dia, total_dias)
+
+    # ── Preview de Satisfação na tela ─────────────────────────────────────
+    if _satisfacao_secoes:
+        st.markdown("<hr style='margin:14px 0 10px 0;border-color:#E2E8F0;'>",
+                    unsafe_allow_html=True)
+        for _sd in _satisfacao_secoes:
+            _trim_lbl = _sd.get("trimestre", "")
+            _ano_lbl  = _sd.get("ano", "")
+            st.markdown(
+                f"<div style='background:#F0F9FF;border-left:4px solid #0056b3;"
+                f"padding:12px 16px;border-radius:6px;margin-bottom:12px;'>"
+                f"<strong style='color:#0A2540;'>⭐ Satisfação — {_trim_lbl} {_ano_lbl}</strong>"
+                f"</div>",
+                unsafe_allow_html=True,
+            )
+            _m1, _m2, _m3, _m4, _m5 = st.columns(5)
+            _m1.metric("Excelência", f"{_sd['tx_exc']}%")
+            _m2.metric("Alívio Dores", f"{_sd['tx_dor']}%")
+            _m3.metric("Mais Energia", f"{_sd['tx_ene']}%")
+            _m4.metric("Impacto Vida", f"{_sd['tx_imp']}%")
+            _m5.metric("Respostas", str(_sd["n_resp"]))
+            # Gráficos com Plotly
+            import plotly.express as _px
+            _mapa_sat = {
+                "Positivo (Excelente)": "#10B981",
+                "Neutro (Mediano)": "#F59E0B",
+                "Atenção (Melhoria)": "#EF4444",
+            }
+            _df_s = _sd.get("df_filtrado")
+            if _df_s is not None and not _df_s.empty:
+                _pares = [
+                    ("Sentimento_Q4", "1. Qualidade dos Professores"),
+                    ("Sentimento_Q2", "2. Melhora nas Dores"),
+                    ("Sentimento_Q1", "3. Disposição e Energia"),
+                    ("Sentimento_Q3", "4. Impacto na Vida"),
+                ]
+                _r1, _r2, _r3, _r4 = st.columns(4)
+                for _rc, (_col_s, _tit_s) in zip([_r1, _r2, _r3, _r4], _pares):
+                    if _col_s in _df_s.columns:
+                        _cnt = _df_s[_col_s].value_counts().reset_index()
+                        _cnt.columns = ["Sentimento", "Votos"]
+                        _cnt = _cnt[_cnt["Sentimento"] != "Sem Classificação"]
+                        if not _cnt.empty:
+                            _fig_s = _px.pie(
+                                _cnt, values="Votos", names="Sentimento",
+                                hole=0.5, title=_tit_s, color="Sentimento",
+                                color_discrete_map=_mapa_sat,
+                            )
+                            _fig_s.update_layout(
+                                margin=dict(t=32, b=4, l=4, r=4),
+                                legend=dict(font_size=9),
+                                title_font_size=11,
+                            )
+                            _rc.plotly_chart(_fig_s, use_container_width=True)
+            # Comentários
+            _df_com_s = _sd.get("df_com")
+            if _df_com_s is not None and not _df_com_s.empty:
+                st.markdown(
+                    f"<span style='font-weight:700;color:#0A2540;'>"
+                    f"💬 Comentários ({len(_df_com_s)})</span>",
+                    unsafe_allow_html=True,
+                )
+                _cols_com = st.columns(3)
+                for _ci, (_, _cr) in enumerate(_df_com_s.head(12).iterrows()):
+                    _cols_com[_ci % 3].markdown(
+                        f"<div style='background:#F0F9FF;border-left:3px solid #0056b3;"
+                        f"padding:7px 9px;border-radius:5px;font-size:12px;"
+                        f"margin-bottom:6px;'>"
+                        f"<strong style='color:#0056b3;font-size:11px;'>"
+                        f"{str(_cr.get('turma',''))}</strong><br>"
+                        f"<em>\"{str(_cr.get('comentario',''))}\"</em></div>",
+                        unsafe_allow_html=True,
+                    )
 
 
 def _render_preview_prestacao(por_dia: dict, total_dias: int) -> None:

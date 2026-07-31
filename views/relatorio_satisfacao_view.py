@@ -614,6 +614,92 @@ def deletar_pesquisa(id_pesquisa):
         st.error(f"Erro ao excluir a pesquisa: {e}")
 
 # =========================================================================
+# 🔁 FUNÇÃO REUTILIZÁVEL — busca e computa dados sem renderizar UI
+# =========================================================================
+def obter_dados_satisfacao(ano: int, trimestre: str) -> dict | None:
+    """Busca e processa dados de satisfação sem renderizar UI.
+
+    trimestre: 'Ano Completo' | '1º Trimestre' | '2º Trimestre' |
+               '3º Trimestre' | '4º Trimestre'
+    Retorna dict com as chaves:
+        df_filtrado, df_com, tx_exc, tx_dor, tx_ene, tx_imp, n_resp,
+        trimestre, ano, graficos_b64
+    Ou None se não houver dados para o período solicitado.
+    """
+    try:
+        response = supabase.table("pesquisas_satisfacao").select("*").execute()
+        dados = response.data
+    except Exception:
+        return None
+    if not dados:
+        return None
+
+    df = pd.DataFrame(dados)
+    if "data_resposta" in df.columns:
+        df["data_resposta"] = pd.to_datetime(df["data_resposta"], errors="coerce")
+
+    anos_disp = sorted(df["data_resposta"].dt.year.dropna().unique().astype(int).tolist())
+    if ano not in anos_disp:
+        return None
+
+    df_filtrado = df[df["data_resposta"].dt.year == ano].copy()
+    if "1º" in trimestre:
+        df_filtrado = df_filtrado[df_filtrado["data_resposta"].dt.month.isin([1, 2, 3])]
+    elif "2º" in trimestre:
+        df_filtrado = df_filtrado[df_filtrado["data_resposta"].dt.month.isin([4, 5, 6])]
+    elif "3º" in trimestre:
+        df_filtrado = df_filtrado[df_filtrado["data_resposta"].dt.month.isin([7, 8, 9])]
+    elif "4º" in trimestre:
+        df_filtrado = df_filtrado[df_filtrado["data_resposta"].dt.month.isin([10, 11, 12])]
+
+    if df_filtrado.empty:
+        return None
+
+    def _class_sent(t):
+        t = str(t).upper()
+        if any(x in t for x in ["😄", "ÓTIMO", "PASSOU"]):
+            return "Positivo (Excelente)"
+        if any(x in t for x in ["😐", "BOM", "POUCO"]):
+            return "Neutro (Mediano)"
+        if any(x in t for x in ["😞", "REGULAR", "AINDA DÓI", "SEM ENERGIA", "NÃO NOTEI"]):
+            return "Atenção (Melhoria)"
+        return "Sem Classificação"
+
+    for q in ["q1_disposicao", "q2_dores", "q3_efeito_vida", "q4_avaliacao_geral"]:
+        col = f"Sentimento_{q[:2].upper()}"
+        serie = df_filtrado[q] if q in df_filtrado.columns else pd.Series(
+            ["Sem Classificação"] * len(df_filtrado))
+        df_filtrado[col] = serie.apply(_class_sent)
+
+    n = len(df_filtrado)
+    tx_exc = int(((df_filtrado["Sentimento_Q4"] == "Positivo (Excelente)").sum() / n) * 100) if n else 0
+    tx_dor = int(((df_filtrado["Sentimento_Q2"] == "Positivo (Excelente)").sum() / n) * 100) if n else 0
+    tx_ene = int(((df_filtrado["Sentimento_Q1"] == "Positivo (Excelente)").sum() / n) * 100) if n else 0
+    tx_imp = int(((df_filtrado["Sentimento_Q3"] == "Positivo (Excelente)").sum() / n) * 100) if n else 0
+
+    _df_com_raw = (
+        df_filtrado[df_filtrado["comentario"].notna() & (df_filtrado["comentario"].str.strip() != "")]
+        if "comentario" in df_filtrado.columns else pd.DataFrame()
+    )
+    df_com = _filtrar_comentarios(_df_com_raw)
+
+    try:
+        graficos_b64 = _gerar_graficos_b64(df_filtrado)
+    except Exception:
+        graficos_b64 = {}
+
+    return {
+        "df_filtrado": df_filtrado,
+        "df_com": df_com,
+        "tx_exc": tx_exc, "tx_dor": tx_dor, "tx_ene": tx_ene, "tx_imp": tx_imp,
+        "n_resp": n,
+        "trimestre": trimestre,
+        "ano": ano,
+        "graficos_b64": graficos_b64,
+    }
+
+
+# =========================================================================
 # 📊 TELA PRINCIPAL (DASHBOARD + FAXINA)
 # =========================================================================
 def tela_relatorio_prime_satisfacao():
