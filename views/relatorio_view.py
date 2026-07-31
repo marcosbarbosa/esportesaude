@@ -1343,6 +1343,25 @@ def _render_pdf_options_prestacao(
              "Para períodos de um único dia é desmarcada automaticamente.",
     )
 
+    # ── Objetivo do Período ────────────────────────────────────────────────
+    st.markdown(
+        "<hr style='margin:8px 0;border-color:#E2E8F0;'>",
+        unsafe_allow_html=True,
+    )
+    objetivo_periodo = st.text_area(
+        "📝 Objetivo das aulas do período (opcional)",
+        value="",
+        max_chars=300,
+        height=80,
+        key="pd_objetivo_periodo",
+        placeholder=(
+            "Ex.: Exercícios de equilíbrio, coordenação motora e respiração consciente. "
+            "Foco em mobilidade articular e fortalecimento dos membros inferiores."
+        ),
+        help="Até 2 linhas. Aparece somente na primeira página do relatório, "
+             "antes da Lista de Presença. Deixe em branco para omitir.",
+    )
+
     # ── Satisfação & Impacto na Saúde ─────────────────────────────────────
     st.markdown(
         "<hr style='margin:8px 0;border-color:#E2E8F0;'>",
@@ -1437,6 +1456,7 @@ def _render_pdf_options_prestacao(
         pdf_bytes = criar_prestacao_periodo_pdf(
             _dias_pdf, resumo=_resumo_pdf,
             satisfacao_secoes=_satisfacao_secoes or None,
+            objetivo_periodo=objetivo_periodo or "",
         )
 
     st.download_button(

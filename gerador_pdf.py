@@ -2195,9 +2195,45 @@ def criar_lista_acao_evasao_pdf(df, categoria, data_inicio, data_fim, turma):
 # ==============================================================================
 # RELATÓRIO: PRESTAÇÃO DE CONTAS DIÁRIA — Lista de Presença por Dia
 # ==============================================================================
-def _pagina_prestacao_diaria(pdf: FPDF, data_fmt: str, nomes: list):
-    """Renderiza uma página completa de presença para um único dia."""
+def _pagina_prestacao_diaria(
+    pdf: FPDF,
+    data_fmt: str,
+    nomes: list,
+    objetivo_periodo: str = "",
+):
+    """Renderiza uma página completa de presença para um único dia.
+
+    objetivo_periodo: quando informado (somente na 1ª página), exibe duas linhas
+    com o objetivo das aulas do período, antes do cabeçalho da lista de presença.
+    """
     _cabecalho_padrao(pdf, subtitulo="PLANILHA DE FREQUENCIA DIARIA")
+
+    # ── Objetivo do período (somente na 1ª página, quando fornecido) ──────
+    if objetivo_periodo and objetivo_periodo.strip():
+        pdf.ln(3)
+        pdf.set_fill_color(240, 249, 255)   # fundo azul-claro
+        pdf.set_draw_color(30, 58, 95)      # borda azul-escuro
+        x0 = pdf.l_margin
+        y0 = pdf.get_y()
+        w0 = pdf.w - pdf.l_margin - pdf.r_margin
+        # borda lateral esquerda colorida
+        pdf.set_fill_color(30, 58, 95)
+        pdf.rect(x0, y0, 2.5, 14, style="F")
+        # fundo da caixa
+        pdf.set_fill_color(240, 249, 255)
+        pdf.rect(x0 + 2.5, y0, w0 - 2.5, 14, style="F")
+        # label "Objetivo do Período:"
+        pdf.set_xy(x0 + 5, y0 + 1.5)
+        pdf.set_font("Arial", "B", 8)
+        pdf.set_text_color(30, 58, 95)
+        pdf.cell(38, 4, limpar_texto("Objetivo do Periodo:"))
+        # texto (até 2 linhas)
+        pdf.set_xy(x0 + 5, y0 + 6)
+        pdf.set_font("Arial", "", 9)
+        pdf.set_text_color(30, 41, 59)
+        pdf.multi_cell(w0 - 8, 4.5, limpar_texto(objetivo_periodo.strip()), border=0)
+        pdf.set_y(y0 + 14 + 3)
+        pdf.set_text_color(0, 0, 0)
 
     # Faixa azul com data
     pdf.set_font("Arial", "B", 11)
@@ -2746,6 +2782,7 @@ def criar_prestacao_periodo_pdf(
     dias: dict,
     resumo: dict = None,
     satisfacao_secoes: list = None,
+    objetivo_periodo: str = "",
 ) -> bytes:
     """
     Gera PDF multi-página da Prestação de Contas por Período.
@@ -2755,6 +2792,8 @@ def criar_prestacao_periodo_pdf(
     satisfacao_secoes (opcional): lista de dicts retornados por
         obter_dados_satisfacao() — cada item gera uma página de satisfação
         APÓS a capa e ANTES das páginas diárias.
+    objetivo_periodo (opcional): texto de até 2 linhas com o objetivo das
+        aulas, exibido somente na primeira página de presença.
     """
     import datetime as _dt
     pdf = PDF()
@@ -2769,13 +2808,16 @@ def criar_prestacao_periodo_pdf(
             pdf.add_page()
             _pagina_satisfacao_prestacao(pdf, dados_sat)
 
+    _primeira_pagina = True
     for data_iso, nomes in dias.items():
         pdf.add_page()
         try:
             data_fmt = _dt.date.fromisoformat(data_iso).strftime("%d/%m/%Y")
         except Exception:
             data_fmt = data_iso
-        _pagina_prestacao_diaria(pdf, data_fmt, nomes)
+        _obj = objetivo_periodo if _primeira_pagina else ""
+        _pagina_prestacao_diaria(pdf, data_fmt, nomes, objetivo_periodo=_obj)
+        _primeira_pagina = False
 
     try:
         return pdf.output(dest='S').encode('latin-1')

@@ -29,7 +29,12 @@ def _badge_perfil(perfil):
 
 
 def tela_gestao_usuarios():
-    email_session = st.session_state.get("email", "").strip().lower()
+    email_session = (
+        st.session_state.get("usuario_email")
+        or st.session_state.get("email_usuario")
+        or st.session_state.get("email")
+        or ""
+    ).strip().lower()
 
     if email_session != ADMIN_RESTRITO.lower():
         st.warning(
