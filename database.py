@@ -3124,6 +3124,36 @@ MENU_CATALOGO = [
 ]
 
 
+def get_objetivos_diario_periodo(data_ini: str, data_fim: str) -> list[str]:
+    """Retorna lista de objetivos únicos do diário de aulas para o período.
+    data_ini / data_fim: strings 'YYYY-MM-DD'.
+    Ignora entradas vazias, nulas ou com mensagem de erro.
+    """
+    try:
+        res = (
+            supabase.table("diario_aulas")
+            .select("objetivo_geral")
+            .gte("data_aula", data_ini)
+            .lte("data_aula", data_fim)
+            .execute()
+        )
+        vistos = set()
+        objetivos = []
+        for row in (res.data or []):
+            obj = (row.get("objetivo_geral") or "").strip()
+            if (
+                not obj
+                or obj.startswith("⚠️")
+                or obj.lower() in vistos
+            ):
+                continue
+            vistos.add(obj.lower())
+            objetivos.append(obj)
+        return objetivos
+    except Exception:
+        return []
+
+
 def get_menu_permissoes_usuario(usuario_id: str) -> dict:
     """Retorna dict {menu_chave: bool} para o usuário.
     Ausência de registro significa tudo liberado (True por padrão).

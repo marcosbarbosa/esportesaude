@@ -36,6 +36,7 @@ from database import (
     get_primeira_data_frequencia,
     registrar_dia_sem_aula,
     remover_dia_sem_aula,
+    get_objetivos_diario_periodo,
 )
 
 # 🚀 IMPORTAÇÃO DO MOTOR NATIVO DO WORD
@@ -1348,9 +1349,42 @@ def _render_pdf_options_prestacao(
         "<hr style='margin:8px 0;border-color:#E2E8F0;'>",
         unsafe_allow_html=True,
     )
+
+    # Monta sugestão automática a partir do Diário de Bordo do período
+    _datas_periodo = sorted(por_dia.keys())
+    _sugestao_obj  = ""
+    if _datas_periodo:
+        _obj_lista = get_objetivos_diario_periodo(_datas_periodo[0], _datas_periodo[-1])
+        if _obj_lista:
+            # Une objetivos únicos; trunca a ~280 chars mantendo frase completa
+            _texto_junto = "; ".join(_obj_lista)
+            if len(_texto_junto) > 280:
+                _texto_junto = _texto_junto[:277].rsplit(";", 1)[0].strip() + "."
+            _sugestao_obj = _texto_junto
+
+    # Mostra sugestão como preview clicável (acima do campo editável)
+    if _sugestao_obj:
+        st.markdown(
+            "<span style='font-size:12px;font-weight:700;color:#1D4ED8;'>"
+            "💡 Sugestão automática (Diário de Bordo):</span>",
+            unsafe_allow_html=True,
+        )
+        st.markdown(
+            f"<div style='background:#EFF6FF;border-left:3px solid #3B82F6;"
+            f"padding:8px 12px;border-radius:5px;font-size:12px;color:#1E3A8A;"
+            f"margin-bottom:6px;'>{_sugestao_obj}</div>",
+            unsafe_allow_html=True,
+        )
+        if st.button(
+            "↑ Usar esta sugestão",
+            key="pd_usar_sugestao_obj",
+            help="Preenche o campo abaixo com o texto sugerido. Você pode editar depois.",
+        ):
+            st.session_state["pd_objetivo_periodo"] = _sugestao_obj
+            st.rerun()
+
     objetivo_periodo = st.text_area(
         "📝 Objetivo das aulas do período (opcional)",
-        value="",
         max_chars=300,
         height=80,
         key="pd_objetivo_periodo",
@@ -1358,8 +1392,9 @@ def _render_pdf_options_prestacao(
             "Ex.: Exercícios de equilíbrio, coordenação motora e respiração consciente. "
             "Foco em mobilidade articular e fortalecimento dos membros inferiores."
         ),
-        help="Até 2 linhas. Aparece somente na primeira página do relatório, "
-             "antes da Lista de Presença. Deixe em branco para omitir.",
+        help="Aparece somente na primeira página do relatório, antes da Lista de Presença. "
+             "Clique em '↑ Usar esta sugestão' para preencher automaticamente, "
+             "ou escreva livremente. Deixe em branco para omitir.",
     )
 
     # ── Satisfação & Impacto na Saúde ─────────────────────────────────────
