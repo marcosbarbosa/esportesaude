@@ -2211,28 +2211,38 @@ def _pagina_prestacao_diaria(
     # ── Objetivo do período (somente na 1ª página, quando fornecido) ──────
     if objetivo_periodo and objetivo_periodo.strip():
         pdf.ln(3)
-        pdf.set_fill_color(240, 249, 255)   # fundo azul-claro
-        pdf.set_draw_color(30, 58, 95)      # borda azul-escuro
         x0 = pdf.l_margin
         y0 = pdf.get_y()
         w0 = pdf.w - pdf.l_margin - pdf.r_margin
-        # borda lateral esquerda colorida
-        pdf.set_fill_color(30, 58, 95)
-        pdf.rect(x0, y0, 2.5, 14, style="F")
-        # fundo da caixa
-        pdf.set_fill_color(240, 249, 255)
-        pdf.rect(x0 + 2.5, y0, w0 - 2.5, 14, style="F")
-        # label "Objetivo do Período:"
+
+        # Escreve o label e o texto primeiro (para calcular altura real)
         pdf.set_xy(x0 + 5, y0 + 1.5)
         pdf.set_font("Arial", "B", 8)
         pdf.set_text_color(30, 58, 95)
-        pdf.cell(38, 4, limpar_texto("Objetivo do Periodo:"))
-        # texto (até 2 linhas)
-        pdf.set_xy(x0 + 5, y0 + 6)
+        pdf.cell(0, 4, limpar_texto("Objetivo do Periodo:"), ln=1)
+
+        pdf.set_x(x0 + 5)
         pdf.set_font("Arial", "", 9)
         pdf.set_text_color(30, 41, 59)
-        pdf.multi_cell(w0 - 8, 4.5, limpar_texto(objetivo_periodo.strip()), border=0)
-        pdf.set_y(y0 + 14 + 3)
+        pdf.multi_cell(w0 - 8, 4.8, limpar_texto(objetivo_periodo.strip()), border=0)
+
+        y_fim = pdf.get_y() + 3          # posição Y após o texto + margem inferior
+
+        # Agora desenha o fundo e a borda ATRÁS do texto já escrito
+        # (FPDF não tem z-index, mas como já escrevemos o texto, desenhamos
+        #  o background "por baixo" retroativamente usando a cor de fundo da
+        #  página — alternativa: desenhar antes e reescrever. Optamos por
+        #  desenhar só a borda esquerda sobre o texto, que é opaca)
+        box_h = y_fim - y0
+        pdf.set_fill_color(30, 58, 95)
+        pdf.rect(x0, y0, 2.5, box_h, style="F")   # barra azul esquerda
+
+        # Linha horizontal fina no topo e na base da caixa
+        pdf.set_draw_color(30, 58, 95)
+        pdf.line(x0, y0, x0 + w0, y0)
+        pdf.line(x0, y_fim, x0 + w0, y_fim)
+
+        pdf.set_y(y_fim + 2)
         pdf.set_text_color(0, 0, 0)
 
     # Faixa azul com data

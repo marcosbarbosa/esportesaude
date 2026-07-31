@@ -1260,7 +1260,10 @@ def _dia_da_semana_pt(d: datetime.date) -> str:
     return nomes[d.weekday()]
 
 
-def _bloco_preview_dia(data_fmt, nomes, img_s, img_p, nome_org, titulo_proj, hoje_fmt, numero_dia=None, total_dias=None):
+def _bloco_preview_dia(
+    data_fmt, nomes, img_s, img_p, nome_org, titulo_proj, hoje_fmt,
+    numero_dia=None, total_dias=None, objetivo_periodo="",
+):
     """Retorna HTML de um bloco de preview para um dia de presença."""
     linhas = ""
     for i, nome in enumerate(nomes, 1):
@@ -1274,6 +1277,22 @@ def _bloco_preview_dia(data_fmt, nomes, img_s, img_p, nome_org, titulo_proj, hoj
             f"</tr>"
         )
     pag_info = f" &nbsp;·&nbsp; Página {numero_dia} de {total_dias}" if numero_dia else ""
+
+    # Bloco de objetivo — somente na 1ª página
+    bloco_obj = ""
+    if objetivo_periodo and objetivo_periodo.strip():
+        bloco_obj = f"""
+  <div style='border-left:4px solid #1E3A5F;background:#EFF6FF;
+              padding:7px 12px;margin-bottom:10px;border-radius:0 4px 4px 0;'>
+    <div style='font-size:8px;font-weight:800;color:#1E3A5F;
+                text-transform:uppercase;margin-bottom:3px;letter-spacing:.5px;'>
+      Objetivo do Período
+    </div>
+    <div style='font-size:10px;color:#1E3A8A;line-height:1.5;'>
+      {objetivo_periodo.strip()}
+    </div>
+  </div>"""
+
     return f"""
 <div style='background:#fff;border:1px solid #CBD5E1;border-radius:8px;
             box-shadow:0 4px 18px rgba(0,0,0,.08);padding:24px 28px;
@@ -1291,6 +1310,7 @@ def _bloco_preview_dia(data_fmt, nomes, img_s, img_p, nome_org, titulo_proj, hoj
     </div>
     <div style='text-align:center;'>{img_p}</div>
   </div>
+  {bloco_obj}
   <div style='background:#1E3A5F;color:#fff;padding:6px 10px;
               font-weight:900;font-size:12px;margin-bottom:8px;'>
     Lista de Presença — {data_fmt}
@@ -1512,7 +1532,7 @@ def _render_pdf_options_prestacao(
     if gerar_preview:
         st.markdown("<hr style='margin:14px 0 10px 0;border-color:#E2E8F0;'>",
                     unsafe_allow_html=True)
-        _render_preview_prestacao(por_dia, total_dias)
+        _render_preview_prestacao(por_dia, total_dias, objetivo_periodo=objetivo_periodo or "")
 
     # ── Preview de Satisfação na tela ─────────────────────────────────────
     if _satisfacao_secoes:
@@ -1588,7 +1608,7 @@ def _render_pdf_options_prestacao(
                     )
 
 
-def _render_preview_prestacao(por_dia: dict, total_dias: int) -> None:
+def _render_preview_prestacao(por_dia: dict, total_dias: int, objetivo_periodo: str = "") -> None:
     """Renderiza o preview visual do relatório — um bloco por dia."""
     from utils.identidade import get_config as _gcfg
     from utils.imagem import get_base64_image
@@ -1609,9 +1629,11 @@ def _render_preview_prestacao(por_dia: dict, total_dias: int) -> None:
             data_fmt = datetime.date.fromisoformat(data_iso).strftime("%d/%m/%Y")
         except Exception:
             data_fmt = data_iso
+        # Objetivo aparece somente no 1º bloco
+        _obj_bloco = objetivo_periodo if idx == 1 else ""
         bloco = _bloco_preview_dia(
             data_fmt, nomes, img_s, img_p, nome_org, titulo_proj, hoje_fmt,
-            numero_dia=idx, total_dias=total_dias,
+            numero_dia=idx, total_dias=total_dias, objetivo_periodo=_obj_bloco,
         )
         st.markdown(bloco, unsafe_allow_html=True)
 
