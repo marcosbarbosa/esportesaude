@@ -3113,14 +3113,25 @@ def get_emails_sistema() -> list:
 
 # ── Catálogo de menus controlados por permissão ──────────────────────────────
 MENU_CATALOGO = [
-    ("principal",          "🏠 Início"),
-    ("frequencia",         "✅ Frequência"),
-    ("portal_aluno",       "🩺 Portal do Aluno"),
-    ("relatorios_bi",      "📊 Relatórios & BI"),
-    ("gestor",             "🎯 Gestor (acesso geral)"),
-    ("gestor_radar",       "💙 Gestor → Radar"),
-    ("gestor_satisfacao",  "⭐ Gestor → Satisfação"),
-    ("gestor_emergencia",  "🚨 Gestor → Emergência"),
+    # ── Menus principais ──────────────────────────────────────────────────
+    ("principal",               "🏠 Início"),
+    ("frequencia",              "✅ Frequência"),
+    ("portal_aluno",            "🩺 Portal do Aluno"),
+    ("relatorios_bi",           "📊 Relatórios & BI"),
+    ("gestor",                  "🎯 Gestor (acesso geral)"),
+    # ── Sub-itens: Frequência ────────────────────────────────────────────
+    ("freq_conf_facial",        "📸 Frequência → Conferência Facial"),
+    # ── Sub-itens: Portal do Aluno ───────────────────────────────────────
+    ("portal_prontuario",       "🩺 Portal → Prontuário / Ficha Individual"),
+    ("portal_ficha_impressao",  "🖨️ Portal → Impressão de Ficha"),
+    # ── Sub-itens: Relatórios & BI ───────────────────────────────────────
+    ("rel_relatorios",          "📋 Relatórios & BI → Relatórios"),
+    ("rel_bi_dashboard",        "📊 Relatórios & BI → BI Dashboard"),
+    ("rel_bi_individual",       "👤 Relatórios & BI → BI Individual"),
+    # ── Sub-itens: Gestor ────────────────────────────────────────────────
+    ("gestor_radar",            "💙 Gestor → Radar"),
+    ("gestor_satisfacao",       "⭐ Gestor → Satisfação"),
+    ("gestor_emergencia",       "🚨 Gestor → Emergência"),
 ]
 
 

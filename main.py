@@ -3245,7 +3245,10 @@ if st.session_state.menu_atual == "Principal":
 elif st.session_state.menu_atual == "Frequência":
     _c_freq_titulo, _c_freq_btn = st.columns([6, 1], vertical_alignment="center")
     with _c_freq_btn:
-        if st.button("📸 Conf. Facial", use_container_width=True, help="Conferência de Presença por Foto"):
+        if _menu_liberado("freq_conf_facial") and st.button(
+            "📸 Conf. Facial", use_container_width=True,
+            help="Conferência de Presença por Foto"
+        ):
             st.session_state.menu_atual = "Conferência Facial"
             st.rerun()
     from views.frequencia_view import tela_frequencia
@@ -3258,12 +3261,20 @@ elif st.session_state.menu_atual == "Nova Matrícula":
 elif st.session_state.menu_atual == "Portal do Aluno":
     _col_portal, _col_ficha_portal = st.columns([6, 1], vertical_alignment="center")
     with _col_ficha_portal:
-        if st.button("🖨️ Ficha", use_container_width=True, help="Central de impressão de fichas de matrícula"):
+        if _menu_liberado("portal_ficha_impressao") and st.button(
+            "🖨️ Ficha", use_container_width=True,
+            help="Central de impressão de fichas de matrícula"
+        ):
             st.session_state.menu_atual = "Ficha de Matrícula"
             st.rerun()
     if st.session_state.aluno_prontuario:
-        from views.prontuario_ficha import renderizar_ficha
-        renderizar_ficha()
+        if _menu_liberado("portal_prontuario"):
+            from views.prontuario_ficha import renderizar_ficha
+            renderizar_ficha()
+        else:
+            st.warning("🔒 Você não tem acesso ao prontuário individual. Contate o administrador.")
+            st.session_state.aluno_prontuario = None
+            st.rerun()
     else:
         from views.prontuario_dashboard import renderizar_dashboard
         renderizar_dashboard()
@@ -3271,19 +3282,35 @@ elif st.session_state.menu_atual == "Portal do Aluno":
 elif st.session_state.menu_atual in ("Relatórios & BI", "BI Prime", "Relatórios"):
     _col_rel, _col_ficha_rel = st.columns([6, 1], vertical_alignment="center")
     with _col_ficha_rel:
-        if st.button("🖨️ Ficha", use_container_width=True, key="ficha_btn_rel", help="Central de impressão de fichas de matrícula"):
+        if _menu_liberado("portal_ficha_impressao") and st.button(
+            "🖨️ Ficha", use_container_width=True, key="ficha_btn_rel",
+            help="Central de impressão de fichas de matrícula"
+        ):
             st.session_state.menu_atual = "Ficha de Matrícula"
             st.rerun()
-    _aba_rel = st.tabs(["📋 Relatórios", "📊 BI Dashboard", "👤 BI Individual"])
-    with _aba_rel[0]:
-        from views.relatorio_view import tela_relatorio
-        tela_relatorio()
-    with _aba_rel[1]:
-        from views.bi_dashboard_view import render_bi_dashboard
-        render_bi_dashboard()
-    with _aba_rel[2]:
-        from views.bi_individual_view import render_bi_individual
-        render_bi_individual()
+    # Monta apenas as abas que o operador tem acesso
+    _rel_tabs_disponiveis = []
+    if _menu_liberado("rel_relatorios"):
+        _rel_tabs_disponiveis.append(("📋 Relatórios", "rel_relatorios"))
+    if _menu_liberado("rel_bi_dashboard"):
+        _rel_tabs_disponiveis.append(("📊 BI Dashboard", "rel_bi_dashboard"))
+    if _menu_liberado("rel_bi_individual"):
+        _rel_tabs_disponiveis.append(("👤 BI Individual", "rel_bi_individual"))
+    if not _rel_tabs_disponiveis:
+        st.info("🔒 Você não tem acesso a nenhuma aba de Relatórios & BI. Contate o administrador.")
+    else:
+        _aba_rel = st.tabs([_t[0] for _t in _rel_tabs_disponiveis])
+        for _ri, (_rnome, _rchave) in enumerate(_rel_tabs_disponiveis):
+            with _aba_rel[_ri]:
+                if _rchave == "rel_relatorios":
+                    from views.relatorio_view import tela_relatorio
+                    tela_relatorio()
+                elif _rchave == "rel_bi_dashboard":
+                    from views.bi_dashboard_view import render_bi_dashboard
+                    render_bi_dashboard()
+                elif _rchave == "rel_bi_individual":
+                    from views.bi_individual_view import render_bi_individual
+                    render_bi_individual()
 
 elif st.session_state.menu_atual == "Ficha de Matrícula":
     try:

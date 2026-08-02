@@ -283,49 +283,131 @@ def tela_gestao_usuarios():
         )
         st.markdown("<br>", unsafe_allow_html=True)
 
-        # Checkboxes por grupo
-        _grupos = [
-            ("🗂️ Menus Principais", [
-                ("principal",     "🏠 Início"),
-                ("frequencia",    "✅ Frequência"),
-                ("portal_aluno",  "🩺 Portal do Aluno"),
-                ("relatorios_bi", "📊 Relatórios & BI"),
-            ]),
-            ("🎯 Gestor", [
-                ("gestor",             "🎯 Gestor (acesso ao menu)"),
-                ("gestor_radar",       "💙 Radar"),
-                ("gestor_satisfacao",  "⭐ Satisfação"),
-                ("gestor_emergencia",  "🚨 Emergência"),
-            ]),
+        # ── Catálogo de seções com hierarquia pai → filhos ────────────────
+        _GRUPOS_PERM = [
+            {
+                "emoji": "🏠", "titulo": "Início",
+                "cor_bg": "#EFF6FF", "cor_bd": "#1D4ED8", "cor_txt": "#1E3A8A",
+                "pai": "principal",
+                "descricao": "Painel inicial com resumo geral do dia.",
+                "filhos": [],
+            },
+            {
+                "emoji": "✅", "titulo": "Frequência",
+                "cor_bg": "#F0FDF4", "cor_bd": "#16A34A", "cor_txt": "#14532D",
+                "pai": "frequencia",
+                "descricao": "Registro de presença nas aulas.",
+                "filhos": [
+                    ("freq_conf_facial", "📸 Conf. Facial",
+                     "Acesso à verificação de presença por foto."),
+                ],
+            },
+            {
+                "emoji": "🩺", "titulo": "Portal do Aluno",
+                "cor_bg": "#FFF7ED", "cor_bd": "#EA580C", "cor_txt": "#7C2D12",
+                "pai": "portal_aluno",
+                "descricao": "Cadastros, prontuários e fichas dos alunos.",
+                "filhos": [
+                    ("portal_prontuario",      "🩺 Prontuário/Ficha",
+                     "Ver e editar ficha individual do aluno."),
+                    ("portal_ficha_impressao", "🖨️ Imprimir Ficha",
+                     "Central de impressão de fichas de matrícula."),
+                ],
+            },
+            {
+                "emoji": "📊", "titulo": "Relatórios & BI",
+                "cor_bg": "#F5F3FF", "cor_bd": "#7C3AED", "cor_txt": "#4C1D95",
+                "pai": "relatorios_bi",
+                "descricao": "Relatórios gerenciais, prestação de contas e análise de dados.",
+                "filhos": [
+                    ("rel_relatorios",    "📋 Relatórios",
+                     "Prestação de contas e frequência por período."),
+                    ("rel_bi_dashboard",  "📊 BI Dashboard",
+                     "Painel analítico com KPIs gerenciais."),
+                    ("rel_bi_individual", "👤 BI Individual",
+                     "Relatório de evolução individual do aluno."),
+                ],
+            },
+            {
+                "emoji": "🎯", "titulo": "Gestor",
+                "cor_bg": "#FFF1F2", "cor_bd": "#BE123C", "cor_txt": "#881337",
+                "pai": "gestor",
+                "descricao": "Monitoramento, satisfação e ferramentas de gestão.",
+                "filhos": [
+                    ("gestor_radar",      "💙 Radar",
+                     "Monitoramento e alertas de acolhimento individual."),
+                    ("gestor_satisfacao", "⭐ Satisfação",
+                     "Pesquisas de satisfação e impacto na saúde."),
+                    ("gestor_emergencia", "🚨 Emergência",
+                     "Protocolo e contatos de emergência."),
+                ],
+            },
         ]
 
+        st.markdown(
+            "<p style='color:#475569;font-size:12px;margin-bottom:12px;'>"
+            "🔑 <b>Acesso ao menu</b> controla a visibilidade do módulo inteiro. "
+            "As sub-opções só tomam efeito quando o módulo pai está <em>ativo</em>. "
+            "Passe o cursor sobre cada item para ver a descrição."
+            "</p>",
+            unsafe_allow_html=True,
+        )
+
         _novas_perms = {}
-        for _grupo_nome, _itens in _grupos:
+        for _g in _GRUPOS_PERM:
+            _chave_pai = _g["pai"]
+            _val_pai_atual = _perm_atual.get(_chave_pai, True)
+            _n_filhos = len(_g["filhos"])
+
+            # ── Card colorido com título da seção ─────────────────────────
             st.markdown(
-                f"<span style='font-weight:700;color:#1E3A8A;font-size:13px;'>"
-                f"{_grupo_nome}</span>",
+                f"<div style='background:{_g['cor_bg']};border-left:4px solid {_g['cor_bd']};"
+                f"border-radius:6px;padding:5px 12px;margin-bottom:2px;'>"
+                f"<span style='color:{_g['cor_txt']};font-weight:700;font-size:13px;'>"
+                f"{_g['emoji']} {_g['titulo']}</span>"
+                f"<span style='color:#64748B;font-size:11px;margin-left:10px;'>"
+                f"{_g['descricao']}</span></div>",
                 unsafe_allow_html=True,
             )
-            _cols_perm = st.columns(4)
-            for _pi, (_chave, _label) in enumerate(_itens):
-                _val_atual = _perm_atual.get(_chave, True)  # default = liberado
-                _novo_val = _cols_perm[_pi % 4].checkbox(
-                    _label,
-                    value=_val_atual,
-                    key=f"perm_{_uid_perm}_{_chave}",
-                )
-                _novas_perms[_chave] = _novo_val
-            st.markdown("<br>", unsafe_allow_html=True)
 
-        # Aviso se Gestor desabilitado mas sub-abas habilitadas
-        if not _novas_perms.get("gestor", True) and any(
-            _novas_perms.get(k, True)
-            for k in ["gestor_radar", "gestor_satisfacao", "gestor_emergencia"]
-        ):
-            st.caption(
-                "ℹ️ Se 'Gestor (acesso ao menu)' estiver desmarcado, as sub-abas "
-                "não aparecem mesmo que estejam marcadas."
+            # ── Checkboxes: pai (col 0) + filhos (cols 1-3) ───────────────
+            _cols_g = st.columns(4)
+
+            # Pai
+            _val_pai_novo = _cols_g[0].checkbox(
+                "🔓 Acesso ao menu",
+                value=_val_pai_atual,
+                key=f"perm_{_uid_perm}_{_chave_pai}",
+                help=f"Habilita ou oculta '{_g['titulo']}' para este operador.",
             )
+            _novas_perms[_chave_pai] = _val_pai_novo
+
+            # Filhos (desabilitados automaticamente se pai estiver off)
+            for _fi, (_chave_f, _label_f, _tip_f) in enumerate(_g["filhos"]):
+                _val_f_atual = _perm_atual.get(_chave_f, True)
+                _val_f_novo = _cols_g[_fi + 1].checkbox(
+                    _label_f,
+                    value=_val_f_atual,
+                    key=f"perm_{_uid_perm}_{_chave_f}",
+                    disabled=not _val_pai_novo,
+                    help=_tip_f if _val_pai_novo else
+                         f"⚠️ Habilite '{_g['titulo']}' primeiro para configurar esta sub-opção.",
+                )
+                # Forçar False se pai estiver desabilitado
+                _novas_perms[_chave_f] = _val_f_novo and _val_pai_novo
+
+            # Aviso de dependência apenas se pai desabilitado e há filhos
+            if not _val_pai_novo and _n_filhos > 0:
+                st.markdown(
+                    f"<div style='margin-left:8px;'>"
+                    f"<small style='color:#94A3B8;'>"
+                    f"↳ As {_n_filhos} sub-opção(ões) acima ficam inativas enquanto "
+                    f"'{_g['titulo']}' estiver desabilitado."
+                    f"</small></div>",
+                    unsafe_allow_html=True,
+                )
+
+            st.markdown("<div style='height:10px'></div>", unsafe_allow_html=True)
 
         _btn_salvar_perm = st.button(
             "💾 Salvar Permissões",
