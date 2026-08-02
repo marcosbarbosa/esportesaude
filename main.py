@@ -1820,9 +1820,20 @@ if st.session_state.menu_atual == "Principal":
             computar_snapshot_home_grid as _computar_snap_home,
         )
 
-        # ── Linha de título + busca + turma + sexo + botão Processar em Lote ──
-        _hg_c_titulo, _hg_c_busca, _hg_c_turma, _hg_c_sexo, _hg_c_lote = st.columns(
-            [1.4, 2.5, 1.8, 1.4, 1.3], vertical_alignment="bottom", gap="small"
+        # ── Catálogo de colunas toggleáveis (chave, rótulo UI, largura tela) ──
+        _HG_COL_DEFS = [
+            ("turma",    "Turma",        0.9),
+            ("aniv",     "Aniversário",  0.8),
+            ("freq",     "Freq.+Pres.",  1.6),
+            ("atestado", "Atestado",     1.0),
+            ("pa",       "Última PA",    1.0),
+            ("anam",     "Anamnese",     1.0),
+            ("wap",      "WhatsApp",     0.8),
+        ]
+
+        # ── Linha de título + busca + turma + sexo + colunas + Processar em Lote ──
+        _hg_c_titulo, _hg_c_busca, _hg_c_turma, _hg_c_sexo, _hg_c_cols, _hg_c_lote = st.columns(
+            [1.4, 2.5, 1.8, 1.4, 0.75, 1.3], vertical_alignment="bottom", gap="small"
         )
         _hg_c_titulo.markdown(
             "<p style='font-weight:800;color:#0A2540;font-size:1.05rem;margin:0;'>👥 Alunos Ativos</p>",
@@ -1863,6 +1874,13 @@ if st.session_state.menu_atual == "Principal":
                     st.rerun()
                 else:
                     st.error(f"Erro ao salvar painel: {_msg_snap}")
+
+        # Popover de visibilidade de colunas
+        with _hg_c_cols:
+            with st.popover("⊞", use_container_width=True, help="Mostrar/ocultar colunas"):
+                st.caption("**Colunas visíveis:**")
+                for _ck, _cl, _ in _HG_COL_DEFS:
+                    st.checkbox(_cl, value=True, key=f"hg_col_{_ck}")
 
         if _snap_ts:
             st.caption(f"📦 Painel processado em: **{_snap_ts}**")
@@ -2046,6 +2064,10 @@ if st.session_state.menu_atual == "Principal":
                 )
             _hg_sexo = _hg_sexo or "Todos"
 
+            # Visibilidade de colunas (lida do session_state, padrão True)
+            _hg_vis = {k: st.session_state.get(f"hg_col_{k}", True)
+                       for k, _, _ in _HG_COL_DEFS}
+
             # Aplicar filtros
             _df_grid = _df_hg.copy()
             _df_grid = _faf_hg(_df_grid, _hg_busca, cols=["nome", "turma"], min_len=3)
@@ -2144,7 +2166,7 @@ if st.session_state.menu_atual == "Principal":
             _df_pag = _df_grid.iloc[_hg_ini: _hg_ini + _hg_ppp]
 
             # Gerador de PDF da lista home
-            def _gerar_pdf_hg(df: pd.DataFrame) -> bytes:
+            def _gerar_pdf_hg(df: pd.DataFrame, vis: dict | None = None) -> bytes:
                 import io as _io
                 import requests as _req
                 from fpdf import FPDF
@@ -2240,11 +2262,25 @@ if st.session_state.menu_atual == "Principal":
                 pdf.add_page()
                 pdf.set_auto_page_break(False, margin=14)
 
-                # colunas:  Foto | # | Nome | Turma | Aniv | Freq | UltPres | Venc | PA | Anam | Vol
-                _hdrs  = ["",       "#", "Nome", "Turma", "Aniversario", "Freq.60d",
-                          "Ultima Pres.", "Venc. Atestado", "Ult. PA", "Anamnese", "Voluntariado"]
-                _widths = [_FOTO_W,  6,   48,     20,      13,           12,
-                           20,            20,              28,        32,          32]
+                # colunas dinâmicas conforme visibilidade
+                _vp = lambda k: vis.get(k, True) if vis else True
+                _pdf_col_spec = [
+                    # (show, header, width)
+                    (True,             "",               _FOTO_W),
+                    (True,             "#",              6),
+                    (True,             "Nome",           48),
+                    (_vp("turma"),     "Turma",          20),
+                    (_vp("aniv"),      "Aniversario",    13),
+                    (_vp("freq"),      "Freq.60d",       12),
+                    (_vp("freq"),      "Ultima Pres.",   20),
+                    (_vp("atestado"),  "Venc. Atestado", 20),
+                    (_vp("pa"),        "Ult. PA",        28),
+                    (_vp("anam"),      "Anamnese",       32),
+                    (_vp("wap"),       "WhatsApp",       22),
+                    (True,             "Voluntariado",   32),
+                ]
+                _hdrs   = [h for show, h, w in _pdf_col_spec if show]
+                _widths = [w for show, h, w in _pdf_col_spec if show]
 
                 # Cabeçalho azul
                 pdf.set_font("Helvetica", "B", 8)
@@ -2325,26 +2361,28 @@ if st.session_state.menu_atual == "Principal":
                         _vol_pdf_val = _fallback[:22] if _fallback else "Sim"
                     else:
                         _vol_pdf_val = "-"
-                    _txt_vals = [
-                        str(i + 1),
-                        str(a.get("nome", ""))[:28],
-                        str(a.get("turma", ""))[:12],
-                        _nasc_pdf,
-                        str(int(a.get("total_presencas_hist", 0))),
-                        _up_str,
-                        _dv_str,
-                        str(a.get("_pa_txt", "") or "-")[:11],
-                        f"{_anam_pdf_str} ({_anam_lbl_pdf})"[:18],
-                        _vol_pdf_val,
+                    _txt_all = [
+                        (True,             str(i + 1)),
+                        (True,             str(a.get("nome", ""))[:28]),
+                        (_vp("turma"),     str(a.get("turma", ""))[:12]),
+                        (_vp("aniv"),      _nasc_pdf),
+                        (_vp("freq"),      str(int(a.get("total_presencas_hist", 0)))),
+                        (_vp("freq"),      _up_str),
+                        (_vp("atestado"),  _dv_str),
+                        (_vp("pa"),        str(a.get("_pa_txt", "") or "-")[:11]),
+                        (_vp("anam"),      f"{_anam_pdf_str} ({_anam_lbl_pdf})"[:18]),
+                        (_vp("wap"),       str(a.get("whatsapp") or "-")[:18]),
+                        (True,             _vol_pdf_val),
                     ]
-                    for _w, _v in zip(_widths[1:], _txt_vals):
-                        pdf.cell(_w, _ROW_H, _s(_v), border=0, fill=True)
+                    _txt_vals = [v for show, v in _txt_all if show]
+                    for _pw, _pv in zip(_widths[1:], _txt_vals):
+                        pdf.cell(_pw, _ROW_H, _s(_pv), border=0, fill=True)
                     pdf.ln()
 
                 return bytes(pdf.output())
 
             # ── Gerador de Excel da lista home ───────────────────────────
-            def _gerar_excel_hg(df: pd.DataFrame) -> bytes:
+            def _gerar_excel_hg(df: pd.DataFrame, vis: dict | None = None) -> bytes:
                 import io as _io
                 import openpyxl
                 from openpyxl.styles import (
@@ -2375,8 +2413,30 @@ if st.session_state.menu_atual == "Principal":
                 _meses = ["","jan","fev","mar","abr","mai","jun",
                           "jul","ago","set","out","nov","dez"]
 
+                # Catálogo de colunas: (key, header, xl_width, color_key, wrap, center)
+                _xl_spec = [
+                    (None,       "#",               6,   None,    False, True),
+                    (None,       "Nome",            36,  None,    True,  False),
+                    ("turma",    "Turma",           14,  None,    False, False),
+                    ("aniv",     "Aniversário",     13,  None,    False, False),
+                    ("freq",     "Freq. 60d",        9,  None,    False, True),
+                    ("freq",     "Total Presenças", 14,  None,    False, True),
+                    ("freq",     "Última Presença", 14,  None,    False, False),
+                    ("atestado", "Venc. Atestado",  14,  "atest", False, False),
+                    ("atestado", "Status Atest.",   12,  "atest", False, False),
+                    ("pa",       "Última PA",       12,  None,    False, False),
+                    ("anam",     "Anamnese Data",   13,  "anam",  False, False),
+                    ("anam",     "Status Anam.",    12,  "anam",  False, False),
+                    (None,       "Voluntariado",    28,  None,    True,  False),
+                    ("wap",      "WhatsApp",        16,  None,    True,  False),
+                    (None,       "Tags de Saúde",   40,  None,    True,  False),
+                ]
+                _vxl = lambda k: k is None or (vis.get(k, True) if vis else True)
+                _act_spec = [(k, h, w, ck, wr, cn) for k, h, w, ck, wr, cn in _xl_spec if _vxl(k)]
+                _cols = [(h, w) for _, h, w, _, _, _ in _act_spec]
+
                 # ── Título e metadados ────────────────────────────────────
-                ws.merge_cells("A1:O1")
+                ws.merge_cells(f"A1:{get_column_letter(len(_cols))}1")
                 ws["A1"] = f"IMBRA – Alunos Ativos  |  Emitido em: {datetime.date.today().strftime('%d/%m/%Y')}  |  Total: {len(df)} aluno(s)"
                 ws["A1"].font = Font(bold=True, size=12, color=_HDR_FG)
                 ws["A1"].fill = _fill(_HDR_BG)
@@ -2488,26 +2548,25 @@ if st.session_state.menu_atual == "Principal":
 
                     _tags_str = str(a.get("tags_saude") or "")
 
-                    vals = [
-                        i + 1,
-                        str(a.get("nome", "")),
-                        str(a.get("turma", "")),
-                        _aniv,
-                        _freq60,
-                        _tot_pr,
-                        _up_str,
-                        _dv_str,
-                        _atest_lbl,
-                        _pa_txt,
-                        _anam_str,
-                        _anam_lbl,
-                        _vol_str,
-                        str(a.get("whatsapp") or ""),
-                        _tags_str,
+                    _all_xl_vals = [
+                        (None,       i + 1),
+                        (None,       str(a.get("nome", ""))),
+                        ("turma",    str(a.get("turma", ""))),
+                        ("aniv",     _aniv),
+                        ("freq",     _freq60),
+                        ("freq",     _tot_pr),
+                        ("freq",     _up_str),
+                        ("atestado", _dv_str),
+                        ("atestado", _atest_lbl),
+                        ("pa",       _pa_txt),
+                        ("anam",     _anam_str),
+                        ("anam",     _anam_lbl),
+                        (None,       _vol_str),
+                        ("wap",      str(a.get("whatsapp") or "")),
+                        (None,       _tags_str),
                     ]
+                    vals = [v for k, v in _all_xl_vals if _vxl(k)]
 
-                    # Cor de fundo do status do atestado na coluna 8 (Venc. Atestado)
-                    _row_status_bg = base_bg
                     _atest_cell_bg = {
                         "vencido": _ALERT_BG, "a_vencer": _WARN_BG, "ok": _OK_BG,
                     }.get(_atest_status, base_bg)
@@ -2516,21 +2575,22 @@ if st.session_state.menu_atual == "Principal":
                         "ok": _OK_BG, "nunca": _ALERT_BG,
                     }.get(_anam_status, base_bg)
 
-                    for ci, val in enumerate(vals, start=1):
+                    for ci, (val, (_, _, _, color_key, wrap, center)) in enumerate(
+                        zip(vals, _act_spec), start=1
+                    ):
                         cell = ws.cell(row=row, column=ci, value=val)
-                        cell.border    = border
-                        cell.alignment = Alignment(vertical="center",
-                                                   wrap_text=(ci in (2, 13, 14)))
-                        if ci in (8, 9):        # atestado
+                        cell.border = border
+                        if color_key == "atest":
                             cell.fill = _fill(_atest_cell_bg)
-                        elif ci in (11, 12):    # anamnese
+                        elif color_key == "anam":
                             cell.fill = _fill(_anam_cell_bg)
                         else:
                             cell.fill = _fill(base_bg)
-                        if ci in (1,):
-                            cell.alignment = Alignment(horizontal="center", vertical="center")
-                        if ci in (5, 6):
-                            cell.alignment = Alignment(horizontal="center", vertical="center")
+                        cell.alignment = Alignment(
+                            horizontal="center" if center else "left",
+                            vertical="center",
+                            wrap_text=wrap,
+                        )
 
                     ws.row_dimensions[row].height = 18
 
@@ -2545,6 +2605,12 @@ if st.session_state.menu_atual == "Principal":
             # Barra de info + navegação + impressão + excel
             _hg_pdf_key  = "hg_pdf_lista"
             _hg_xlsx_key = "hg_xlsx_lista"
+            # Invalida cache PDF/Excel quando visibilidade muda
+            _hg_vis_sig = str(sorted(_hg_vis.items()))
+            if st.session_state.get("_hg_vis_sig_last") != _hg_vis_sig:
+                st.session_state["_hg_vis_sig_last"] = _hg_vis_sig
+                st.session_state.pop(_hg_pdf_key, None)
+                st.session_state.pop(_hg_xlsx_key, None)
             _pc1, _pc2, _pc3, _pc_imp, _pc_xl = st.columns(
                 [2.5, 0.6, 0.6, 0.9, 0.9], gap="small", vertical_alignment="center"
             )
@@ -2571,7 +2637,7 @@ if st.session_state.menu_atual == "Principal":
                 )
             else:
                 if _pc_imp.button("🖨️ Imprimir", key="hg_imp", use_container_width=True):
-                    st.session_state[_hg_pdf_key] = _gerar_pdf_hg(_df_grid)
+                    st.session_state[_hg_pdf_key] = _gerar_pdf_hg(_df_grid, _hg_vis)
                     st.rerun()
 
             # botão Excel
@@ -2587,16 +2653,26 @@ if st.session_state.menu_atual == "Principal":
                 )
             else:
                 if _pc_xl.button("📊 Excel", key="hg_xl", use_container_width=True):
-                    st.session_state[_hg_xlsx_key] = _gerar_excel_hg(_df_grid)
+                    st.session_state[_hg_xlsx_key] = _gerar_excel_hg(_df_grid, _hg_vis)
                     st.rerun()
 
-            # ── Cabeçalho das colunas (clicável para ordenar) ──────────
-            _h0, _h1, _h2, _h3, _h4, _h5, _h5b, _h5c, _h_wap, _h6 = st.columns(
-                [0.5, 2.1, 0.9, 0.8, 1.6, 1.0, 1.0, 1.0, 0.8, 0.9], gap="small"
-            )
-            _h0.markdown(" ", unsafe_allow_html=True)
-            _h_wap.markdown("<span style='font-size:12px;font-weight:600;color:#475569;'>📱 WhatsApp</span>", unsafe_allow_html=True)
-            _h6.markdown(" ", unsafe_allow_html=True)
+            # ── Cabeçalho dinâmico das colunas (clicável para ordenar) ──────────
+            _hdr_w = [0.5, 2.1]
+            _hdr_k = ["_h_foto", "_h_nome"]
+            for _hk, _, _hw in _HG_COL_DEFS:
+                if _hg_vis.get(_hk, True):
+                    _hdr_w.append(_hw)
+                    _hdr_k.append(f"_hh_{_hk}")
+            _hdr_w.append(0.9); _hdr_k.append("_h_btn")
+            _hdr_cols_list = st.columns(_hdr_w, gap="small")
+            _hcm = dict(zip(_hdr_k, _hdr_cols_list))
+            _hcm["_h_foto"].markdown(" ", unsafe_allow_html=True)
+            _hcm["_h_btn"].markdown(" ", unsafe_allow_html=True)
+            if "_hh_wap" in _hcm:
+                _hcm["_hh_wap"].markdown(
+                    "<span style='font-size:12px;font-weight:600;color:#475569;'>📱 WhatsApp</span>",
+                    unsafe_allow_html=True,
+                )
 
             def _sort_btn(col_widget, label, sort_key):
                 _ativo = (st.session_state.get("hg_sort_col") == sort_key)
@@ -2615,13 +2691,13 @@ if st.session_state.menu_atual == "Principal":
                     st.session_state.hg_pg = 1
                     st.rerun()
 
-            _sort_btn(_h1, "Nome",                 "nome")
-            _sort_btn(_h2, "Turma",                "turma")
-            _sort_btn(_h3, "🎂 Aniversário",       "aniversario")
-            _sort_btn(_h4, "⏱ Freq.60d + Pres.",  "total_presencas_hist")
-            _sort_btn(_h5, "🏥 Venc. Atestado",    "data_vencimento_atestado")
-            _sort_btn(_h5b, "🩸 Últ. PA",          "_pa_sis")
-            _sort_btn(_h5c, "📋 Anamnese",         "_anam_data")
+            _sort_btn(_hcm["_h_nome"], "Nome", "nome")
+            if "_hh_turma"    in _hcm: _sort_btn(_hcm["_hh_turma"],    "Turma",              "turma")
+            if "_hh_aniv"     in _hcm: _sort_btn(_hcm["_hh_aniv"],     "🎂 Aniversário",     "aniversario")
+            if "_hh_freq"     in _hcm: _sort_btn(_hcm["_hh_freq"],     "⏱ Freq.60d + Pres.", "total_presencas_hist")
+            if "_hh_atestado" in _hcm: _sort_btn(_hcm["_hh_atestado"], "🏥 Venc. Atestado",  "data_vencimento_atestado")
+            if "_hh_pa"       in _hcm: _sort_btn(_hcm["_hh_pa"],       "🩸 Últ. PA",         "_pa_sis")
+            if "_hh_anam"     in _hcm: _sort_btn(_hcm["_hh_anam"],     "📋 Anamnese",        "_anam_data")
 
             # Pré-carregar IDs avaliados (1 query, sem N+1 no loop)
             try:
@@ -2638,10 +2714,27 @@ if st.session_state.menu_atual == "Principal":
 
             for _, _r in _df_pag.iterrows():
                 with st.container(border=True):
-                    _ca, _cb, _cc, _cd, _ce, _cg, _cpa, _canam, _cwap, _cf = st.columns(
-                        [0.5, 2.1, 0.9, 0.8, 1.6, 1.0, 1.0, 1.0, 0.8, 0.9], gap="small",
-                        vertical_alignment="center"
-                    )
+                    # Colunas dinâmicas conforme visibilidade
+                    class _HgNoop:
+                        def markdown(self, *a, **kw): pass
+                    _HGNOOP = _HgNoop()
+                    _row_w = [0.5, 2.1]
+                    _row_k = ["_ca", "_cb"]
+                    for _rk, _, _rw in _HG_COL_DEFS:
+                        if _hg_vis.get(_rk, True):
+                            _row_w.append(_rw)
+                            _row_k.append(_rk)
+                    _row_w.append(0.9); _row_k.append("_cf")
+                    _row_cols_list = st.columns(_row_w, gap="small", vertical_alignment="center")
+                    _rcm = dict(zip(_row_k, _row_cols_list))
+                    _ca    = _rcm["_ca"]; _cb = _rcm["_cb"]; _cf = _rcm["_cf"]
+                    _cc    = _rcm.get("turma",    _HGNOOP)
+                    _cd    = _rcm.get("aniv",     _HGNOOP)
+                    _ce    = _rcm.get("freq",     _HGNOOP)
+                    _cg    = _rcm.get("atestado", _HGNOOP)
+                    _cpa   = _rcm.get("pa",       _HGNOOP)
+                    _canam = _rcm.get("anam",     _HGNOOP)
+                    _cwap  = _rcm.get("wap",      _HGNOOP)
 
                     # Foto
                     _foto = str(_r.get("foto_url") or "").strip()
