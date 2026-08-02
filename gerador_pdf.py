@@ -2203,8 +2203,9 @@ def _pagina_prestacao_diaria(
 ):
     """Renderiza uma página completa de presença para um único dia.
 
-    objetivo_periodo: quando informado (somente na 1ª página), exibe duas linhas
+    objetivo_periodo: quando informado (somente na 1ª página), exibe até 3 linhas
     com o objetivo das aulas do período, antes do cabeçalho da lista de presença.
+    O multi_cell quebra automaticamente — o texto aparece integralmente no impresso.
     """
     _cabecalho_padrao(pdf, subtitulo="PLANILHA DE FREQUENCIA DIARIA")
 
@@ -2802,8 +2803,8 @@ def criar_prestacao_periodo_pdf(
     satisfacao_secoes (opcional): lista de dicts retornados por
         obter_dados_satisfacao() — cada item gera uma página de satisfação
         APÓS a capa e ANTES das páginas diárias.
-    objetivo_periodo (opcional): texto de até 2 linhas com o objetivo das
-        aulas, exibido somente na primeira página de presença.
+    objetivo_periodo (opcional): texto de até 3 linhas com o objetivo das
+        aulas, exibido somente na primeira página de presença (impresso integralmente).
     """
     import datetime as _dt
     pdf = PDF()

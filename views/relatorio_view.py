@@ -1806,10 +1806,18 @@ def _render_pdf_options_prestacao(
     if _datas_periodo:
         _obj_lista = get_objetivos_diario_periodo(_datas_periodo[0], _datas_periodo[-1])
         if _obj_lista:
-            # Une objetivos únicos; trunca a ~280 chars mantendo frase completa
+            # Une objetivos únicos; trunca a ~420 chars mantendo frase completa
             _texto_junto = "; ".join(_obj_lista)
-            if len(_texto_junto) > 280:
-                _texto_junto = _texto_junto[:277].rsplit(";", 1)[0].strip() + "."
+            if len(_texto_junto) > 420:
+                # Prefere cortar no fim de uma frase (ponto final)
+                _trecho = _texto_junto[:420]
+                _ult_ponto = _trecho.rfind(".")
+                _ult_pv    = _trecho.rfind(";")
+                _corte     = max(_ult_ponto, _ult_pv)
+                if _corte > 200:  # só aplica se encontrar divisão razoável
+                    _texto_junto = _trecho[:_corte + 1].strip()
+                else:
+                    _texto_junto = _trecho.rstrip(";, ").strip() + "."
             _sugestao_obj = _texto_junto
 
     # Mostra sugestão como preview clicável (acima do campo editável)
@@ -1835,8 +1843,8 @@ def _render_pdf_options_prestacao(
 
     objetivo_periodo = st.text_area(
         "📝 Objetivo das aulas do período (opcional)",
-        max_chars=300,
-        height=80,
+        max_chars=450,
+        height=100,
         key="pd_objetivo_periodo",
         placeholder=(
             "Ex.: Exercícios de equilíbrio, coordenação motora e respiração consciente. "
