@@ -2143,6 +2143,11 @@ if st.session_state.menu_atual == "Principal":
                 _df_grid = _df_grid.sort_values(
                     ["_mes_n", "_dia_n"], ascending=_sa, na_position="last"
                 )
+            elif _sc == "ultima_presenca":
+                # Ausente há mais tempo primeiro: NaT (nunca veio) sobe ao topo
+                _df_grid = _df_grid.sort_values(
+                    _sc, ascending=_sa, na_position="first" if _sa else "last"
+                )
             elif _sc in _df_grid.columns:
                 _df_grid = _df_grid.sort_values(_sc, ascending=_sa, na_position="last")
             else:
@@ -2694,7 +2699,10 @@ if st.session_state.menu_atual == "Principal":
             _sort_btn(_hcm["_h_nome"], "Nome", "nome")
             if "_hh_turma"    in _hcm: _sort_btn(_hcm["_hh_turma"],    "Turma",              "turma")
             if "_hh_aniv"     in _hcm: _sort_btn(_hcm["_hh_aniv"],     "🎂 Aniversário",     "aniversario")
-            if "_hh_freq"     in _hcm: _sort_btn(_hcm["_hh_freq"],     "⏱ Freq.60d + Pres.", "total_presencas_hist")
+            if "_hh_freq"     in _hcm:
+                _hf1, _hf2 = _hcm["_hh_freq"].columns(2, gap="small")
+                _sort_btn(_hf1, "⏱ Freq.60d", "freq_60d")
+                _sort_btn(_hf2, "📅 Últ. Pres.", "ultima_presenca")
             if "_hh_atestado" in _hcm: _sort_btn(_hcm["_hh_atestado"], "🏥 Venc. Atestado",  "data_vencimento_atestado")
             if "_hh_pa"       in _hcm: _sort_btn(_hcm["_hh_pa"],       "🩸 Últ. PA",         "_pa_sis")
             if "_hh_anam"     in _hcm: _sort_btn(_hcm["_hh_anam"],     "📋 Anamnese",        "_anam_data")
