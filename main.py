@@ -1820,9 +1820,9 @@ if st.session_state.menu_atual == "Principal":
             computar_snapshot_home_grid as _computar_snap_home,
         )
 
-        # ── Linha de título + busca + turma + botão Processar em Lote ────────
-        _hg_c_titulo, _hg_c_busca, _hg_c_turma, _hg_c_lote = st.columns(
-            [1.4, 2.5, 1.8, 1.3], vertical_alignment="bottom", gap="small"
+        # ── Linha de título + busca + turma + sexo + botão Processar em Lote ──
+        _hg_c_titulo, _hg_c_busca, _hg_c_turma, _hg_c_sexo, _hg_c_lote = st.columns(
+            [1.4, 2.5, 1.8, 1.4, 1.3], vertical_alignment="bottom", gap="small"
         )
         _hg_c_titulo.markdown(
             "<p style='font-weight:800;color:#0A2540;font-size:1.05rem;margin:0;'>👥 Alunos Ativos</p>",
@@ -2035,11 +2035,28 @@ if st.session_state.menu_atual == "Principal":
                 label_visibility="collapsed", key="hg_turma"
             )
 
+            # Filtro de sexo — segmented_control (pills, 1 clique)
+            with _hg_c_sexo:
+                _hg_sexo = st.segmented_control(
+                    "Sexo",
+                    options=["Todos", "♀ Fem.", "♂ Masc."],
+                    default="Todos",
+                    key="hg_sexo",
+                    label_visibility="collapsed",
+                )
+            _hg_sexo = _hg_sexo or "Todos"
+
             # Aplicar filtros
             _df_grid = _df_hg.copy()
             _df_grid = _faf_hg(_df_grid, _hg_busca, cols=["nome", "turma"], min_len=3)
             if _hg_turma != "Todas":
                 _df_grid = _df_grid[_df_grid["turma"] == _hg_turma]
+            if _hg_sexo != "Todos" and "sexo" in _df_grid.columns:
+                _sexo_val = "F" if "Fem" in _hg_sexo else "M"
+                # Aceita tanto "M"/"F" quanto "Masculino"/"Feminino"
+                _df_grid = _df_grid[
+                    _df_grid["sexo"].astype(str).str.upper().str.startswith(_sexo_val)
+                ]
 
             # Pré-carrega vínculos estruturados de voluntariado (1 query, sem N+1)
             try:
