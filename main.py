@@ -2256,6 +2256,17 @@ if st.session_state.menu_atual == "Principal":
                     _caption_vol += " identificado(s) na base ativa"
                 st.caption(_caption_vol)
 
+            # ── Ao trocar de turma, limpar filtro de faixa automaticamente ──────────
+            _turma_prev_ev = st.session_state.get("hg_turma_prev_ev")
+            if (_turma_prev_ev is not None and
+                    _turma_prev_ev != _hg_turma and
+                    st.session_state.get("hg_filtro_evasao")):
+                st.session_state.pop("hg_filtro_evasao", None)
+                st.session_state["hg_turma_prev_ev"] = _hg_turma
+                st.session_state.hg_pg = 1
+                st.rerun()
+            st.session_state["hg_turma_prev_ev"] = _hg_turma
+
             # ── Filtro por faixa de evasão (aplicado após todos os outros filtros) ─
             _hg_faixa_ev = st.session_state.get("hg_filtro_evasao")  # verde/amarelo/laranja/vermelho ou None
             if _hg_faixa_ev and "ultima_presenca" in _df_grid.columns:
@@ -2278,6 +2289,38 @@ if st.session_state.menu_atual == "Principal":
                 _df_grid = _df_grid[
                     _df_grid["ultima_presenca"].map(_classifica_faixa) == _hg_faixa_ev
                 ].reset_index(drop=True)
+
+            # ── Pill de filtro de faixa ativo ─────────────────────────────────
+            if _hg_faixa_ev:
+                _faixa_pill_map = {
+                    "verde":    ("🟢", "Ausência ≤ 7 dias",   "#D1FAE5", "#065F46"),
+                    "amarelo":  ("🟡", "Ausência 8–30 dias",  "#FEF3C7", "#92400E"),
+                    "laranja":  ("🟠", "Ausência 31–60 dias", "#FFEDD5", "#9A3412"),
+                    "vermelho": ("🔴", "Ausência > 60 dias",  "#FEE2E2", "#991B1B"),
+                }
+                _pill_emoji, _pill_desc, _pill_bg, _pill_fg = _faixa_pill_map.get(
+                    _hg_faixa_ev, ("🔵", _hg_faixa_ev, "#DBEAFE", "#1E3A8A")
+                )
+                _pill_col, _pill_btn_col = st.columns([5, 1], gap="small")
+                _pill_col.markdown(
+                    f"<div style='background:{_pill_bg};color:{_pill_fg};"
+                    f"padding:5px 12px;border-radius:9999px;display:inline-flex;"
+                    f"align-items:center;gap:6px;font-size:12px;font-weight:600;"
+                    f"border:1px solid {_pill_fg}44;margin:2px 0;'>"
+                    f"{_pill_emoji}&nbsp;<b>Filtro de faixa:</b>&nbsp;{_pill_desc}"
+                    f"&nbsp;<span style='opacity:0.6;font-size:10px;'>"
+                    f"· {len(_df_grid)} aluno(s)</span></div>",
+                    unsafe_allow_html=True,
+                )
+                if _pill_btn_col.button(
+                    "✖ Limpar filtro",
+                    key="hg_pill_clear",
+                    use_container_width=True,
+                    help="Remover filtro de faixa de ausência e voltar ao grid completo",
+                ):
+                    st.session_state.pop("hg_filtro_evasao", None)
+                    st.session_state.hg_pg = 1
+                    st.rerun()
 
             # Ordenação dinâmica
             if "hg_sort_col" not in st.session_state:
