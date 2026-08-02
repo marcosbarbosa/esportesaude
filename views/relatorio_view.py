@@ -738,6 +738,436 @@ def gerar_word_prestacao_contas(
 
 
 # ==============================================================================
+# 🏆 MOTOR WORD: PRESTAÇÃO DE CONTAS (PERÍODO COMPLETO) — fiel ao PDF
+# ==============================================================================
+def gerar_word_prestacao_periodo(
+    dias: dict,
+    resumo: dict = None,
+    satisfacao_secoes: list = None,
+    objetivo_periodo: str = "",
+    somente_capa: bool = False,
+) -> bytes | None:
+    """
+    Gera .docx da Prestação de Contas do período, ultra-fiel ao PDF:
+    - Capa: KPI cards coloridos, gráfico de linhas, grids semana/mês, tabela dias sem aula
+    - Satisfação (opcional): 5 KPI cards, 4 gráficos pizza, tabelas de sentimento, comentários
+    - Páginas diárias: objetivo do período, cabeçalho azul com data, tabela zebra de nomes
+    """
+    if not DOCX_DISPONIVEL:
+        return None
+
+    import io as _io
+    from docx import Document as _Doc
+    from docx.shared import Pt as _Pt, RGBColor as _RGB, Cm as _Cm
+    from docx.enum.text import WD_ALIGN_PARAGRAPH as _AP
+    from docx.enum.table import WD_TABLE_ALIGNMENT as _TA, WD_ALIGN_VERTICAL as _AV
+    from docx.oxml.ns import qn as _qn
+    from docx.oxml import OxmlElement as _OE
+
+    doc = _Doc()
+    for sec in doc.sections:
+        sec.page_width    = _Cm(21.0)
+        sec.page_height   = _Cm(29.7)
+        sec.top_margin    = _Cm(1.8)
+        sec.bottom_margin = _Cm(1.8)
+        sec.left_margin   = _Cm(1.8)
+        sec.right_margin  = _Cm(1.8)
+
+    # ── helpers ─────────────────────────────────────────────────────────────
+    def _cbg(cell, hex6):
+        tcPr = cell._tc.get_or_add_tcPr()
+        shd = _OE('w:shd')
+        shd.set(_qn('w:val'),   'clear')
+        shd.set(_qn('w:color'), 'auto')
+        shd.set(_qn('w:fill'),  hex6.lstrip('#'))
+        tcPr.append(shd)
+
+    def _borders(table, color="D1D5DB"):
+        for row in table.rows:
+            for cell in row.cells:
+                tcPr = cell._tc.get_or_add_tcPr()
+                tcB = _OE('w:tcBorders')
+                for side in ('top','left','bottom','right'):
+                    b = _OE(f'w:{side}')
+                    b.set(_qn('w:val'),   'single')
+                    b.set(_qn('w:sz'),    '4')
+                    b.set(_qn('w:color'), color)
+                    tcB.append(b)
+                tcPr.append(tcB)
+
+    def _no_borders(table):
+        for row in table.rows:
+            for cell in row.cells:
+                tcPr = cell._tc.get_or_add_tcPr()
+                tcB = _OE('w:tcBorders')
+                for side in ('top','left','bottom','right','insideH','insideV'):
+                    b = _OE(f'w:{side}')
+                    b.set(_qn('w:val'), 'none')
+                    tcB.append(b)
+                tcPr.append(tcB)
+
+    def _add_header(subtitle=""):
+        try:
+            from utils.identidade import get_config as _cfg
+            cfg = _cfg()
+        except Exception:
+            cfg = {}
+        titulo   = cfg.get("titulo_projeto",  "ESPORTE E SAUDE NA COMUNIDADE - FASE 2")
+        logo_esq = cfg.get("logo_secundaria", "logo-secretaria.png")
+        logo_dir = cfg.get("logo_principal",  "logo-imbra.png")
+        t = doc.add_table(rows=1, cols=3)
+        t.alignment = _TA.CENTER
+        _no_borders(t)
+        t.columns[0].width = _Cm(3.2)
+        t.columns[1].width = _Cm(11.4)
+        t.columns[2].width = _Cm(2.8)
+        c_esq, c_ctr, c_dir = t.rows[0].cells
+        for c in (c_esq, c_ctr, c_dir):
+            c.vertical_alignment = _AV.CENTER
+        for path in [logo_esq, logo_esq.replace(".png",".jpg"), logo_esq.replace(".jpg",".png")]:
+            if path and os.path.exists(path):
+                try:
+                    c_esq.paragraphs[0].add_run().add_picture(path, width=_Cm(3.0))
+                except Exception: pass
+                break
+        p_c = c_ctr.paragraphs[0]
+        p_c.alignment = _AP.CENTER
+        r1 = p_c.add_run(titulo + "\n")
+        r1.bold = True; r1.font.size = _Pt(11); r1.font.color.rgb = _RGB(10,37,64)
+        if subtitle:
+            r2 = p_c.add_run(subtitle)
+            r2.font.size = _Pt(8); r2.font.color.rgb = _RGB(100,116,139)
+        # borda inferior azul na célula central (simula linha separadora)
+        tcPr = c_ctr._tc.get_or_add_tcPr()
+        tcB = _OE('w:tcBorders')
+        bot = _OE('w:bottom')
+        bot.set(_qn('w:val'), 'single'); bot.set(_qn('w:sz'), '12'); bot.set(_qn('w:color'), '0056B3')
+        tcB.append(bot); tcPr.append(tcB)
+        p_d = c_dir.paragraphs[0]; p_d.alignment = _AP.RIGHT
+        for path in [logo_dir, logo_dir.replace(".png",".jpg"), logo_dir.replace(".jpg",".png")]:
+            if path and os.path.exists(path):
+                try:
+                    p_d.add_run().add_picture(path, width=_Cm(2.4))
+                except Exception: pass
+                break
+
+    def _kpi_cards(cards, n_cols=4):
+        """Tabela de KPI cards coloridos: valor (grande) + rótulo (pequeno) em 2 linhas."""
+        t = doc.add_table(rows=2, cols=n_cols)
+        t.alignment = _TA.CENTER
+        _no_borders(t)
+        cw = _Cm(17.0 / n_cols)
+        for i in range(n_cols):
+            t.columns[i].width = cw
+        for idx, (valor, label, cor) in enumerate(cards):
+            cv = t.rows[0].cells[idx]
+            cl = t.rows[1].cells[idx]
+            _cbg(cv, cor); _cbg(cl, cor)
+            pv = cv.paragraphs[0]; pv.alignment = _AP.CENTER; pv.space_before = _Pt(4)
+            rv = pv.add_run(valor)
+            rv.bold = True; rv.font.size = _Pt(20); rv.font.color.rgb = _RGB(255,255,255)
+            pl = cl.paragraphs[0]; pl.alignment = _AP.CENTER; pl.space_after = _Pt(4)
+            rl = pl.add_run(label)
+            rl.bold = True; rl.font.size = _Pt(7); rl.font.color.rgb = _RGB(255,255,255)
+
+    def _grid_totais(titulo, itens, hex_cor, n_cols=6):
+        p = doc.add_paragraph()
+        rg = p.add_run(titulo)
+        rg.bold = True; rg.font.size = _Pt(10)
+        rg.font.color.rgb = _RGB(int(hex_cor[:2],16), int(hex_cor[2:4],16), int(hex_cor[4:],16))
+        rows = (len(itens) + n_cols - 1) // n_cols
+        t = doc.add_table(rows=rows * 2, cols=n_cols)
+        t.alignment = _TA.CENTER; _no_borders(t)
+        cw = _Cm(17.0 / n_cols)
+        for i in range(n_cols): t.columns[i].width = cw
+        for idx, it in enumerate(itens):
+            rv = (idx // n_cols) * 2; rl = rv + 1; col = idx % n_cols
+            cv = t.rows[rv].cells[col]; cl = t.rows[rl].cells[col]
+            _cbg(cv, "F6F9FC"); _cbg(cl, "F6F9FC")
+            pv = cv.paragraphs[0]; pv.alignment = _AP.CENTER
+            rvr = pv.add_run(str(it.get("valor", 0)))
+            rvr.bold = True; rvr.font.size = _Pt(12)
+            rvr.font.color.rgb = _RGB(int(hex_cor[:2],16), int(hex_cor[2:4],16), int(hex_cor[4:],16))
+            pl = cl.paragraphs[0]; pl.alignment = _AP.CENTER
+            plr = pl.add_run(str(it.get("label", "")))
+            plr.font.size = _Pt(6); plr.font.color.rgb = _RGB(90,100,110)
+        doc.add_paragraph()
+
+    def _chart_png(serie):
+        import plotly.graph_objects as go
+        valores = [int(p.get("valor", 0) or 0) for p in serie]
+        labels  = [str(p.get("data", "")) for p in serie]
+        n = len(valores); step = max(1, n // 12)
+        tick_vals = [i for i in range(n) if i % step == 0 or i == n - 1]
+        fig = go.Figure()
+        fig.add_trace(go.Scatter(
+            x=list(range(n)), y=valores, mode='lines+markers',
+            line=dict(color='#2563EB', width=2), marker=dict(color='#2563EB', size=5),
+            fill='tozeroy', fillcolor='rgba(191,219,254,0.35)',
+        ))
+        fig.update_layout(
+            width=700, height=220, margin=dict(l=35, r=10, t=10, b=45),
+            plot_bgcolor='#F8FAFC', paper_bgcolor='#FFFFFF', showlegend=False,
+            xaxis=dict(tickmode='array', tickvals=tick_vals,
+                       ticktext=[labels[i] for i in tick_vals],
+                       tickfont=dict(size=7), gridcolor='#EEF0F3',
+                       showline=True, linecolor='#CBD5E1'),
+            yaxis=dict(tickfont=dict(size=8), gridcolor='#EEF0F3',
+                       showline=True, linecolor='#CBD5E1'),
+        )
+        return _io.BytesIO(fig.to_image(format='png', scale=2))
+
+    # ══ SEÇÃO 1: CAPA ════════════════════════════════════════════════════════
+    if resumo:
+        _add_header("PRESTAÇÃO DE CONTAS - RELATÓRIO DE FREQUÊNCIA")
+        p_tit = doc.add_paragraph(); p_tit.alignment = _AP.CENTER; p_tit.space_before = _Pt(10)
+        rt = p_tit.add_run("PRESTAÇÃO DE CONTAS")
+        rt.bold = True; rt.font.size = _Pt(18); rt.font.color.rgb = _RGB(10,37,64)
+        p_per = doc.add_paragraph(); p_per.alignment = _AP.CENTER
+        rp = p_per.add_run(f"Período: {resumo.get('periodo_ini','')}  a  {resumo.get('periodo_fim','')}")
+        rp.font.size = _Pt(11); rp.font.color.rgb = _RGB(100,116,139)
+        doc.add_paragraph()
+
+        dias_sem = resumo.get("dias_sem_aula", []) or []
+        _kpi_cards([
+            (str(resumo.get("total_dias",      0)),   "DIAS COM AULA",       "1E3A5F"),
+            (str(len(dias_sem)),                       "DIAS SEM AULA",       "B45309"),
+            (str(resumo.get("total_presencas", 0)),   "TOTAL DE PRESENÇAS",  "166534"),
+            (str(resumo.get("media_dia",     "0")),   "MÉDIA POR DIA",       "6D28D9"),
+        ], n_cols=4)
+        doc.add_paragraph()
+
+        serie = resumo.get("serie_diaria", []) or []
+        if serie:
+            pg = doc.add_paragraph()
+            rg = pg.add_run("Variação de Presenças no Período")
+            rg.bold = True; rg.font.size = _Pt(11); rg.font.color.rgb = _RGB(30,58,95)
+            try:
+                pi = doc.add_paragraph(); pi.alignment = _AP.CENTER
+                pi.add_run().add_picture(_chart_png(serie), width=_Cm(15))
+            except Exception: pass
+            doc.add_paragraph()
+
+        if resumo.get("totais_semana"):
+            _grid_totais(f"Totais por semana ({len(resumo['totais_semana'])})", resumo["totais_semana"], "1E3A5F")
+        if resumo.get("totais_mes"):
+            _grid_totais(f"Totais por mês ({len(resumo['totais_mes'])})", resumo["totais_mes"], "166534")
+
+        p_dsa = doc.add_paragraph()
+        r_dsa = p_dsa.add_run(f"Dias SEM AULA registrados no Calendário Institucional ({len(dias_sem)})")
+        r_dsa.bold = True; r_dsa.font.size = _Pt(11); r_dsa.font.color.rgb = _RGB(22,101,52)
+        if dias_sem:
+            td = doc.add_table(rows=1 + len(dias_sem), cols=3)
+            td.alignment = _TA.LEFT; _borders(td, "D1FAE5")
+            td.columns[0].width = _Cm(1.2); td.columns[1].width = _Cm(4.0); td.columns[2].width = _Cm(12.2)
+            for ci, txt in enumerate(["#", "DATA", "MOTIVO"]):
+                c = td.rows[0].cells[ci]; _cbg(c, "16A34A")
+                ph = c.paragraphs[0]; ph.alignment = _AP.CENTER
+                rh = ph.add_run(txt)
+                rh.bold = True; rh.font.size = _Pt(9); rh.font.color.rgb = _RGB(255,255,255)
+            for ri, item in enumerate(dias_sem, 1):
+                bg = "F0FDF4" if ri % 2 == 0 else "FFFFFF"
+                rc = td.rows[ri].cells
+                for ci in range(3): _cbg(rc[ci], bg)
+                rc[0].paragraphs[0].alignment = _AP.CENTER
+                r0 = rc[0].paragraphs[0].add_run(str(ri)); r0.bold = True; r0.font.size = _Pt(8)
+                r1 = rc[1].paragraphs[0].add_run(str(item.get("data",""))); r1.font.size = _Pt(9)
+                rc[1].paragraphs[0].alignment = _AP.CENTER
+                r2 = rc[2].paragraphs[0].add_run(str(item.get("motivo","") or "-")); r2.font.size = _Pt(9)
+        else:
+            pn = doc.add_paragraph("Nenhum dia sem aula registrado no período.")
+            if pn.runs: pn.runs[0].font.color.rgb = _RGB(100,116,139)
+        doc.add_paragraph()
+        pf = doc.add_paragraph()
+        rf = pf.add_run(f"Emitido em: {datetime.date.today().strftime('%d/%m/%Y')}  |  Sistema IMBRA - Gestão Inteligente MoveRight")
+        rf.italic = True; rf.font.size = _Pt(8); rf.font.color.rgb = _RGB(100,100,100)
+
+    # ══ SEÇÃO 2: SATISFAÇÃO ══════════════════════════════════════════════════
+    for dados_sat in (satisfacao_secoes or []):
+        if not dados_sat:
+            continue
+        doc.add_page_break()
+        trimestre = dados_sat.get("trimestre", "Ano Completo")
+        ano       = dados_sat.get("ano",       datetime.date.today().year)
+        n_resp    = dados_sat.get("n_resp",    0)
+        tx_exc    = dados_sat.get("tx_exc",    0)
+        tx_dor    = dados_sat.get("tx_dor",    0)
+        tx_ene    = dados_sat.get("tx_ene",    0)
+        tx_imp    = dados_sat.get("tx_imp",    0)
+        df_fil    = dados_sat.get("df_filtrado")
+        df_com    = dados_sat.get("df_com")
+        graficos  = dados_sat.get("graficos_b64", {})
+
+        _add_header(f"SATISFAÇÃO & IMPACTO NA SAÚDE — {trimestre.upper()} {ano}")
+        ps = doc.add_paragraph(); ps.alignment = _AP.CENTER
+        rs = ps.add_run("SATISFAÇÃO & IMPACTO NA SAÚDE")
+        rs.bold = True; rs.font.size = _Pt(14); rs.font.color.rgb = _RGB(10,37,64)
+        pss = doc.add_paragraph(); pss.alignment = _AP.CENTER
+        rss = pss.add_run(f"Período: {trimestre} de {ano}  |  {n_resp} pesquisas respondidas")
+        rss.font.size = _Pt(10); rss.font.color.rgb = _RGB(100,116,139)
+        doc.add_paragraph()
+
+        _kpi_cards([
+            (f"{tx_exc}%", "Excelência nas Aulas", "10B981"),
+            (f"{tx_dor}%", "Alívio de Dores",      "0056B3"),
+            (f"{tx_ene}%", "Mais Energia",           "F59E0B"),
+            (f"{tx_imp}%", "Impacto na Vida",        "8B5CF6"),
+            (str(n_resp),  "Total Respostas",         "0A2540"),
+        ], n_cols=5)
+        doc.add_paragraph()
+
+        chart_order = [
+            ("Sentimento_Q4","1. Qualidade dos Professores"),
+            ("Sentimento_Q2","2. Melhora nas Dores"),
+            ("Sentimento_Q1","3. Disposição e Energia"),
+            ("Sentimento_Q3","4. Impacto na Vida"),
+        ]
+        if graficos:
+            import base64 as _b64
+            pg2 = doc.add_paragraph()
+            rg2 = pg2.add_run("Análise Gráfica")
+            rg2.bold = True; rg2.font.size = _Pt(9); rg2.font.color.rgb = _RGB(10,37,64)
+            tg = doc.add_table(rows=2, cols=4)
+            tg.alignment = _TA.CENTER; _no_borders(tg)
+            for gi in range(4): tg.columns[gi].width = _Cm(4.2)
+            for gi, (col, titulo) in enumerate(chart_order):
+                b64s = graficos.get(col)
+                if b64s:
+                    try:
+                        ci_img = tg.rows[0].cells[gi]
+                        ci_img.paragraphs[0].alignment = _AP.CENTER
+                        ci_img.paragraphs[0].add_run().add_picture(_io.BytesIO(_b64.b64decode(b64s)), width=_Cm(3.8))
+                    except Exception: pass
+                ci_tit = tg.rows[1].cells[gi]
+                ci_tit.paragraphs[0].alignment = _AP.CENTER
+                rt2 = ci_tit.paragraphs[0].add_run(titulo)
+                rt2.font.size = _Pt(6)
+            doc.add_paragraph()
+
+        pd2 = doc.add_paragraph()
+        rd2 = pd2.add_run("Análise Detalhada por Indicador")
+        rd2.bold = True; rd2.font.size = _Pt(9); rd2.font.color.rgb = _RGB(10,37,64)
+        cor_map_rgb = {
+            "Positivo (Excelente)": _RGB(16,185,129),
+            "Neutro (Mediano)":     _RGB(245,158,11),
+            "Atenção (Melhoria)":   _RGB(239,68,68),
+        }
+        ts2 = doc.add_table(rows=5, cols=4)
+        ts2.alignment = _TA.CENTER
+        for ci in range(4): ts2.columns[ci].width = _Cm(4.2)
+        for ti, (lbl, col) in enumerate(chart_order):
+            ch = ts2.rows[0].cells[ti]; _cbg(ch, "1E3A5F")
+            rl2 = ch.paragraphs[0].add_run(lbl)
+            rl2.bold = True; rl2.font.size = _Pt(7); rl2.font.color.rgb = _RGB(255,255,255)
+            ch.paragraphs[0].alignment = _AP.CENTER
+            if df_fil is not None and col in df_fil.columns:
+                contagem = df_fil[col].value_counts()
+                ridx = 1
+                for sent, votos in contagem.items():
+                    if sent == "Sem Classificação" or ridx >= 5: continue
+                    pct = round(votos / n_resp * 100) if n_resp else 0
+                    rgb_c = cor_map_rgb.get(sent, _RGB(100,116,139))
+                    cr = ts2.rows[ridx].cells[ti]; _cbg(cr, "F8FAFC")
+                    pr = cr.paragraphs[0]
+                    rs2 = pr.add_run(f"  {sent[:22]}")
+                    rs2.font.size = _Pt(6); rs2.font.color.rgb = rgb_c
+                    rp2 = pr.add_run(f"  {votos} ({pct}%)")
+                    rp2.font.size = _Pt(6); rp2.bold = True
+                    ridx += 1
+        _borders(ts2, "E2E8F0")
+        doc.add_paragraph()
+
+        if df_com is not None and not df_com.empty:
+            pc = doc.add_paragraph()
+            rc = pc.add_run(f"Comentários dos Alunos ({len(df_com)})")
+            rc.bold = True; rc.font.size = _Pt(9); rc.font.color.rgb = _RGB(10,37,64)
+            sample = df_com.head(12)
+            rows_c = (len(sample) + 1) // 2
+            tc = doc.add_table(rows=rows_c, cols=2)
+            tc.alignment = _TA.CENTER; _no_borders(tc)
+            tc.columns[0].width = _Cm(8.4); tc.columns[1].width = _Cm(8.4)
+            for ci2, (_, cr) in enumerate(sample.iterrows()):
+                r_idx = ci2 // 2; c_idx = ci2 % 2
+                cell = tc.rows[r_idx].cells[c_idx]; _cbg(cell, "F0F9FF")
+                turma_c = str(cr.get("turma","") or "").strip()[:20]
+                texto_c = str(cr.get("comentario","") or "").strip()[:80]
+                ptc = cell.paragraphs[0]
+                rtc = ptc.add_run(f"{turma_c}\n")
+                rtc.bold = True; rtc.font.size = _Pt(6); rtc.font.color.rgb = _RGB(0,86,179)
+                rxt = ptc.add_run(f'"{texto_c}"')
+                rxt.italic = True; rxt.font.size = _Pt(6); rxt.font.color.rgb = _RGB(30,41,59)
+
+    # ══ SEÇÃO 3: PÁGINAS DIÁRIAS ═════════════════════════════════════════════
+    if not somente_capa:
+        _primeira = True
+        for data_iso, nomes in (dias or {}).items():
+            doc.add_page_break()
+            try:
+                data_fmt = datetime.date.fromisoformat(data_iso).strftime("%d/%m/%Y")
+            except Exception:
+                data_fmt = str(data_iso)
+
+            _add_header("PLANILHA DE FREQUÊNCIA DIÁRIA")
+
+            # Caixa de objetivo (só 1ª página)
+            obj = objetivo_periodo.strip() if _primeira else ""
+            if obj:
+                to = doc.add_table(rows=1, cols=2); _no_borders(to)
+                to.columns[0].width = _Cm(0.35); to.columns[1].width = _Cm(17.05)
+                _cbg(to.rows[0].cells[0], "1E3A5F")
+                _cbg(to.rows[0].cells[1], "EFF6FF")
+                ct = to.rows[0].cells[1]
+                pto = ct.paragraphs[0]
+                rto1 = pto.add_run("Objetivo do Período:  ")
+                rto1.bold = True; rto1.font.size = _Pt(8); rto1.font.color.rgb = _RGB(30,58,95)
+                rto2 = pto.add_run(obj)
+                rto2.font.size = _Pt(9); rto2.font.color.rgb = _RGB(30,41,59)
+                doc.add_paragraph()
+            _primeira = False
+
+            # Faixa azul com data
+            th = doc.add_table(rows=1, cols=1); _no_borders(th)
+            th.columns[0].width = _Cm(17.4)
+            ch = th.rows[0].cells[0]; _cbg(ch, "1E3A5F")
+            phd = ch.paragraphs[0]
+            phd.space_before = _Pt(3); phd.space_after = _Pt(3)
+            rhd = phd.add_run(f"  Lista de Presença  —  {data_fmt}")
+            rhd.bold = True; rhd.font.size = _Pt(11); rhd.font.color.rgb = _RGB(255,255,255)
+            doc.add_paragraph()
+
+            # Total presentes
+            pt = doc.add_paragraph()
+            rt = pt.add_run(f"Total de alunos presentes: {len(nomes)}")
+            rt.bold = True; rt.font.size = _Pt(9); rt.font.color.rgb = _RGB(30,58,95)
+            doc.add_paragraph()
+
+            # Tabela zebra de nomes
+            if nomes:
+                tn = doc.add_table(rows=1 + len(nomes), cols=2)
+                tn.alignment = _TA.LEFT; _borders(tn, "CBD5E1")
+                tn.columns[0].width = _Cm(1.3); tn.columns[1].width = _Cm(14.5)
+                for ci, txt in enumerate(["#", "NOME DO ALUNO"]):
+                    c = tn.rows[0].cells[ci]; _cbg(c, "1E3A5F")
+                    phh = c.paragraphs[0]
+                    phh.alignment = _AP.CENTER if ci == 0 else _AP.LEFT
+                    rhh = phh.add_run(txt)
+                    rhh.bold = True; rhh.font.size = _Pt(9); rhh.font.color.rgb = _RGB(255,255,255)
+                for ni, nome in enumerate(nomes, 1):
+                    bg = "F8FAFC" if ni % 2 == 0 else "FFFFFF"
+                    rc2 = tn.rows[ni].cells
+                    _cbg(rc2[0], bg); _cbg(rc2[1], bg)
+                    rc2[0].paragraphs[0].alignment = _AP.CENTER
+                    rn = rc2[0].paragraphs[0].add_run(str(ni))
+                    rn.bold = True; rn.font.size = _Pt(8)
+                    rno = rc2[1].paragraphs[0].add_run(nome.upper())
+                    rno.font.size = _Pt(9)
+
+    buf = _io.BytesIO()
+    doc.save(buf)
+    return buf.getvalue()
+
+
+# ==============================================================================
 # MOTOR PDF: RELATÓRIO PRIME DE FREQUÊNCIA
 # Gráficos em HTML/CSS puro — sem kaleido, sem matplotlib, 100% xhtml2pdf.
 # REGRAS: sem emojis no HTML, sem display:table-cell, só <table> para layout.
@@ -1514,11 +1944,45 @@ def _render_pdf_options_prestacao(
             objetivo_periodo=objetivo_periodo or "",
         )
 
-    st.download_button(
-        label=_label, data=pdf_bytes, file_name=_arq,
-        mime="application/pdf", type="primary",
-        use_container_width=True, key="pd_download",
-    )
+    _btn_pdf_col, _btn_word_col = st.columns(2)
+    with _btn_pdf_col:
+        st.download_button(
+            label=_label, data=pdf_bytes, file_name=_arq,
+            mime="application/pdf", type="primary",
+            use_container_width=True, key="pd_download",
+        )
+    with _btn_word_col:
+        _word_key = f"pd_word_{sufixo}"
+        if st.session_state.get(_word_key):
+            st.download_button(
+                "📝 Baixar Word (.docx)",
+                data=st.session_state[_word_key],
+                file_name=_arq.replace(".pdf", ".docx"),
+                mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                type="secondary",
+                use_container_width=True,
+                key="pd_dl_word",
+            )
+        else:
+            if DOCX_DISPONIVEL:
+                if st.button("📝 Gerar Word (.docx)", use_container_width=True,
+                             key="pd_gen_word",
+                             help="Gera o mesmo relatório em formato Word editável, fiel ao PDF."):
+                    with st.spinner("Gerando Word — aguarde…"):
+                        _w_bytes = gerar_word_prestacao_periodo(
+                            _dias_pdf,
+                            resumo=_resumo_pdf,
+                            satisfacao_secoes=_satisfacao_secoes or None,
+                            objetivo_periodo=objetivo_periodo or "",
+                            somente_capa=somente_capa,
+                        )
+                    if _w_bytes:
+                        st.session_state[_word_key] = _w_bytes
+                        st.rerun()
+                    else:
+                        st.error("Não foi possível gerar o Word. Verifique os logs.")
+            else:
+                st.caption("📝 Word: python-docx indisponível no servidor.")
 
     # ── Preview visual na tela ────────────────────────────────────────────
     gerar_preview = st.checkbox(
