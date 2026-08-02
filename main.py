@@ -2661,6 +2661,44 @@ if st.session_state.menu_atual == "Principal":
                     st.session_state[_hg_xlsx_key] = _gerar_excel_hg(_df_grid, _hg_vis)
                     st.rerun()
 
+            # ── Painel de evasão: contagem por faixa ────────────────────────────
+            if _hg_vis.get("freq", True):
+                _hoje_ev = datetime.date.today()
+                _ev_verde = _ev_amarelo = _ev_laranja = _ev_vermelho = 0
+                for _up_val in _df_grid.get("ultima_presenca", pd.Series(dtype="object")):
+                    if pd.isna(_up_val) or _up_val is None:
+                        _ev_vermelho += 1
+                    else:
+                        try:
+                            _ev_d = (_hoje_ev - pd.Timestamp(_up_val).date()).days
+                            if _ev_d <= 7:
+                                _ev_verde += 1
+                            elif _ev_d <= 30:
+                                _ev_amarelo += 1
+                            elif _ev_d <= 60:
+                                _ev_laranja += 1
+                            else:
+                                _ev_vermelho += 1
+                        except Exception:
+                            _ev_vermelho += 1
+                _ev_parts = []
+                if _ev_verde:
+                    _ev_parts.append(f"<span style='background:#D1FAE5;color:#065F46;border-radius:999px;padding:2px 10px;font-size:12px;font-weight:700;'>🟢 {_ev_verde}</span>")
+                if _ev_amarelo:
+                    _ev_parts.append(f"<span style='background:#FEF3C7;color:#92400E;border-radius:999px;padding:2px 10px;font-size:12px;font-weight:700;'>🟡 {_ev_amarelo}</span>")
+                if _ev_laranja:
+                    _ev_parts.append(f"<span style='background:#FFEDD5;color:#9A3412;border-radius:999px;padding:2px 10px;font-size:12px;font-weight:700;'>🟠 {_ev_laranja}</span>")
+                if _ev_vermelho:
+                    _ev_parts.append(f"<span style='background:#FEE2E2;color:#991B1B;border-radius:999px;padding:2px 10px;font-size:12px;font-weight:700;'>🔴 {_ev_vermelho}</span>")
+                if _ev_parts:
+                    st.markdown(
+                        "<div style='display:flex;gap:6px;flex-wrap:wrap;margin:4px 0 6px 0;align-items:center;'>"
+                        "<span style='font-size:11px;color:#94A3B8;margin-right:2px;'>Ausência:</span>"
+                        + " ".join(_ev_parts)
+                        + "</div>",
+                        unsafe_allow_html=True,
+                    )
+
             # ── Cabeçalho dinâmico das colunas (clicável para ordenar) ──────────
             _hdr_w = [0.5, 2.1]
             _hdr_k = ["_h_foto", "_h_nome"]
@@ -2909,14 +2947,23 @@ if st.session_state.menu_atual == "Principal":
                     if pd.notna(_up):
                         _up_dt   = pd.Timestamp(_up).date()
                         _up_dias = (_hoje_hg - _up_dt).days
-                        _up_cor  = "#10B981" if _up_dias <= 7 else ("#F59E0B" if _up_dias <= 30 else "#EF4444")
+                        if _up_dias <= 7:
+                            _up_cor = "#10B981"; _up_badge_bg = "#D1FAE5"; _up_badge_fg = "#065F46"; _up_badge_ic = "🟢"
+                        elif _up_dias <= 30:
+                            _up_cor = "#F59E0B"; _up_badge_bg = "#FEF3C7"; _up_badge_fg = "#92400E"; _up_badge_ic = "🟡"
+                        elif _up_dias <= 60:
+                            _up_cor = "#F97316"; _up_badge_bg = "#FFEDD5"; _up_badge_fg = "#9A3412"; _up_badge_ic = "🟠"
+                        else:
+                            _up_cor = "#EF4444"; _up_badge_bg = "#FEE2E2"; _up_badge_fg = "#991B1B"; _up_badge_ic = "🔴"
                         _up_txt  = _up_dt.strftime("%d/%m/%y")
                         _up_dsem = _dias_sem[_up_dt.weekday()]
                         _up_html = (
-                            f"<span style='font-size:12px;font-weight:700;color:{_up_cor};'>"
+                            f"<span style='font-size:10px;font-weight:700;background:{_up_badge_bg};"
+                            f"color:{_up_badge_fg};border-radius:999px;padding:1px 6px;"
+                            f"white-space:nowrap;'>{_up_badge_ic} {_up_dias}d</span> "
+                            f"<span style='font-size:11px;font-weight:700;color:{_up_cor};'>"
                             f"{_up_txt}</span>"
-                            f"<span style='font-size:10px;color:#94A3B8;margin-left:3px;'>"
-                            f"{_up_dsem} · {_up_dias}d</span>"
+                            f"<span style='font-size:10px;color:#94A3B8;margin-left:2px;'>{_up_dsem}</span>"
                         )
                         if _wapp_ok and _up_dias > 14:
                             _wap_e = str(_r.get("whatsapp") or "").strip()
@@ -2933,7 +2980,11 @@ if st.session_state.menu_atual == "Principal":
                                         f"font-weight:600;'>📱 Contato</a>"
                                     )
                     else:
-                        _up_html = "<span style='font-size:11px;color:#CBD5E1;'>Sem registro</span>"
+                        _up_html = (
+                            "<span style='font-size:10px;font-weight:700;background:#FEE2E2;"
+                            "color:#991B1B;border-radius:999px;padding:1px 6px;white-space:nowrap;'>"
+                            "🔴 nunca</span>"
+                        )
                         if _wapp_ok:
                             _wap_e = str(_r.get("whatsapp") or "").strip()
                             if _wap_e:
