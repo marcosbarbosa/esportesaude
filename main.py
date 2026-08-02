@@ -2360,7 +2360,7 @@ if st.session_state.menu_atual == "Principal":
             _df_pag = _df_grid.iloc[_hg_ini: _hg_ini + _hg_ppp]
 
             # Gerador de PDF da lista home
-            def _gerar_pdf_hg(df: pd.DataFrame, vis: dict | None = None) -> bytes:
+            def _gerar_pdf_hg(df: pd.DataFrame, vis: dict | None = None, filtros: str = "") -> bytes:
                 import io as _io
                 import requests as _req
                 from fpdf import FPDF
@@ -2446,6 +2446,15 @@ if st.session_state.menu_atual == "Principal":
                                f"  |  Total: {_tot_pdf} aluno(s)"),
                             align="C", new_x="LMARGIN", new_y="NEXT",
                         )
+                        _filtros_label = filtros if filtros else "Sem filtros"
+                        self.set_font("Helvetica", "I", 7)
+                        self.set_text_color(100, 116, 139)
+                        self.cell(
+                            0, 4,
+                            _s(f"Filtros aplicados: {_filtros_label}"),
+                            align="C", new_x="LMARGIN", new_y="NEXT",
+                        )
+                        self.set_text_color(15, 23, 42)
                         self.ln(2)
                     def footer(self):
                         self.set_y(-13)
@@ -2576,7 +2585,7 @@ if st.session_state.menu_atual == "Principal":
                 return bytes(pdf.output())
 
             # ── Gerador de Excel da lista home ───────────────────────────
-            def _gerar_excel_hg(df: pd.DataFrame, vis: dict | None = None) -> bytes:
+            def _gerar_excel_hg(df: pd.DataFrame, vis: dict | None = None, filtros: str = "") -> bytes:
                 import io as _io
                 import openpyxl
                 from openpyxl.styles import (
@@ -2637,6 +2646,15 @@ if st.session_state.menu_atual == "Principal":
                 ws["A1"].alignment = Alignment(horizontal="center", vertical="center")
                 ws.row_dimensions[1].height = 22
 
+                # ── Linha de filtros ativos ────────────────────────────────
+                _filtros_label = filtros if filtros else "Sem filtros"
+                ws.merge_cells(f"A2:{get_column_letter(len(_cols))}2")
+                ws["A2"] = f"Filtros aplicados: {_filtros_label}"
+                ws["A2"].font = Font(italic=True, size=9, color="475569")
+                ws["A2"].fill = _fill("F1F5F9")
+                ws["A2"].alignment = Alignment(horizontal="left", vertical="center")
+                ws.row_dimensions[2].height = 16
+
                 # ── Cabeçalhos ────────────────────────────────────────────
                 _cols = [
                     ("#",              6),
@@ -2656,20 +2674,20 @@ if st.session_state.menu_atual == "Principal":
                     ("Tags de Saúde",   40),
                 ]
                 for ci, (lbl, w) in enumerate(_cols, start=1):
-                    cell = ws.cell(row=2, column=ci, value=lbl)
+                    cell = ws.cell(row=3, column=ci, value=lbl)
                     cell.font      = Font(bold=True, color=_HDR_FG, size=9)
                     cell.fill      = _fill(_HDR_BG)
                     cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
                     cell.border    = border
                     ws.column_dimensions[get_column_letter(ci)].width = w
-                ws.row_dimensions[2].height = 26
+                ws.row_dimensions[3].height = 26
 
-                # Congelar título + cabeçalho
-                ws.freeze_panes = "A3"
+                # Congelar título + filtros + cabeçalho
+                ws.freeze_panes = "A4"
 
                 # ── Linhas de dados ───────────────────────────────────────
                 for i, (_, a) in enumerate(df.iterrows()):
-                    row = i + 3
+                    row = i + 4
                     base_bg = _EVEN_BG if i % 2 == 0 else _ODD_BG
 
                     # --- campos calculados ---
@@ -2789,7 +2807,7 @@ if st.session_state.menu_atual == "Principal":
                     ws.row_dimensions[row].height = 18
 
                 # ── Auto-filtro ───────────────────────────────────────────
-                ws.auto_filter.ref = f"A2:{get_column_letter(len(_cols))}2"
+                ws.auto_filter.ref = f"A3:{get_column_letter(len(_cols))}3"
 
                 buf = _io.BytesIO()
                 wb.save(buf)
@@ -2799,8 +2817,32 @@ if st.session_state.menu_atual == "Principal":
             # Barra de info + navegação + impressão + excel
             _hg_pdf_key  = "hg_pdf_lista"
             _hg_xlsx_key = "hg_xlsx_lista"
-            # Invalida cache PDF/Excel quando visibilidade muda
-            _hg_vis_sig = str(sorted(_hg_vis.items()))
+
+            # ── Rótulo de filtros ativos para exportação ──────────────────
+            _filtros_partes = []
+            if _hg_turma and _hg_turma != "Todas":
+                _filtros_partes.append(f"Turma: {_hg_turma}")
+            if _hg_sexo and _hg_sexo != "Todos":
+                _filtros_partes.append(_hg_sexo)
+            if _hg_busca and len(_hg_busca.strip()) >= 3:
+                _filtros_partes.append(f'Busca: "{_hg_busca.strip()}"')
+            if _hg_faixa_ev:
+                _faixa_desc_map = {
+                    "verde":    "Ausência ≤ 7 dias",
+                    "amarelo":  "Ausência 8–30 dias",
+                    "laranja":  "Ausência 31–60 dias",
+                    "vermelho": "Ausência > 60 dias",
+                }
+                _filtros_partes.append(_faixa_desc_map.get(_hg_faixa_ev, _hg_faixa_ev))
+            if _hg_vol_filter:
+                if _hg_acao_filter:
+                    _filtros_partes.append(f"Voluntários: {', '.join(_hg_acao_filter)}")
+                else:
+                    _filtros_partes.append("Somente voluntários")
+            _hg_filtros_label = " · ".join(_filtros_partes) if _filtros_partes else ""
+
+            # Invalida cache PDF/Excel quando visibilidade ou filtros mudam
+            _hg_vis_sig = str(sorted(_hg_vis.items())) + "|" + _hg_filtros_label
             if st.session_state.get("_hg_vis_sig_last") != _hg_vis_sig:
                 st.session_state["_hg_vis_sig_last"] = _hg_vis_sig
                 st.session_state.pop(_hg_pdf_key, None)
@@ -2831,7 +2873,7 @@ if st.session_state.menu_atual == "Principal":
                 )
             else:
                 if _pc_imp.button("🖨️ Imprimir", key="hg_imp", use_container_width=True):
-                    st.session_state[_hg_pdf_key] = _gerar_pdf_hg(_df_grid, _hg_vis)
+                    st.session_state[_hg_pdf_key] = _gerar_pdf_hg(_df_grid, _hg_vis, _hg_filtros_label)
                     st.rerun()
 
             # botão Excel
@@ -2847,7 +2889,7 @@ if st.session_state.menu_atual == "Principal":
                 )
             else:
                 if _pc_xl.button("📊 Excel", key="hg_xl", use_container_width=True):
-                    st.session_state[_hg_xlsx_key] = _gerar_excel_hg(_df_grid, _hg_vis)
+                    st.session_state[_hg_xlsx_key] = _gerar_excel_hg(_df_grid, _hg_vis, _hg_filtros_label)
                     st.rerun()
 
             # ── Painel de evasão: contagem por faixa (clicável para filtrar) ────
