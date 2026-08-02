@@ -2891,6 +2891,24 @@ if st.session_state.menu_atual == "Principal":
                     _filtros_partes.append("Somente voluntários")
             _hg_filtros_label = " · ".join(_filtros_partes) if _filtros_partes else ""
 
+            # ── Sufixo legível para o nome do arquivo exportado ───────────
+            def _montar_sufixo_arquivo(partes):
+                """Converte lista de partes de filtro em sufixo seguro para nome de arquivo."""
+                if not partes:
+                    return ""
+                sufixo = "_".join(partes)
+                # Substitui separadores e dois-pontos por underscore
+                sufixo = sufixo.replace(": ", "_").replace(":", "_").replace(" · ", "_").replace(" - ", "_")
+                # Remove ou substitui caracteres inválidos em nomes de arquivo
+                sufixo = sufixo.replace(" ", "_")
+                sufixo = re.sub(r'[\\/*?:"<>|≤≥–—""\'()]', "", sufixo)
+                # Normaliza múltiplos underscores
+                sufixo = re.sub(r"_+", "_", sufixo).strip("_")
+                # Limita comprimento para não gerar nomes absurdamente longos
+                return ("_" + sufixo[:60]) if sufixo else ""
+
+            _hg_sufixo_arquivo = _montar_sufixo_arquivo(_filtros_partes)
+
             # Invalida cache PDF/Excel quando visibilidade ou filtros mudam
             _hg_vis_sig = str(sorted(_hg_vis.items())) + "|" + _hg_filtros_label
             if st.session_state.get("_hg_vis_sig_last") != _hg_vis_sig:
@@ -2915,7 +2933,7 @@ if st.session_state.menu_atual == "Principal":
                 _pc_imp.download_button(
                     "📥 PDF",
                     data=st.session_state[_hg_pdf_key],
-                    file_name=f"Alunos_Ativos_{datetime.date.today().strftime('%Y%m%d')}.pdf",
+                    file_name=f"Alunos_Ativos_{datetime.date.today().strftime('%Y%m%d')}{_hg_sufixo_arquivo}.pdf",
                     mime="application/pdf",
                     key="hg_dl_pdf",
                     type="primary",
@@ -2931,7 +2949,7 @@ if st.session_state.menu_atual == "Principal":
                 _pc_xl.download_button(
                     "📥 Excel",
                     data=st.session_state[_hg_xlsx_key],
-                    file_name=f"Alunos_Ativos_{datetime.date.today().strftime('%Y%m%d')}.xlsx",
+                    file_name=f"Alunos_Ativos_{datetime.date.today().strftime('%Y%m%d')}{_hg_sufixo_arquivo}.xlsx",
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                     key="hg_dl_xlsx",
                     type="secondary",
