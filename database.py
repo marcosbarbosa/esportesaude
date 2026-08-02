@@ -1208,6 +1208,9 @@ def computar_snapshot_home_grid() -> dict:
     snap: dict = {}
 
     # ── 1. Última presença (status=PRESENTE) por aluno ──────────────────────
+    # ultima_presenca_ok=True indica que a query foi concluída sem exceção;
+    # step 6 só classifica alunos como "nunca registrou" quando esse flag é True.
+    snap["ultima_presenca_ok"] = False
     try:
         res = (
             supabase.from_("frequencia")
@@ -1226,8 +1229,10 @@ def computar_snapshot_home_grid() -> dict:
             snap["ultima_presenca_recs"] = ult.to_dict("records")
         else:
             snap["ultima_presenca_recs"] = []
+        snap["ultima_presenca_ok"] = True   # query executou sem exceção
     except Exception:
         snap["ultima_presenca_recs"] = []
+        # ultima_presenca_ok permanece False
 
     # ── 2. Total presenças 60 dias ───────────────────────────────────────────
     try:
@@ -1320,6 +1325,77 @@ def computar_snapshot_home_grid() -> dict:
         snap["ultima_aval"] = datas
     except Exception:
         snap["ultima_aval"] = {}
+
+    # ── 6. Alunos em risco crítico (>60 dias sem presença ou nunca registraram) ──
+    try:
+        _hoje_rc = _dt.date.today()
+        # Pagina a tabela de alunos ativos com range+order estável (mesma estratégia
+        # das demais queries pesadas do snapshot — evita truncamento no PostgREST).
+        _al_rows: list = []
+        _al_offset = 0
+        for _ in range(100):
+            _res_al = (
+                supabase.from_("alunos")
+                .select("id, nome, turma")
+                .neq("status", "Inativo")
+                .order("id")
+                .range(_al_offset, _al_offset + 999)
+                .execute()
+            )
+            if not _res_al.data:
+                break
+            _al_rows.extend(_res_al.data)
+            if len(_res_al.data) < 1000:
+                break
+            _al_offset += 1000
+
+        if _al_rows:
+            _al_map = {str(r["id"]): r for r in _al_rows}
+            # Build id→ultima_presenca map from already-computed step 1
+            _up_map = {
+                str(r["id"]): r.get("ultima_presenca")
+                for r in snap.get("ultima_presenca_recs", [])
+            }
+            # Só infere "nunca registrou" quando a query de última presença
+            # completou sem exceção — evita falsos positivos por falha de step 1.
+            _presenca_ok = snap.get("ultima_presenca_ok", False)
+            _risco: list = []
+            for _al_id, _al_info in _al_map.items():
+                _up_str = _up_map.get(_al_id)
+                if _up_str is None:
+                    if _presenca_ok:
+                        _risco.append({
+                            "id": _al_id,
+                            "nome": _al_info.get("nome", "—"),
+                            "turma": _al_info.get("turma") or "",
+                            "ultima_presenca": None,
+                            "dias": None,
+                        })
+                    # Se ultima_presenca_ok=False, ausência da chave pode ser
+                    # falha de query — ignorar para não gerar alerta falso.
+                else:
+                    try:
+                        _dias_rc = (_hoje_rc - _dt.date.fromisoformat(_up_str[:10])).days
+                        if _dias_rc > 60:
+                            _risco.append({
+                                "id": _al_id,
+                                "nome": _al_info.get("nome", "—"),
+                                "turma": _al_info.get("turma") or "",
+                                "ultima_presenca": _up_str[:10],
+                                "dias": _dias_rc,
+                            })
+                    except Exception:
+                        pass
+            # Sort: nunca (None) primeiro, depois por mais dias ausente
+            _risco.sort(
+                key=lambda x: x["dias"] if x["dias"] is not None else 99999,
+                reverse=True,
+            )
+            snap["alunos_risco_critico_recs"] = _risco
+        else:
+            snap["alunos_risco_critico_recs"] = []
+    except Exception:
+        snap["alunos_risco_critico_recs"] = []
 
     return snap
 

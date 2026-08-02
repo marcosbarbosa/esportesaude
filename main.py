@@ -2014,6 +2014,56 @@ if st.session_state.menu_atual == "Principal":
                 icon=None,
             )
 
+        # ── Card: Alunos em risco crítico (>60 dias sem presença) ───────────────
+        # Lê exclusivamente do snapshot — zero queries extras na abertura da home.
+        # Os nomes são incluídos em alunos_risco_critico_recs durante o Processar em Lote.
+        _criticos_snap = _snap_home.get("alunos_risco_critico_recs", [])
+        if _criticos_snap:
+            import html as _html_mod
+            _n_criticos = len(_criticos_snap)
+            _TOP_N = 5
+            _linhas_html = ""
+            for _rc_r in _criticos_snap[:_TOP_N]:
+                _rc_nome = _html_mod.escape(str(_rc_r.get("nome") or "—"))
+                _rc_dias = _rc_r.get("dias")
+                _rc_dias_txt = f"{_rc_dias} dias" if _rc_dias is not None else "nunca registrou"
+                _linhas_html += (
+                    f"<div style='display:flex;justify-content:space-between;"
+                    f"padding:2px 0;border-bottom:1px solid #FECACA22;'>"
+                    f"<span style='font-weight:600;color:#7F1D1D;font-size:12px;"
+                    f"white-space:nowrap;overflow:hidden;text-overflow:ellipsis;"
+                    f"max-width:68%;'>{_rc_nome}</span>"
+                    f"<span style='font-size:11px;color:#B91C1C;font-weight:700;"
+                    f"white-space:nowrap;'>{_rc_dias_txt}</span>"
+                    f"</div>"
+                )
+            _mais_txt = (
+                f"<div style='font-size:11px;color:#B91C1C;margin-top:4px;'>…e mais "
+                f"<b>{_n_criticos - _TOP_N}</b> aluno(s)</div>"
+                if _n_criticos > _TOP_N else ""
+            )
+
+            _card_col, _btn_col = st.columns([4, 1], vertical_alignment="center", gap="small")
+            _card_col.markdown(
+                f"<div style='background:#FEF2F2;border:1.5px solid #FCA5A5;"
+                f"border-radius:10px;padding:10px 14px;'>"
+                f"<div style='font-weight:800;color:#991B1B;font-size:0.88rem;"
+                f"margin-bottom:6px;'>🔴 Alunos em risco crítico — {_n_criticos} ausente(s) há mais de 60 dias</div>"
+                f"{_linhas_html}"
+                f"{_mais_txt}"
+                f"</div>",
+                unsafe_allow_html=True,
+            )
+            if _btn_col.button(
+                "🔍 Ver no painel",
+                key="hg_ver_risco_critico",
+                use_container_width=True,
+                help="Abre o painel de alunos filtrado pela faixa 🔴 Ausência > 60 dias",
+            ):
+                st.session_state["hg_filtro_evasao"] = "vermelho"
+                st.session_state["hg_grid_ativo"] = True
+                st.rerun()
+
         # ── Checkbox: grid desabilitado por padrão para evitar crash na abertura ──
         _grid_habilitado = st.checkbox(
             "📊 Exibir painel de alunos",
