@@ -389,6 +389,86 @@ def disparar_zapi(numero: str, mensagem: str, cfg: dict) -> tuple[bool, str]:
         return False, f"Erro Z-API: {e}"
 
 
+def disparar_alertas_ausencia(cfg: dict | None = None) -> list[dict]:
+    """
+    Verifica alunos com 30+ dias de ausência e envia alertas via Z-API.
+    - 30–59 dias → template evasao_60
+    - 60+ dias   → template evasao_80
+    Registra cada disparo em alertas_ausencia_log para não repetir
+    dentro da janela de cooldown igual ao próprio limiar (30 ou 60 dias).
+    Retorna lista de {nome, dias, limiar, sucesso, msg}.
+    """
+    if cfg is None:
+        cfg = get_config_niver()
+
+    if not cfg.get("zapi_habilitado") or not cfg.get("zapi_instance") or not cfg.get("zapi_token"):
+        return []
+
+    from database import (
+        bi_alunos_risco_abandono,
+        get_alerta_ausencia_ja_enviado,
+        registrar_alerta_ausencia,
+        get_crm_templates,
+    )
+
+    # Carrega templates de evasão
+    tpl_map: dict = {}
+    try:
+        df_tpl = get_crm_templates()
+        if df_tpl is not None and not df_tpl.empty and "gatilho" in df_tpl.columns:
+            for _, _tr in df_tpl.iterrows():
+                tpl_map[str(_tr.get("gatilho", ""))] = str(_tr.get("mensagem", "") or "")
+    except Exception:
+        pass
+
+    tpl_30 = (tpl_map.get("evasao_60") or "").strip() or (
+        "Olá {nome}, sentimos sua falta! Faz 30 dias que não te vemos. "
+        "Que tal retomar suas atividades? Estamos esperando por você! 💪"
+    )
+    tpl_60 = (tpl_map.get("evasao_80") or "").strip() or (
+        "Olá {nome}, estamos com saudades! Faz mais de 60 dias sem você. "
+        "Venha nos visitar, sua vaga continua garantida! 🏃"
+    )
+
+    # Busca alunos ausentes há 30+ dias
+    try:
+        df = bi_alunos_risco_abandono(dias=30)
+    except Exception:
+        return []
+
+    if df is None or df.empty:
+        return []
+
+    resultados = []
+    for _, r in df.iterrows():
+        aluno_id = str(r.get("id", "")).strip()
+        nome     = str(r.get("nome", "") or "").strip()
+        wap      = str(r.get("whatsapp", "") or "").strip()
+        dias     = int(r.get("dias_ausente", 0) or 0)
+
+        if not wap or not aluno_id:
+            continue
+
+        # Determina limiar e template
+        if dias >= 60:
+            limiar   = 60
+            template = tpl_60
+        else:
+            limiar   = 30
+            template = tpl_30
+
+        # Pula se alerta já foi enviado nesta janela
+        if get_alerta_ausencia_ja_enviado(aluno_id, limiar):
+            continue
+
+        mensagem = personalizar_mensagem(template, nome)
+        ok, msg  = disparar_zapi(wap, mensagem, cfg)
+        registrar_alerta_ausencia(aluno_id, limiar, ok)
+        resultados.append({"nome": nome, "dias": dias, "limiar": limiar, "sucesso": ok, "msg": msg})
+
+    return resultados
+
+
 def disparar_zapi_aniversariantes(df_hoje, cfg: dict | None = None) -> list[dict]:
     """
     Envia mensagem de aniversário via Z-API para todos de df_hoje.

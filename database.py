@@ -3965,3 +3965,57 @@ def sincronizar_tags_clinicas() -> tuple:
         return True, f"{inseridos} inserida(s), {atualizados} atualizada(s)."
     except Exception as e:
         return False, str(e)
+
+
+# ==============================================================================
+# 📱 ALERTAS AUTOMÁTICOS DE AUSÊNCIA — log de disparos WhatsApp
+# Evita reenvio: bloqueia novo disparo para o mesmo aluno/limiar durante
+# os próximos `limiar_dias` dias após o último registro.
+# ==============================================================================
+
+def get_alerta_ausencia_ja_enviado(aluno_id: str, limiar_dias: int) -> bool:
+    """Retorna True se já foi enviado alerta para este aluno neste limiar recentemente."""
+    try:
+        hoje = datetime.date.today()
+        corte = (hoje - datetime.timedelta(days=limiar_dias)).isoformat()
+        res = (
+            supabase.table("alertas_ausencia_log")
+            .select("id")
+            .eq("aluno_id", str(aluno_id))
+            .eq("limiar_dias", limiar_dias)
+            .gte("data_alerta", corte)
+            .limit(1)
+            .execute()
+        )
+        return bool(res.data)
+    except Exception:
+        return False
+
+
+def registrar_alerta_ausencia(aluno_id: str, limiar_dias: int, sucesso: bool = True) -> bool:
+    """Registra disparo de alerta de ausência para evitar repetição."""
+    try:
+        supabase.table("alertas_ausencia_log").insert({
+            "aluno_id": str(aluno_id),
+            "limiar_dias": limiar_dias,
+            "data_alerta": datetime.date.today().isoformat(),
+            "sucesso": sucesso,
+        }).execute()
+        return True
+    except Exception:
+        return False
+
+
+def get_ultimos_alertas_ausencia(limite: int = 30) -> list:
+    """Retorna os últimos registros de alertas de ausência enviados."""
+    try:
+        res = (
+            supabase.table("alertas_ausencia_log")
+            .select("aluno_id, limiar_dias, data_alerta, sucesso, criado_em")
+            .order("criado_em", desc=True)
+            .limit(limite)
+            .execute()
+        )
+        return res.data or []
+    except Exception:
+        return []

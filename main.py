@@ -540,6 +540,17 @@ if st.session_state.usuario_logado:
         except Exception:
             pass
 
+    # ── Alertas de Ausência (WhatsApp/Z-API): verificação diária (1x por sessão)
+    if not st.session_state.get("_alerta_ausencia_checado"):
+        st.session_state["_alerta_ausencia_checado"] = True
+        try:
+            from database import get_config_valor as _gcv_aa
+            if _gcv_aa("alerta_ausencia_habilitado", "0") == "1":
+                from utils.niver_automatico import disparar_alertas_ausencia as _daa
+                _daa()
+        except Exception:
+            pass
+
 # ==============================================================================
 # 🎨 CSS PRIME — MINIMALISTA & EXCELÊNCIA (TEMA CLARO BASE)
 # ==============================================================================
@@ -940,6 +951,18 @@ if not st.session_state.usuario_logado:
 # 📅 CALENDÁRIO INSTITUCIONAL — Tela de gestão de Dias Sem Aula
 # ==============================================================================
 
+_SQL_ALERTA_AUSENCIA = """
+CREATE TABLE IF NOT EXISTS alertas_ausencia_log (
+  id           uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+  aluno_id     text NOT NULL,
+  limiar_dias  integer NOT NULL,
+  data_alerta  date NOT NULL DEFAULT CURRENT_DATE,
+  sucesso      boolean NOT NULL DEFAULT true,
+  criado_em    timestamptz NOT NULL DEFAULT now()
+);
+ALTER TABLE alertas_ausencia_log DISABLE ROW LEVEL SECURITY;
+""".strip()
+
 _SQL_MIGRACAO_EBI = """
 CREATE TABLE IF NOT EXISTS email_bi_schedules (
   id               uuid         DEFAULT gen_random_uuid() PRIMARY KEY,
@@ -1235,9 +1258,9 @@ def _tela_email_bi():
 
     if not schedules:
         st.info("Nenhum pacote configurado ainda. Clique em **'➕ Novo Pacote'** para começar.")
-        return
 
-    st.markdown("---")
+    if schedules:
+        st.markdown("---")
     _DIAS_NMS = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"]
     _FREQ_LBL = {"semanal": "Semanal", "quinzenal": "Quinzenal", "mensal": "Mensal"}
 
@@ -1326,6 +1349,106 @@ def _tela_email_bi():
                     st.success(f"✅ {_msg_l}")
                 else:
                     st.error(f"❌ {_msg_l}")
+
+    # ══════════════════════════════════════════════════════════════════════
+    # 📱 ALERTAS AUTOMÁTICOS DE AUSÊNCIA (WhatsApp / Z-API)
+    # ══════════════════════════════════════════════════════════════════════
+    st.markdown("---")
+    st.markdown("""
+        <div style='background:#FFF7ED;border-left:4px solid #EA580C;
+                    padding:12px 16px;border-radius:6px;margin-bottom:18px;'>
+            <strong style='color:#9A3412;'>📱 Alertas Automáticos de Ausência (WhatsApp)</strong><br>
+            <span style='color:#C2410C;font-size:13px;'>
+                Dispara mensagem via Z-API quando um aluno ultrapassa <strong>30 dias</strong>
+                ou <strong>60 dias</strong> sem presença registrada.
+                Usa as mesmas credenciais Z-API configuradas em
+                <strong>🔔 Auto Niver</strong>.
+            </span>
+        </div>
+    """, unsafe_allow_html=True)
+
+    from database import get_config_valor as _gcv_aa, set_config_valor as _scv_aa
+
+    _aa_hab = _gcv_aa("alerta_ausencia_habilitado", "0") == "1"
+
+    _col_aa1, _col_aa2 = st.columns([3, 2])
+    _novo_aa_hab = _col_aa1.toggle(
+        "Habilitar alertas automáticos de ausência",
+        value=_aa_hab,
+        key="aa_toggle_hab",
+        help=(
+            "Quando ativo, verifica diariamente (ao abrir o sistema) se algum aluno "
+            "cruzou 30 ou 60 dias de ausência e envia WhatsApp automaticamente."
+        ),
+    )
+    if _novo_aa_hab != _aa_hab:
+        _scv_aa("alerta_ausencia_habilitado", "1" if _novo_aa_hab else "0")
+        st.rerun()
+
+    if _novo_aa_hab:
+        st.success("✅ Ativo — o alerta é disparado automaticamente ao abrir o sistema (1× por sessão).")
+    else:
+        st.info("⚪ Inativo — nenhum alerta automático será enviado.")
+
+    st.caption(
+        "**Template 30 dias** → `evasao_60` · "
+        "**Template 60 dias** → `evasao_80`   "
+        "(edite os textos em ⚙️ Configurações → 💬 Mensagens)"
+    )
+
+    # ── Verificar se a tabela existe no banco ─────────────────────────────
+    from database import get_ultimos_alertas_ausencia as _gua
+    _hist_aa = _gua(limite=20)
+    if _hist_aa is None:
+        # tabela não existe ainda
+        st.warning("⚠️ A tabela `alertas_ausencia_log` ainda não foi criada no banco de dados.")
+        st.markdown("Execute o SQL abaixo no **Supabase Dashboard → SQL Editor** e recarregue:")
+        st.code(_SQL_ALERTA_AUSENCIA, language="sql")
+    else:
+        # ── Disparar agora (teste manual) ─────────────────────────────────
+        _col_btn1, _col_btn2, _ = st.columns([2, 2, 3])
+        if _col_btn1.button("▶️ Disparar agora", key="aa_run_now", help="Executa a verificação imediatamente (modo manual)"):
+            st.session_state["_aa_run_manual"] = True
+            st.rerun()
+
+        if st.session_state.pop("_aa_run_manual", False):
+            with st.spinner("Verificando ausências e enviando alertas…"):
+                try:
+                    from utils.niver_automatico import disparar_alertas_ausencia as _daa_ui
+                    _res_aa = _daa_ui()
+                    if _res_aa:
+                        _ok_aa  = [r for r in _res_aa if r.get("sucesso")]
+                        _fail_aa = [r for r in _res_aa if not r.get("sucesso")]
+                        if _ok_aa:
+                            st.success(f"✅ {len(_ok_aa)} alerta(s) enviado(s) com sucesso.")
+                        if _fail_aa:
+                            st.warning(f"⚠️ {len(_fail_aa)} envio(s) falharam: " +
+                                       ", ".join(r['nome'] for r in _fail_aa))
+                    else:
+                        st.info("Nenhum aluno elegível encontrado (Z-API inativo, ausências abaixo do limiar, ou alertas já enviados recentemente).")
+                except Exception as _e_aa:
+                    st.error(f"Erro ao disparar: {_e_aa}")
+
+        # ── Histórico de alertas ───────────────────────────────────────────
+        if _col_btn2.button("🔄 Atualizar histórico", key="aa_refresh_hist"):
+            st.rerun()
+
+        if _hist_aa:
+            st.markdown(f"**📋 Últimos {len(_hist_aa)} alerta(s) registrado(s):**")
+            import pandas as _pd_aa
+            _df_hist_aa = _pd_aa.DataFrame([
+                {
+                    "#": i + 1,
+                    "Data": str(r.get("data_alerta", ""))[:10],
+                    "Limiar": f"{r.get('limiar_dias')} dias",
+                    "Status": "✅ Enviado" if r.get("sucesso") else "❌ Falhou",
+                    "Criado em": str(r.get("criado_em", ""))[:16].replace("T", " "),
+                }
+                for i, r in enumerate(_hist_aa)
+            ])
+            st.dataframe(_df_hist_aa, use_container_width=True, hide_index=True)
+        else:
+            st.caption("Nenhum alerta enviado ainda.")
 
 
 def _tela_calendario_institucional():
