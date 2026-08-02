@@ -2983,8 +2983,36 @@ if st.session_state.menu_atual == "Principal":
             _hoje_mes  = _hoje_hg.month
             _meses_abr = ["","jan","fev","mar","abr","mai","jun","jul","ago","set","out","nov","dez"]
 
-            for _, _r in _df_pag.iterrows():
+            for _hg_row_idx, (_, _r) in enumerate(_df_pag.iterrows()):
                 with st.container(border=True):
+                    # ── Destaque visual por faixa de risco ─────────────────────
+                    _up_hg_r = _r.get("ultima_presenca")
+                    _row_faixa_hg = "verde"
+                    if pd.isna(_up_hg_r) or _up_hg_r is None:
+                        _row_faixa_hg = "vermelho"
+                    else:
+                        try:
+                            _d_abs_hg = (_hoje_hg - pd.Timestamp(_up_hg_r).date()).days
+                            if _d_abs_hg <= 7:
+                                _row_faixa_hg = "verde"
+                            elif _d_abs_hg <= 30:
+                                _row_faixa_hg = "amarelo"
+                            elif _d_abs_hg <= 60:
+                                _row_faixa_hg = "laranja"
+                            else:
+                                _row_faixa_hg = "vermelho"
+                        except Exception:
+                            _row_faixa_hg = "vermelho"
+                    _row_bg_hg = {"vermelho": "#FFF5F5", "laranja": "#FFF8F3"}.get(_row_faixa_hg, "")
+                    if _row_bg_hg:
+                        _row_css_cls = f"hgrow_{str(_r.get('id', _hg_row_idx)).replace('-', '_')}"
+                        st.markdown(
+                            f"<style>div[data-testid='stVerticalBlockBorderWrapper']"
+                            f":has(div.{_row_css_cls}){{background:{_row_bg_hg}!important;}}</style>"
+                            f"<div class='{_row_css_cls}' style='display:none'></div>",
+                            unsafe_allow_html=True,
+                        )
+
                     # Colunas dinâmicas conforme visibilidade
                     class _HgNoop:
                         def markdown(self, *a, **kw): pass
