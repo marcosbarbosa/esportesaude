@@ -2133,6 +2133,29 @@ if st.session_state.menu_atual == "Principal":
                     _caption_vol += " identificado(s) na base ativa"
                 st.caption(_caption_vol)
 
+            # ── Filtro por faixa de evasão (aplicado após todos os outros filtros) ─
+            _hg_faixa_ev = st.session_state.get("hg_filtro_evasao")  # verde/amarelo/laranja/vermelho ou None
+            if _hg_faixa_ev and "ultima_presenca" in _df_grid.columns:
+                _hoje_filt = datetime.date.today()
+                def _classifica_faixa(val):
+                    if pd.isna(val) or val is None:
+                        return "vermelho"
+                    try:
+                        d = (_hoje_filt - pd.Timestamp(val).date()).days
+                        if d <= 7:
+                            return "verde"
+                        elif d <= 30:
+                            return "amarelo"
+                        elif d <= 60:
+                            return "laranja"
+                        else:
+                            return "vermelho"
+                    except Exception:
+                        return "vermelho"
+                _df_grid = _df_grid[
+                    _df_grid["ultima_presenca"].map(_classifica_faixa) == _hg_faixa_ev
+                ].reset_index(drop=True)
+
             # Ordenação dinâmica
             if "hg_sort_col" not in st.session_state:
                 st.session_state.hg_sort_col = "nome"
@@ -2661,11 +2684,22 @@ if st.session_state.menu_atual == "Principal":
                     st.session_state[_hg_xlsx_key] = _gerar_excel_hg(_df_grid, _hg_vis)
                     st.rerun()
 
-            # ── Painel de evasão: contagem por faixa ────────────────────────────
+            # ── Painel de evasão: contagem por faixa (clicável para filtrar) ────
             if _hg_vis.get("freq", True):
+                # Conta faixas usando o dataframe COMPLETO filtrado por turma/busca/sexo
+                # mas SEM o filtro de faixa, para mostrar totais reais por faixa
                 _hoje_ev = datetime.date.today()
+                _df_ev_base = _df_hg.copy()
+                _df_ev_base = _faf_hg(_df_ev_base, _hg_busca, cols=["nome", "turma"], min_len=3)
+                if _hg_turma != "Todas":
+                    _df_ev_base = _df_ev_base[_df_ev_base["turma"] == _hg_turma]
+                if _hg_sexo != "Todos" and "sexo" in _df_ev_base.columns:
+                    _sexo_v2 = "F" if "Fem" in _hg_sexo else "M"
+                    _df_ev_base = _df_ev_base[
+                        _df_ev_base["sexo"].astype(str).str.upper().str.startswith(_sexo_v2)
+                    ]
                 _ev_verde = _ev_amarelo = _ev_laranja = _ev_vermelho = 0
-                for _up_val in _df_grid.get("ultima_presenca", pd.Series(dtype="object")):
+                for _up_val in _df_ev_base.get("ultima_presenca", pd.Series(dtype="object")):
                     if pd.isna(_up_val) or _up_val is None:
                         _ev_vermelho += 1
                     else:
@@ -2681,23 +2715,48 @@ if st.session_state.menu_atual == "Principal":
                                 _ev_vermelho += 1
                         except Exception:
                             _ev_vermelho += 1
-                _ev_parts = []
-                if _ev_verde:
-                    _ev_parts.append(f"<span style='background:#D1FAE5;color:#065F46;border-radius:999px;padding:2px 10px;font-size:12px;font-weight:700;'>🟢 {_ev_verde}</span>")
-                if _ev_amarelo:
-                    _ev_parts.append(f"<span style='background:#FEF3C7;color:#92400E;border-radius:999px;padding:2px 10px;font-size:12px;font-weight:700;'>🟡 {_ev_amarelo}</span>")
-                if _ev_laranja:
-                    _ev_parts.append(f"<span style='background:#FFEDD5;color:#9A3412;border-radius:999px;padding:2px 10px;font-size:12px;font-weight:700;'>🟠 {_ev_laranja}</span>")
-                if _ev_vermelho:
-                    _ev_parts.append(f"<span style='background:#FEE2E2;color:#991B1B;border-radius:999px;padding:2px 10px;font-size:12px;font-weight:700;'>🔴 {_ev_vermelho}</span>")
-                if _ev_parts:
-                    st.markdown(
-                        "<div style='display:flex;gap:6px;flex-wrap:wrap;margin:4px 0 6px 0;align-items:center;'>"
-                        "<span style='font-size:11px;color:#94A3B8;margin-right:2px;'>Ausência:</span>"
-                        + " ".join(_ev_parts)
-                        + "</div>",
+
+                _faixa_ativa = st.session_state.get("hg_filtro_evasao")
+                _ev_cols_parts = []
+                if _ev_verde:   _ev_cols_parts.append(("verde",    f"🟢 {_ev_verde}",    "#D1FAE5", "#065F46"))
+                if _ev_amarelo: _ev_cols_parts.append(("amarelo",  f"🟡 {_ev_amarelo}",  "#FEF3C7", "#92400E"))
+                if _ev_laranja: _ev_cols_parts.append(("laranja",  f"🟠 {_ev_laranja}",  "#FFEDD5", "#9A3412"))
+                if _ev_vermelho:_ev_cols_parts.append(("vermelho", f"🔴 {_ev_vermelho}", "#FEE2E2", "#991B1B"))
+
+                if _ev_cols_parts:
+                    _ev_n_cols = len(_ev_cols_parts) + (1 if _faixa_ativa else 0)
+                    _ev_label_col, *_ev_btn_cols = st.columns(
+                        [1.2] + [1] * _ev_n_cols, gap="small"
+                    )
+                    _ev_label_col.markdown(
+                        "<span style='font-size:11px;color:#94A3B8;line-height:2;'>Ausência:</span>",
                         unsafe_allow_html=True,
                     )
+                    for (_fk, _flabel, _fbg, _ffg), _ecol in zip(_ev_cols_parts, _ev_btn_cols):
+                        _ativo = (_faixa_ativa == _fk)
+                        if _ecol.button(
+                            f"{'✓ ' if _ativo else ''}{_flabel}",
+                            key=f"hg_ev_btn_{_fk}",
+                            use_container_width=True,
+                            help="Remover filtro de faixa" if _ativo else f"Filtrar grid por esta faixa de ausência",
+                        ):
+                            if _ativo:
+                                st.session_state.pop("hg_filtro_evasao", None)
+                            else:
+                                st.session_state["hg_filtro_evasao"] = _fk
+                            st.session_state.hg_pg = 1
+                            st.rerun()
+                    # Botão "Ver todos" quando há filtro ativo
+                    if _faixa_ativa and _ev_n_cols > len(_ev_cols_parts):
+                        if _ev_btn_cols[-1].button(
+                            "✖ Ver todos",
+                            key="hg_ev_btn_clear",
+                            use_container_width=True,
+                            help="Remover filtro de faixa de ausência",
+                        ):
+                            st.session_state.pop("hg_filtro_evasao", None)
+                            st.session_state.hg_pg = 1
+                            st.rerun()
 
             # ── Cabeçalho dinâmico das colunas (clicável para ordenar) ──────────
             _hdr_w = [0.5, 2.1]
