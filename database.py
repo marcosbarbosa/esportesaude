@@ -3128,6 +3128,14 @@ MENU_CATALOGO = [
     ("rel_relatorios",          "📋 Relatórios & BI → Relatórios"),
     ("rel_bi_dashboard",        "📊 Relatórios & BI → BI Dashboard"),
     ("rel_bi_individual",       "👤 Relatórios & BI → BI Individual"),
+    # ── Sub-itens: Abas internas de Relatórios ───────────────────────────
+    ("rel_lista_freq",          "📋 Relatórios → Lista Frequência Oficial"),
+    ("rel_plan_freq",           "📊 Relatórios → Plan. Frequência"),
+    ("rel_auditoria",           "🔎 Relatórios → Auditoria"),
+    ("rel_prestacao_ped",       "🏆 Relatórios → Prestação Pedagógica"),
+    ("rel_avaliacoes",          "🧪 Relatórios → Avaliações"),
+    ("rel_patologias",          "🧬 Relatórios → Patologias"),
+    ("rel_pa_lote",             "🩺 Relatórios → Coleta PA em Lote"),
     # ── Sub-itens: Gestor ────────────────────────────────────────────────
     ("gestor_radar",            "💙 Gestor → Radar"),
     ("gestor_satisfacao",       "⭐ Gestor → Satisfação"),
@@ -3196,7 +3204,7 @@ def set_menu_permissoes_usuario(usuario_id: str, permissoes: dict) -> tuple:
     try:
         resp = (
             supabase.table("configuracoes_sistema")
-            .select("id")
+            .select("chave")
             .eq("chave", chave)
             .execute()
         )

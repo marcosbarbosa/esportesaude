@@ -321,11 +321,34 @@ def tela_gestao_usuarios():
                 "descricao": "Relatórios gerenciais, prestação de contas e análise de dados.",
                 "filhos": [
                     ("rel_relatorios",    "📋 Relatórios",
-                     "Prestação de contas e frequência por período."),
+                     "Acesso à aba de relatórios (Prestação de Contas etc.)."),
                     ("rel_bi_dashboard",  "📊 BI Dashboard",
                      "Painel analítico com KPIs gerenciais."),
                     ("rel_bi_individual", "👤 BI Individual",
                      "Relatório de evolução individual do aluno."),
+                ],
+                "sub_grupos": [
+                    {
+                        "titulo": "↳ Abas dentro de 📋 Relatórios",
+                        "cor_bg": "#FAF5FF", "cor_bd": "#A78BFA", "cor_txt": "#5B21B6",
+                        "pai_cond": "rel_relatorios",
+                        "itens": [
+                            ("rel_lista_freq",    "📋 Lista Freq. Oficial",
+                             "Frequência por aluno e turma para um período."),
+                            ("rel_plan_freq",     "📊 Plan. Frequência",
+                             "Planilha de frequência com controle de presenças e faltas."),
+                            ("rel_auditoria",     "🔎 Auditoria",
+                             "Auditoria de cadastros e documentos pendentes."),
+                            ("rel_prestacao_ped", "🏆 Prestação Pedag.",
+                             "Relatório pedagógico mensal com exportação Word."),
+                            ("rel_avaliacoes",    "🧪 Avaliações",
+                             "Alunos pendentes de avaliação física."),
+                            ("rel_patologias",    "🧬 Patologias",
+                             "Anamnese clínica e condições de saúde registradas."),
+                            ("rel_pa_lote",       "🩺 Coleta PA em Lote",
+                             "Registro de pressão arterial em lote por turma."),
+                        ],
+                    }
                 ],
             },
             {
@@ -406,6 +429,47 @@ def tela_gestao_usuarios():
                     f"</small></div>",
                     unsafe_allow_html=True,
                 )
+
+            # ── Sub-grupos aninhados (3º nível — ex: abas internas de Relatórios) ──
+            for _sg in _g.get("sub_grupos", []):
+                _pai_cond  = _sg.get("pai_cond")
+                _pai_cond_ok = _novas_perms.get(_pai_cond, True) if _pai_cond else True
+                _sg_ativo  = _val_pai_novo and _pai_cond_ok
+                _sg_itens  = _sg["itens"]
+
+                # Mini-cabeçalho do sub-grupo
+                _dica_off = (
+                    f" <span style='color:#94A3B8;font-size:10px;'>"
+                    f"(habilite '📋 Relatórios' acima para editar)</span>"
+                ) if not _sg_ativo else ""
+                st.markdown(
+                    f"<div style='margin-left:24px;background:{_sg['cor_bg']};"
+                    f"border-left:3px solid {_sg['cor_bd']};border-radius:4px;"
+                    f"padding:3px 10px;margin-bottom:2px;margin-top:2px;'>"
+                    f"<span style='color:{_sg['cor_txt']};font-weight:600;font-size:12px;'>"
+                    f"{_sg['titulo']}</span>{_dica_off}</div>",
+                    unsafe_allow_html=True,
+                )
+
+                # Checkboxes em linhas de 4 (com coluna-espaçador à esquerda)
+                _n_sg_rows = (len(_sg_itens) + 3) // 4
+                for _sgr in range(_n_sg_rows):
+                    _sg_cols = st.columns([0.3, 1, 1, 1, 1])
+                    for _sgi, (_chave_sg, _label_sg, _tip_sg) in enumerate(
+                        _sg_itens[_sgr * 4 : (_sgr + 1) * 4]
+                    ):
+                        _val_sg = _perm_atual.get(_chave_sg, True)
+                        _val_sg_novo = _sg_cols[_sgi + 1].checkbox(
+                            _label_sg,
+                            value=_val_sg,
+                            key=f"perm_{_uid_perm}_{_chave_sg}",
+                            disabled=not _sg_ativo,
+                            help=_tip_sg if _sg_ativo else
+                                 "Habilite '📊 Relatórios & BI' e '📋 Relatórios' primeiro.",
+                        )
+                        _novas_perms[_chave_sg] = _val_sg_novo and _sg_ativo
+
+                st.markdown("<div style='height:4px'></div>", unsafe_allow_html=True)
 
             st.markdown("<div style='height:10px'></div>", unsafe_allow_html=True)
 

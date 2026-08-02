@@ -2871,22 +2871,44 @@ def tela_relatorio():
         unsafe_allow_html=True,
     )
 
-    tab_diario, tab_f, tab_a, tab_w, tab_sem_av, tab_clinico, tab_pa_lote = st.tabs(
-        [
-            "📋 Lista Frequência Oficial",
-            "📊 Plan. Frequência",
-            "🔎 Auditoria",
-            "🏆 Prestação Pedagógica",
-            "🧪 Avaliações",
-            "🧬 Patologias",
-            "🩺 Coleta PA em Lote",
-        ]
-    )
+    # ── Permissões por aba ─────────────────────────────────────────────────
+    def _rel_liberada(chave: str) -> bool:
+        if st.session_state.get('perfil') == 'SuperAdmin':
+            return True
+        perms = st.session_state.get('_menu_perms_cache') or {}
+        return perms.get(chave, True)
+
+    _ABAS_REL_CAT = [
+        ("rel_lista_freq",    "📋 Lista Frequência Oficial"),
+        ("rel_plan_freq",     "📊 Plan. Frequência"),
+        ("rel_auditoria",     "🔎 Auditoria"),
+        ("rel_prestacao_ped", "🏆 Prestação Pedagógica"),
+        ("rel_avaliacoes",    "🧪 Avaliações"),
+        ("rel_patologias",    "🧬 Patologias"),
+        ("rel_pa_lote",       "🩺 Coleta PA em Lote"),
+    ]
+    _abas_vis = [(c, l) for c, l in _ABAS_REL_CAT if _rel_liberada(c)]
+    if not _abas_vis:
+        st.info("🔒 Você não tem acesso a nenhuma aba de Relatórios. Contate o administrador.")
+        return
+
+    _tabs_obj = st.tabs([l for _, l in _abas_vis])
+    _tab_r = {c: _tabs_obj[i] for i, (c, _) in enumerate(_abas_vis)}
+    tab_diario  = _tab_r.get("rel_lista_freq")
+    tab_f       = _tab_r.get("rel_plan_freq")
+    tab_a       = _tab_r.get("rel_auditoria")
+    tab_w       = _tab_r.get("rel_prestacao_ped")
+    tab_sem_av  = _tab_r.get("rel_avaliacoes")
+    tab_clinico = _tab_r.get("rel_patologias")
+    tab_pa_lote = _tab_r.get("rel_pa_lote")
 
     # ==============================================================================
     # --- ABA 1: FREQUÊNCIA (MOTOR ANTI-FURO IMPLEMENTADO) ---
     # ==============================================================================
-    with tab_f:
+    def _render_tab_f():
+        if not _rel_liberada("rel_plan_freq"):
+            st.info("🔒 Sem acesso a esta aba (Plan. Frequência). Contate o administrador.")
+            return
         c1, c2, c3 = st.columns([1, 1, 2], vertical_alignment="bottom")
         d_i = c1.date_input(
             "Data de Início", datetime.date.today().replace(day=1), format="DD/MM/YYYY"
@@ -3369,10 +3391,16 @@ def tela_relatorio():
                     **{"text-align": "center"},
                 )
                 st.dataframe(df_st, use_container_width=True, hide_index=True)
+    if tab_f is not None:
+        with tab_f:
+            _render_tab_f()
     # ==============================================================================
     # --- ABA 2: AUDITORIA COM PDF NATIVO E GRID INTERATIVO ---
     # ==============================================================================
-    with tab_a:
+    def _render_tab_a():
+        if not _rel_liberada("rel_auditoria"):
+            st.info("🔒 Sem acesso a esta aba (Auditoria). Contate o administrador.")
+            return
         st.markdown("### 🔎 Auditoria de Cadastros e Documentos")
         st.write(
             "Identifique pendências documentais e clique no botão para acessar e corrigir a ficha do aluno instantaneamente."
@@ -3604,10 +3632,16 @@ def tela_relatorio():
                         "🎉 Todos os alunos desta turma possuem documentos e cadastros 100% completos!"
                     )
 
+    if tab_a is not None:
+        with tab_a:
+            _render_tab_a()
     # ==============================================================================
     # --- ABA 3: PRESTAÇÃO PEDAGÓGICA (MOTOR NATIVO .DOCX) ---
     # ==============================================================================
-    with tab_w:
+    def _render_tab_w():
+        if not _rel_liberada("rel_prestacao_ped"):
+            st.info("🔒 Sem acesso a esta aba (Prestação Pedagógica). Contate o administrador.")
+            return
         st.markdown("### 🏆 Prestação de Conta Pedagógica")
         st.info(
             "Geração do documento oficial consolidando métricas bioindicadoras e de engajamento baseadas nos dados preenchidos no Diário de Bordo."
@@ -3752,28 +3786,35 @@ def tela_relatorio():
                         use_container_width=True,
                     )
 
+    if tab_w is not None:
+        with tab_w:
+            _render_tab_w()
     # ==============================================================================
     # --- ABA 5: PRESTAÇÃO DIÁRIA (Lista de Presença por Dia - PDF) ---
     # ==============================================================================
-    with tab_diario:
-        _renderizar_aba_prestacao_diaria()
+    if tab_diario is not None:
+        with tab_diario:
+            _renderizar_aba_prestacao_diaria()
 
     # ==============================================================================
     # --- ABA 6: AVALIAÇÕES PENDENTES ---
     # ==============================================================================
-    with tab_sem_av:
-        from views.sem_avaliacao_view import renderizar_aba_sem_avaliacao
-        renderizar_aba_sem_avaliacao()
+    if tab_sem_av is not None:
+        with tab_sem_av:
+            from views.sem_avaliacao_view import renderizar_aba_sem_avaliacao
+            renderizar_aba_sem_avaliacao()
 
     # ==============================================================================
     # --- ABA 7: PATOLOGIAS / ANAMNESE CLÍNICA ---
     # ==============================================================================
-    with tab_clinico:
-        from views.patologias_clinicas_view import renderizar_aba_patologias
-        renderizar_aba_patologias()
+    if tab_clinico is not None:
+        with tab_clinico:
+            from views.patologias_clinicas_view import renderizar_aba_patologias
+            renderizar_aba_patologias()
 
-    with tab_pa_lote:
-        tela_relatorio_pa_lote()
+    if tab_pa_lote is not None:
+        with tab_pa_lote:
+            tela_relatorio_pa_lote()
 
     st.markdown(
         "<br><p style='text-align:center; color:#94a3b8; font-size:10px;'>Moveright™ Gestão Inteligente - Projeto Esporte e Saúde Community Phase 2 - v8.40 PRIMEMAX</p>",
