@@ -3675,6 +3675,7 @@ def tela_relatorio():
         )
         m_w_num = [k for k, v in meses_dict.items() if v == m_w_nome][0]
         a_w = cw2.selectbox("Ano de Referência", [2025, 2026, 2027], index=1)
+        turmas = get_todas_turmas(ativas_apenas=True)
         t_w_sel = cw3.selectbox(
             "Escopo do Relatório",
             ["Global Polo"] + turmas["nome"].tolist()
