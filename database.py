@@ -3377,6 +3377,14 @@ def excluir_usuario_sistema(uid: str, email_session: str):
         if res.data[0].get("email", "").strip().lower() == email_session.strip().lower():
             return False, "Você não pode excluir sua própria conta."
         supabase.table("usuarios").delete().eq("id", uid).execute()
+        # Remove a chave de permissões de menu do usuário excluído para evitar
+        # acúmulo de dados órfãos em configuracoes_sistema.
+        try:
+            supabase.table("configuracoes_sistema").delete().eq(
+                "chave", f"menu_perm_{uid}"
+            ).execute()
+        except Exception:
+            pass  # Limpeza opcional — não impede o sucesso da exclusão
         return True, "✅ Usuário excluído permanentemente."
     except Exception as e:
         return False, str(e)
@@ -4168,5 +4176,56 @@ def limpar_chaves_perm_version_obsoletas() -> int:
         return 0
 
 
+def limpar_chaves_menu_perm_orfas() -> int:
+    """Remove chaves menu_perm_{uid} de configuracoes_sistema cujo uid não existe mais em usuarios.
+
+    Executa uma vez na inicialização para eliminar registros acumulados de
+    usuários já excluídos. Retorna o número de chaves removidas (0 em caso de
+    erro ou quando não há órfãos).
+    """
+    try:
+        # 1. Busca todas as chaves menu_perm_* existentes
+        resp_chaves = (
+            supabase.table("configuracoes_sistema")
+            .select("chave")
+            .like("chave", "menu_perm_%")
+            .execute()
+        )
+        chaves = [r["chave"] for r in (resp_chaves.data or [])]
+        if not chaves:
+            return 0
+
+        # 2. Extrai os UIDs referenciados pelas chaves
+        prefixo = "menu_perm_"
+        uids_referenciados = [c[len(prefixo):] for c in chaves if c.startswith(prefixo)]
+        if not uids_referenciados:
+            return 0
+
+        # 3. Busca quais desses UIDs ainda existem em usuarios
+        resp_usuarios = (
+            supabase.table("usuarios")
+            .select("id")
+            .in_("id", uids_referenciados)
+            .execute()
+        )
+        uids_existentes = {r["id"] for r in (resp_usuarios.data or [])}
+
+        # 4. Determina as chaves órfãs (uid não existe mais)
+        chaves_orfas = [
+            c for c in chaves
+            if c[len(prefixo):] not in uids_existentes
+        ]
+        if not chaves_orfas:
+            return 0
+
+        supabase.table("configuracoes_sistema").delete().in_(
+            "chave", chaves_orfas
+        ).execute()
+        return len(chaves_orfas)
+    except Exception:
+        return 0
+
+
 # ── Limpeza única de chaves legadas ao carregar o módulo ─────────────────────
 _perm_version_cleanup_count = limpar_chaves_perm_version_obsoletas()
+_menu_perm_orphan_cleanup_count = limpar_chaves_menu_perm_orfas()
