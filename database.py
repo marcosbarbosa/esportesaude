@@ -3310,7 +3310,6 @@ def set_menu_permissoes_usuario(usuario_id: str, permissoes: dict) -> tuple:
 def get_menu_perm_version(usuario_id: str) -> str:
     """Retorna o version stamp das permissões do usuário (string ISO ou '').
     Lê _v embutido no JSON de menu_perm_{uid} (escrita atômica).
-    Fallback para a chave legada perm_version_{uid} em registros antigos.
     """
     if not usuario_id:
         return ""
@@ -3327,18 +3326,6 @@ def get_menu_perm_version(usuario_id: str) -> str:
             v = data.get("_v", "")
             if v:
                 return v
-    except Exception:
-        pass
-    # Fallback: registros gravados antes da migração usam chave separada
-    try:
-        resp_v = (
-            supabase.table("configuracoes_sistema")
-            .select("valor")
-            .eq("chave", f"perm_version_{usuario_id}")
-            .execute()
-        )
-        if resp_v.data:
-            return resp_v.data[0]["valor"]
     except Exception:
         pass
     return ""
@@ -4149,3 +4136,37 @@ def get_ultimos_alertas_ausencia(limite: int = 30) -> list:
         return res.data or []
     except Exception:
         return []
+
+
+def limpar_chaves_perm_version_obsoletas() -> int:
+    """Remove todas as chaves perm_version_* de configuracoes_sistema.
+
+    Essas chaves foram substituídas pelo campo _v embutido no JSON de
+    menu_perm_{uid} e não são mais gravadas pelo sistema. Esta função é
+    chamada uma única vez na inicialização do módulo para limpar registros
+    legados que ainda possam existir no banco.
+
+    Retorna o número de linhas removidas (0 se não havia nada ou em caso de erro).
+    """
+    try:
+        # Supabase não expõe LIKE diretamente; listamos as chaves que correspondem
+        # ao padrão e as deletamos em lote pelo id/chave para maior segurança.
+        resp = (
+            supabase.table("configuracoes_sistema")
+            .select("chave")
+            .like("chave", "perm_version_%")
+            .execute()
+        )
+        chaves = [r["chave"] for r in (resp.data or [])]
+        if not chaves:
+            return 0
+        supabase.table("configuracoes_sistema").delete().in_(
+            "chave", chaves
+        ).execute()
+        return len(chaves)
+    except Exception:
+        return 0
+
+
+# ── Limpeza única de chaves legadas ao carregar o módulo ─────────────────────
+_perm_version_cleanup_count = limpar_chaves_perm_version_obsoletas()
