@@ -3252,6 +3252,7 @@ def get_objetivos_diario_periodo(data_ini: str, data_fim: str) -> list[str]:
 def get_menu_permissoes_usuario(usuario_id: str) -> dict:
     """Retorna dict {menu_chave: bool} para o usuário.
     Ausência de registro significa tudo liberado (True por padrão).
+    Remove a chave interna '_v' (version stamp) antes de retornar.
     """
     if not usuario_id:
         return {}
@@ -3264,7 +3265,9 @@ def get_menu_permissoes_usuario(usuario_id: str) -> dict:
         )
         if resp.data:
             import json
-            return json.loads(resp.data[0]["valor"])
+            data = json.loads(resp.data[0]["valor"])
+            data.pop("_v", None)  # remove version stamp; não é uma permissão de menu
+            return data
     except Exception:
         pass
     return {}
@@ -3272,16 +3275,17 @@ def get_menu_permissoes_usuario(usuario_id: str) -> dict:
 
 def set_menu_permissoes_usuario(usuario_id: str, permissoes: dict) -> tuple:
     """Salva dict de permissões do usuário em configuracoes_sistema.
-    Também atualiza perm_version_{usuario_id} para que sessões ativas detectem
-    a mudança sem precisar de logout/login.
+    O version stamp (_v) é embutido dentro do próprio JSON de permissões,
+    garantindo atomicidade: uma única escrita salva permissões e versão juntas.
     Retorna (bool, mensagem).
     """
     import json
     from datetime import datetime
     chave = f"menu_perm_{usuario_id}"
-    chave_version = f"perm_version_{usuario_id}"
-    valor = json.dumps(permissoes, ensure_ascii=False)
-    nova_version = datetime.utcnow().isoformat()
+    # Copia para não mutar o dict original; embute o version stamp no JSON
+    payload = dict(permissoes)
+    payload["_v"] = datetime.utcnow().isoformat()
+    valor = json.dumps(payload, ensure_ascii=False)
     try:
         resp = (
             supabase.table("configuracoes_sistema")
@@ -3298,22 +3302,6 @@ def set_menu_permissoes_usuario(usuario_id: str, permissoes: dict) -> tuple:
             supabase.table("configuracoes_sistema") \
                 .insert({"chave": chave, "valor": valor}) \
                 .execute()
-        # Atualiza o version stamp para invalidar caches de sessões ativas
-        resp_v = (
-            supabase.table("configuracoes_sistema")
-            .select("chave")
-            .eq("chave", chave_version)
-            .execute()
-        )
-        if resp_v.data:
-            supabase.table("configuracoes_sistema") \
-                .update({"valor": nova_version}) \
-                .eq("chave", chave_version) \
-                .execute()
-        else:
-            supabase.table("configuracoes_sistema") \
-                .insert({"chave": chave_version, "valor": nova_version}) \
-                .execute()
         return True, "✅ Permissões salvas com sucesso."
     except Exception as e:
         return False, f"Erro ao salvar: {e}"
@@ -3321,19 +3309,36 @@ def set_menu_permissoes_usuario(usuario_id: str, permissoes: dict) -> tuple:
 
 def get_menu_perm_version(usuario_id: str) -> str:
     """Retorna o version stamp das permissões do usuário (string ISO ou '').
-    Usado para detectar cache stale em sessões ativas.
+    Lê _v embutido no JSON de menu_perm_{uid} (escrita atômica).
+    Fallback para a chave legada perm_version_{uid} em registros antigos.
     """
     if not usuario_id:
         return ""
     try:
+        import json
         resp = (
+            supabase.table("configuracoes_sistema")
+            .select("valor")
+            .eq("chave", f"menu_perm_{usuario_id}")
+            .execute()
+        )
+        if resp.data:
+            data = json.loads(resp.data[0]["valor"])
+            v = data.get("_v", "")
+            if v:
+                return v
+    except Exception:
+        pass
+    # Fallback: registros gravados antes da migração usam chave separada
+    try:
+        resp_v = (
             supabase.table("configuracoes_sistema")
             .select("valor")
             .eq("chave", f"perm_version_{usuario_id}")
             .execute()
         )
-        if resp.data:
-            return resp.data[0]["valor"]
+        if resp_v.data:
+            return resp_v.data[0]["valor"]
     except Exception:
         pass
     return ""
