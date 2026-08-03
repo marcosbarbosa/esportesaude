@@ -1,4 +1,4 @@
-modules = ["nodejs-24", "python-3.11", "postgresql-16"]
+modules = ["nodejs-24", "python-3.11"]
 
 [[artifacts]]
 id = "artifacts/api-server"
@@ -13,17 +13,6 @@ deploymentTarget = "autoscale"
 [deployment.postBuild]
 args = ["pnpm", "store", "prune"]
 env = { "CI" = "true" }
-[repl]
-run = "streamlit run main.py"
-
-[deployment]
-run = [
-  "sh",
-  "-c",
-  "streamlit run main.py --server.address=0.0.0.0 --server.port=$PORT",
-]
-deploymentTarget = "cloudrun"
-ignorePorts = false
 
 [workflows]
 runButton = "Project"
@@ -46,7 +35,7 @@ outputType = "webview"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
-args = "python cleanup.py; PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=\"\" STREAMLIT_SERVER_PORT=8000 streamlit run main.py"
+args = "STREAMLIT_SERVER_PORT=8000 streamlit run main.py"
 waitForPort = 8000
 
 [agent]
@@ -65,4 +54,4 @@ packages = ["glibcLocales", "lacus"]
 
 [userenv.shared]
 SMTP_EMAIL = "marcosbarbosa.am@gmail.com"
-SMTP_PASSWORD = "nqufitmlgwjjwjcq"
+SMTP_PASSWORD = "bmqzajtkikmuedpo"
