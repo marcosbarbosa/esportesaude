@@ -1,5 +1,6 @@
 {pkgs}: {
   deps = [
+    pkgs.u-root-cmds
     pkgs.openjpeg
     pkgs.libwebp
     pkgs.lcms2
