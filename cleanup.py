@@ -11,18 +11,44 @@ import time
 
 
 def _pyc_is_stale(pyc_path: str, py_path: str) -> bool:
-    """Return True if the .pyc timestamp is older than the .py source file."""
+    """Return True if the .pyc is stale or untrustworthy.
+
+    PEP-552 introduced two .pyc validation modes:
+      flags & 1 == 0  →  timestamp-based (classic)
+      flags & 1 == 1  →  hash-based
+        flags & 2 == 0  →  checked (hash verified at import)
+        flags & 2 == 2  →  unchecked (hash stored but NEVER verified by CPython)
+
+    Unchecked hash-based pycs (flags == 3) are dangerous: CPython loads them
+    blindly even when the source has changed.  We always treat them as stale
+    so they are deleted and CPython falls back to the .py source.
+    """
     try:
-        py_mtime = os.path.getmtime(py_path)
-        # PEP-3147 .pyc layout: magic(4) + flags(4) + timestamp(4) + size(4)
+        # PEP-3147 .pyc layout: magic(4) + flags(4) + ...
         with open(pyc_path, "rb") as f:
             header = f.read(16)
         if len(header) < 16:
             return True  # truncated / corrupt
-        # bytes 8-11 hold the source timestamp (little-endian uint32)
-        cached_ts = struct.unpack_from("<I", header, 8)[0]
-        # Compare with 1-second granularity (same as CPython's own check)
-        return int(py_mtime) > cached_ts
+
+        flags = struct.unpack_from("<I", header, 4)[0]
+
+        if flags & 1:
+            # Hash-based pyc.
+            if flags & 2:
+                # Unchecked hash (flags == 3): CPython never validates → always stale.
+                return True
+            # Checked hash-based: verify SHA-256 of source matches stored hash.
+            import hashlib
+            stored_hash = header[8:16]  # 8 bytes of hash
+            with open(py_path, "rb") as f:
+                src_hash = hashlib.sha256(f.read()).digest()[:8]
+            return src_hash != stored_hash
+        else:
+            # Timestamp-based (classic): compare source mtime with stored timestamp.
+            py_mtime = os.path.getmtime(py_path)
+            cached_ts = struct.unpack_from("<I", header, 8)[0]
+            return int(py_mtime) > cached_ts
+
     except (OSError, struct.error):
         return True  # unreadable → treat as stale
 
