@@ -825,6 +825,7 @@ if not st.session_state.usuario_logado:
                             )
                             # Limpa cache de permissões ao fazer login
                             st.session_state.pop("_menu_perms_cache", None)
+                            st.session_state.pop("_menu_perms_version", None)
                             st.rerun()
                         else:
                             st.error("❌ Credenciais inválidas.")
@@ -1574,9 +1575,14 @@ def _menu_liberado(chave: str) -> bool:
         return True
     perms = st.session_state.get("_menu_perms_cache")
     if perms is None:
-        from database import get_menu_permissoes_usuario
+        from database import get_menu_permissoes_usuario, get_menu_perm_version
         perms = get_menu_permissoes_usuario(uid)
         st.session_state["_menu_perms_cache"] = perms
+        # Armazena a versão atual para detectar mudanças futuras
+        try:
+            st.session_state["_menu_perms_version"] = get_menu_perm_version(uid)
+        except Exception:
+            pass
     return perms.get(chave, True)
 
 
@@ -1588,11 +1594,47 @@ _CHAVES_MENU = {
     "Gestor":          "gestor",
 }
 
+# ── Verifica se permissões do usuário foram alteradas por outro admin ─────────
+# Executa uma vez por render; se a versão no banco for diferente da cached,
+# limpa o cache para que _menu_liberado() recarregue do banco neste mesmo render.
+_uid_perm_check = st.session_state.get("usuario_id", "")
+if (
+    _uid_perm_check
+    and st.session_state.get("perfil") != "SuperAdmin"
+    and st.session_state.get("_menu_perms_cache") is not None
+):
+    try:
+        from database import get_menu_perm_version as _get_perm_ver
+        _db_ver = _get_perm_ver(_uid_perm_check)
+        if _db_ver and _db_ver != st.session_state.get("_menu_perms_version", ""):
+            st.session_state.pop("_menu_perms_cache", None)
+            st.session_state["_menu_perms_version"] = _db_ver
+    except Exception:
+        pass
+
 menu = [
     m for m in ["Principal", "Frequência", "Portal do Aluno", "Relatórios & BI", "Gestor"]
     if _menu_liberado(_CHAVES_MENU[m])
 ]
 menu.append("Sair")
+
+# Se a página atual é um item de menu de primeiro nível que foi revogado,
+# redirecionar para a primeira página permitida sem esperar o próximo clique.
+# Sub-páginas internas (Conferência Facial, Ficha de Matrícula, Nova Matrícula)
+# não são afetadas — elas são controladas pelo fluxo interno de seus pais.
+_TOP_LEVEL_PAGES = {"Principal", "Frequência", "Portal do Aluno", "Relatórios & BI", "Gestor"}
+_current_page = st.session_state.get("menu_atual", "Principal")
+if _current_page in _TOP_LEVEL_PAGES and _current_page not in menu:
+    # Primeira opção válida excluindo "Sair"
+    _allowed_pages = [m for m in menu if m != "Sair"]
+    if _allowed_pages:
+        _redirect_page = _allowed_pages[0]
+        st.session_state.menu_atual = _redirect_page
+        st.session_state["nav"] = _redirect_page
+    else:
+        # Sem nenhuma página disponível: encerrar sessão
+        st.session_state.clear()
+        st.rerun()
 
 
 def format_nav(opt):

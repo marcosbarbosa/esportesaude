@@ -3272,11 +3272,16 @@ def get_menu_permissoes_usuario(usuario_id: str) -> dict:
 
 def set_menu_permissoes_usuario(usuario_id: str, permissoes: dict) -> tuple:
     """Salva dict de permissões do usuário em configuracoes_sistema.
+    Também atualiza perm_version_{usuario_id} para que sessões ativas detectem
+    a mudança sem precisar de logout/login.
     Retorna (bool, mensagem).
     """
     import json
+    from datetime import datetime
     chave = f"menu_perm_{usuario_id}"
+    chave_version = f"perm_version_{usuario_id}"
     valor = json.dumps(permissoes, ensure_ascii=False)
+    nova_version = datetime.utcnow().isoformat()
     try:
         resp = (
             supabase.table("configuracoes_sistema")
@@ -3293,9 +3298,45 @@ def set_menu_permissoes_usuario(usuario_id: str, permissoes: dict) -> tuple:
             supabase.table("configuracoes_sistema") \
                 .insert({"chave": chave, "valor": valor}) \
                 .execute()
+        # Atualiza o version stamp para invalidar caches de sessões ativas
+        resp_v = (
+            supabase.table("configuracoes_sistema")
+            .select("chave")
+            .eq("chave", chave_version)
+            .execute()
+        )
+        if resp_v.data:
+            supabase.table("configuracoes_sistema") \
+                .update({"valor": nova_version}) \
+                .eq("chave", chave_version) \
+                .execute()
+        else:
+            supabase.table("configuracoes_sistema") \
+                .insert({"chave": chave_version, "valor": nova_version}) \
+                .execute()
         return True, "✅ Permissões salvas com sucesso."
     except Exception as e:
         return False, f"Erro ao salvar: {e}"
+
+
+def get_menu_perm_version(usuario_id: str) -> str:
+    """Retorna o version stamp das permissões do usuário (string ISO ou '').
+    Usado para detectar cache stale em sessões ativas.
+    """
+    if not usuario_id:
+        return ""
+    try:
+        resp = (
+            supabase.table("configuracoes_sistema")
+            .select("valor")
+            .eq("chave", f"perm_version_{usuario_id}")
+            .execute()
+        )
+        if resp.data:
+            return resp.data[0]["valor"]
+    except Exception:
+        pass
+    return ""
 
 
 def listar_usuarios_sistema() -> tuple:
