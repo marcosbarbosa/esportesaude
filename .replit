@@ -13,6 +13,17 @@ deploymentTarget = "autoscale"
 [deployment.postBuild]
 args = ["pnpm", "store", "prune"]
 env = { "CI" = "true" }
+[repl]
+run = "streamlit run main.py"
+
+[deployment]
+run = [
+  "sh",
+  "-c",
+  "streamlit run main.py --server.address=0.0.0.0 --server.port=$PORT",
+]
+deploymentTarget = "cloudrun"
+ignorePorts = false
 
 [workflows]
 runButton = "Project"
