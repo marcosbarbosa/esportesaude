@@ -3,6 +3,9 @@ cleanup.py — Smart Python bytecode cache checker.
 
 Only removes .pyc files / __pycache__ dirs when stale or orphaned bytecode
 is actually detected. Clean environments skip the scan with no overhead.
+
+On removal, persists a structured log entry to configuracoes_sistema so admins
+can audit cache-corruption history from the Backup & Diagnostics screen.
 """
 import os
 import sys
@@ -75,6 +78,84 @@ def _find_issues(root: str):
                     yield ("stale", pyc_path)
 
 
+# ==============================================================================
+# 📦 LOG DE LIMPEZA → configuracoes_sistema
+# ==============================================================================
+
+_CHAVE_LOG = "cleanup_cache_log"
+_MAX_ENTRADAS = 50  # mantém os últimos 50 eventos
+
+
+def _ler_secrets_toml(root: str) -> dict:
+    """Lê .streamlit/secrets.toml sem dependência do Streamlit."""
+    try:
+        import tomllib
+        secrets_path = os.path.join(root, ".streamlit", "secrets.toml")
+        with open(secrets_path, "rb") as f:
+            return tomllib.load(f)
+    except Exception:
+        return {}
+
+
+def _registrar_log_supabase(root: str, n_orfaos: int, n_obsoletos: int, elapsed: float):
+    """Persiste um evento de limpeza em configuracoes_sistema via Supabase REST."""
+    try:
+        import json
+        import datetime
+
+        secrets = _ler_secrets_toml(root)
+        url = secrets.get("SUPABASE_URL") or os.environ.get("SUPABASE_URL", "")
+        key = secrets.get("SUPABASE_KEY") or os.environ.get("SUPABASE_KEY", "")
+
+        if not url or not key:
+            print("[cleanup] Aviso: credenciais Supabase não encontradas — log não registrado.", file=sys.stderr)
+            return
+
+        from supabase import create_client
+        sb = create_client(url, key)
+
+        # Lê log existente
+        res = (
+            sb.table("configuracoes_sistema")
+            .select("valor")
+            .eq("chave", _CHAVE_LOG)
+            .execute()
+        )
+        try:
+            entradas = json.loads(res.data[0]["valor"]) if res.data else []
+            if not isinstance(entradas, list):
+                entradas = []
+        except Exception:
+            entradas = []
+
+        # Adiciona nova entrada
+        nova = {
+            "data": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "orfaos": n_orfaos,
+            "obsoletos": n_obsoletos,
+            "total": n_orfaos + n_obsoletos,
+            "duracao_s": round(elapsed, 2),
+        }
+        entradas.append(nova)
+
+        # Mantém apenas as últimas N entradas
+        if len(entradas) > _MAX_ENTRADAS:
+            entradas = entradas[-_MAX_ENTRADAS:]
+
+        payload = json.dumps(entradas, ensure_ascii=False)
+
+        sb.table("configuracoes_sistema").upsert(
+            {"chave": _CHAVE_LOG, "valor": payload},
+            on_conflict="chave",
+        ).execute()
+
+        print(f"[cleanup] Evento de limpeza registrado no banco ({nova['total']} arquivo(s)).")
+
+    except Exception as exc:
+        # Nunca deve travar o startup por falha no log
+        print(f"[cleanup] Aviso: não foi possível registrar log: {exc}", file=sys.stderr)
+
+
 def main():
     root = os.path.dirname(os.path.abspath(__file__))
     t0 = time.monotonic()
@@ -89,6 +170,8 @@ def main():
     print(f"[cleanup] Found {len(issues)} stale/orphaned .pyc file(s) — cleaning...")
     removed_files = 0
     removed_dirs = set()
+    n_orfaos = 0
+    n_obsoletos = 0
 
     for kind, pyc_path in issues:
         cache_dir = os.path.dirname(pyc_path)
@@ -96,6 +179,10 @@ def main():
             os.remove(pyc_path)
             removed_files += 1
             removed_dirs.add(cache_dir)
+            if kind == "orphan":
+                n_orfaos += 1
+            else:
+                n_obsoletos += 1
         except OSError as exc:
             print(f"[cleanup] Warning: could not remove {pyc_path}: {exc}", file=sys.stderr)
 
@@ -109,6 +196,9 @@ def main():
 
     elapsed = time.monotonic() - t0
     print(f"[cleanup] Removed {removed_files} file(s) in {elapsed:.2f}s.")
+
+    # Registra o evento no banco para auditoria
+    _registrar_log_supabase(root, n_orfaos, n_obsoletos, elapsed)
 
 
 if __name__ == "__main__":

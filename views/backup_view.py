@@ -60,7 +60,7 @@ def tela_backup():
     st.write("Bem-vindo ao núcleo de segurança do MoveRight. Aqui você pode gerar snapshots (fotografias) instantâneas de toda a base de dados.")
     st.divider()
 
-    tab_gerar, tab_restaurar, tab_nuvem = st.tabs(["💾 Gerar Backup Manual", "🔄 Restauração (Perigo)", "☁️ Nuvem & Automação"])
+    tab_gerar, tab_restaurar, tab_nuvem, tab_diag = st.tabs(["💾 Gerar Backup Manual", "🔄 Restauração (Perigo)", "☁️ Nuvem & Automação", "🔍 Diagnóstico de Cache"])
 
     # ==========================================================================
     # ABA 1: GERAR BACKUP
@@ -138,3 +138,83 @@ def tela_backup():
 
         *Isso garante um isolamento perfeito: mesmo que a nuvem do sistema caia, o ficheiro físico estará consigo e no Google!*
         """)
+
+    # ==========================================================================
+    # ABA 4: DIAGNÓSTICO DE CACHE DE BYTECODE
+    # ==========================================================================
+    with tab_diag:
+        st.markdown("### 🔍 Histórico de Limpeza de Cache Bytecode")
+        st.markdown(
+            "Registros gerados automaticamente pelo **cleanup.py** no startup. "
+            "Eventos frequentes podem indicar deploys incompletos ou problemas no filesystem."
+        )
+
+        _CHAVE_LOG = "cleanup_cache_log"
+
+        try:
+            res = (
+                supabase.table("configuracoes_sistema")
+                .select("valor")
+                .eq("chave", _CHAVE_LOG)
+                .execute()
+            )
+            raw = res.data[0]["valor"] if res.data else None
+            entradas = json.loads(raw) if raw else []
+            if not isinstance(entradas, list):
+                entradas = []
+        except Exception as exc:
+            st.error(f"Erro ao carregar histórico: {exc}")
+            entradas = []
+
+        if not entradas:
+            st.info("✅ Nenhum evento de limpeza registrado. O cache bytecode está consistente desde o início do monitoramento.")
+        else:
+            # Exibe do mais recente para o mais antigo
+            entradas_desc = list(reversed(entradas))
+
+            import pandas as pd
+
+            df = pd.DataFrame(entradas_desc)
+            # Formata colunas para exibição
+            col_map = {
+                "data": "Data/Hora (UTC)",
+                "orfaos": "Órfãos",
+                "obsoletos": "Obsoletos",
+                "total": "Total Removido",
+                "duracao_s": "Duração (s)",
+            }
+            df = df.rename(columns=col_map)
+            # Formata data de ISO para legível
+            if "Data/Hora (UTC)" in df.columns:
+                df["Data/Hora (UTC)"] = pd.to_datetime(
+                    df["Data/Hora (UTC)"], errors="coerce"
+                ).dt.strftime("%d/%m/%Y %H:%M:%S")
+
+            st.dataframe(
+                df,
+                use_container_width=True,
+                hide_index=True,
+                column_config={
+                    "Data/Hora (UTC)": st.column_config.TextColumn("📅 Data/Hora (UTC)", width="medium"),
+                    "Órfãos": st.column_config.NumberColumn("🗑️ Órfãos", help="Arquivos .pyc sem .py correspondente"),
+                    "Obsoletos": st.column_config.NumberColumn("⏳ Obsoletos", help="Arquivos .pyc com timestamp desatualizado"),
+                    "Total Removido": st.column_config.NumberColumn("📦 Total Removido"),
+                    "Duração (s)": st.column_config.NumberColumn("⏱️ Duração (s)", format="%.2f"),
+                },
+            )
+
+            total_eventos = len(entradas)
+            total_removidos = sum(e.get("total", 0) for e in entradas)
+            col1, col2 = st.columns(2)
+            col1.metric("Eventos registrados", total_eventos)
+            col2.metric("Total de arquivos removidos (acumulado)", total_removidos)
+
+            if st.button("🗑️ Limpar histórico de diagnóstico", key="btn_limpar_cleanup_log"):
+                try:
+                    supabase.table("configuracoes_sistema").delete().eq(
+                        "chave", _CHAVE_LOG
+                    ).execute()
+                    st.success("Histórico apagado com sucesso.")
+                    st.rerun()
+                except Exception as exc:
+                    st.error(f"Erro ao apagar histórico: {exc}")
