@@ -23,6 +23,7 @@ from database import (
     get_todas_turmas,
     alternar_presenca,
     get_ultima_presenca_batch,
+    get_numero_aula_no_ano,
 )
 from modulos_frequencia.tab_tablet import renderizar_aba_terminal
 from modulos_frequencia.tab_diario import renderizar_aba_diario
@@ -196,6 +197,145 @@ def carregar_css_global():
     )
 
 
+# ==============================================================================
+# 🎉 BADGE DE NÚMERO DA AULA + SISTEMA DE CELEBRAÇÕES FESTIVAS
+# ==============================================================================
+
+# Marcos de aula que disparam celebração
+_MARCOS_AULA = {
+    1:   ("🌅", "#92400E", "#FEF3C7", "#F59E0B", "Primeira aula do ano!"),
+    50:  ("🎯", "#5B21B6", "#EDE9FE", "#8B5CF6", "50ª aula — metade do caminho!"),
+    100: ("🎉", "#991B1B", "#FEE2E2", "#EF4444", "100ª aula — marco histórico!"),
+    150: ("🚀", "#0C4A6E", "#E0F2FE", "#0EA5E9", "150 aulas em " + str(datetime.date.today().year) + "!"),
+    200: ("🏆", "#78350F", "#FEF3C7", "#D97706", "200 aulas — que turma incrível!"),
+    250: ("⭐", "#831843", "#FDF2F8", "#EC4899", "250ª aula — vocês são demais!"),
+    300: ("💎", "#312E81", "#EEF2FF", "#6366F1", "300 aulas! Épico! Parabéns!"),
+}
+for _m in range(400, 10_000, 100):
+    _MARCOS_AULA[_m] = ("🚀", "#0C4A6E", "#E0F2FE", "#0EA5E9", f"{_m}ª aula — inacreditável!")
+
+# Datas de calendário que disparam celebração (mês, dia)
+_DATAS_FESTIVAS = {
+    (2, 14): ("💝", "#BE185D", "#FDF2F8", "#EC4899", "Dia dos Namorados!"),
+    (3,  8): ("🌺", "#6B21A8", "#F5F3FF", "#9333EA", "Dia Internacional da Mulher!"),
+    (6, 12): ("💑", "#BE185D", "#FDF2F8", "#EC4899", "Dia dos Namorados!"),
+    (6, 23): ("🎆", "#92400E", "#FEF3C7", "#F59E0B", "Véspera de São João! Arriba!"),
+    (6, 24): ("🪘", "#92400E", "#FEF3C7", "#F59E0B", "Festa de São João! Forró!"),
+    (10, 31): ("🎃", "#9A3412", "#FFF7ED", "#EA580C", "Feliz Halloween!"),
+}
+
+# Marcos grandes (disparam balões flutuantes maiores)
+_MARCOS_GRANDES = {100, 200, 300, 400, 500}
+
+
+def _gerar_baloes_css(num_baloes: int = 14) -> str:
+    """Gera CSS de balões flutuando da base para o topo da tela."""
+    import random as _rnd
+    _rnd.seed(42)
+    emojis = ["🎈", "🎊", "🎉", "🎈", "🎈", "✨", "🎈", "🥳", "🎈", "🎊"]
+    baloes_html = ""
+    for i in range(num_baloes):
+        emoji = emojis[i % len(emojis)]
+        left  = _rnd.randint(2, 97)
+        delay = round(_rnd.uniform(0, 3.5), 2)
+        dur   = round(_rnd.uniform(4, 7), 2)
+        size  = _rnd.randint(24, 42)
+        baloes_html += (
+            f"<div class='_balao' style='left:{left}%;animation-delay:{delay}s;"
+            f"animation-duration:{dur}s;font-size:{size}px;'>{emoji}</div>"
+        )
+    return f"""
+    <style>
+    @keyframes _subir {{
+        0%   {{ transform: translateY(0)   rotate(-6deg); opacity:1; }}
+        50%  {{ transform: translateY(-40vh) rotate(6deg);  opacity:0.85; }}
+        100% {{ transform: translateY(-100vh) rotate(-3deg); opacity:0; }}
+    }}
+    ._overlay_festivo {{
+        position:fixed; inset:0; z-index:99999; pointer-events:none;
+        overflow:hidden;
+    }}
+    ._balao {{
+        position:absolute; bottom:-60px;
+        animation: _subir linear forwards;
+        will-change: transform;
+        filter: drop-shadow(0 2px 6px rgba(0,0,0,0.18));
+    }}
+    </style>
+    <div class='_overlay_festivo'>{baloes_html}</div>
+    """
+
+
+def _renderizar_badge_aula(data_aula: datetime.date, num_aula: int) -> None:
+    """
+    Renderiza o badge de número da aula logo abaixo do date_input.
+    Detecta marcos e datas festivas, exibindo legenda especial e
+    injetando balões flutuantes na tela quando necessário.
+    """
+    # ── Detectar tipo de ocasião ──────────────────────────────────────────
+    marco      = _MARCOS_AULA.get(num_aula)
+    data_fest  = _DATAS_FESTIVAS.get((data_aula.month, data_aula.day))
+    eh_celebr  = bool(marco or data_fest)
+    eh_grande  = num_aula in _MARCOS_GRANDES
+
+    # Escolher configuração visual
+    if marco:
+        ico, txt_c, bg, borda, legenda = marco
+    elif data_fest:
+        ico, txt_c, bg, borda, legenda = data_fest
+    else:
+        ico, txt_c, bg, borda, legenda = "📚", "#1E40AF", "#EFF6FF", "#BFDBFE", ""
+
+    # ── Badge HTML ────────────────────────────────────────────────────────
+    ano = data_aula.year
+    aula_label = f"Aula #{num_aula}" if num_aula else "—"
+
+    _pulse_css = """
+    @keyframes _pulse_badge {
+        0%,100% { box-shadow: 0 0 0 0 rgba(239,68,68,0.4); }
+        50%      { box-shadow: 0 0 0 8px rgba(239,68,68,0); }
+    }
+    """ if eh_celebr else ""
+
+    _legenda_html = (
+        f"<span style='font-size:11px;font-weight:700;color:{txt_c};"
+        f"background:{bg};border-radius:8px;padding:1px 7px;"
+        f"white-space:nowrap;'>{legenda}</span>"
+        if legenda else ""
+    )
+
+    _anim_style = (
+        f"animation:_pulse_badge 1.4s ease-in-out infinite;"
+    ) if eh_celebr else ""
+
+    badge_html = f"""
+    <style>{_pulse_css}</style>
+    <div style='
+        display:inline-flex;align-items:center;gap:7px;
+        background:{bg};
+        border:1.5px solid {borda};
+        border-radius:20px;
+        padding:4px 13px 4px 9px;
+        margin-top:6px;
+        font-size:13px;font-weight:700;
+        color:{txt_c};
+        white-space:nowrap;
+        {_anim_style}
+        box-shadow:0 1px 5px rgba(0,0,0,0.08);
+    '>
+      <span style='font-size:16px;line-height:1;'>{ico}</span>
+      <span style='font-size:13px;font-weight:900;'>{aula_label} · {ano}</span>
+      {_legenda_html}
+    </div>
+    """
+    st.markdown(badge_html, unsafe_allow_html=True)
+
+    # ── Balões flutuantes (somente em celebrações) ────────────────────────
+    if eh_celebr:
+        n = 18 if eh_grande else 12
+        st.markdown(_gerar_baloes_css(n), unsafe_allow_html=True)
+
+
 def tela_frequencia():
     if st.session_state.pop("_force_reload_freq", False):
         for fn in (obter_todos_alunos_cache, obter_todos_alunos_com_inativos_cache):
@@ -249,6 +389,9 @@ def tela_frequencia():
             data_aula = st.date_input(
                 "📅 Data da Aula:", hoje_check, format="DD/MM/YYYY", key="freq_data_aula"
             )
+            # ── Badge: número da aula no ano ──────────────────────────────
+            _num_aula = get_numero_aula_no_ano(data_aula)
+            _renderizar_badge_aula(data_aula, _num_aula)
 
         dia_semana = data_aula.weekday()
         if dia_semana in [5, 6]:

@@ -4226,6 +4226,44 @@ def limpar_chaves_menu_perm_orfas() -> int:
         return 0
 
 
+@st.cache_data(ttl=600, show_spinner=False)
+def get_numero_aula_no_ano(data_referencia) -> int:
+    """
+    Conta quantos dias letivos distintos foram registrados na tabela 'frequencia'
+    desde 01/Jan do mesmo ano até data_referencia (inclusive).
+    Retorna 0 em caso de erro ou se nenhum registro for encontrado.
+    Usado para exibir o número sequencial da aula na tela de Gestão de Fluxo.
+    """
+    try:
+        import datetime as _dt
+        if isinstance(data_referencia, str):
+            data_referencia = _dt.date.fromisoformat(data_referencia[:10])
+        inicio_ano = _dt.date(data_referencia.year, 1, 1).isoformat()
+        fim = data_referencia.isoformat()
+        PAGE = 1000
+        datas_unicas: set = set()
+        for start in range(0, 500_000, PAGE):
+            r = (
+                supabase.from_("frequencia")
+                .select("data_aula")
+                .gte("data_aula", inicio_ano)
+                .lte("data_aula", fim)
+                .order("data_aula")
+                .range(start, start + PAGE - 1)
+                .execute()
+            )
+            batch = r.data or []
+            for row in batch:
+                d = str(row.get("data_aula", ""))[:10]
+                if d:
+                    datas_unicas.add(d)
+            if len(batch) < PAGE:
+                break
+        return len(datas_unicas)
+    except Exception:
+        return 0
+
+
 # ── Limpeza única de chaves legadas ao carregar o módulo ─────────────────────
 _perm_version_cleanup_count = limpar_chaves_perm_version_obsoletas()
 _menu_perm_orphan_cleanup_count = limpar_chaves_menu_perm_orfas()
