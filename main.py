@@ -1457,17 +1457,20 @@ def _tela_calendario_institucional():
         get_dias_sem_aula_periodo_df,
         registrar_dia_sem_aula,
         remover_dia_sem_aula,
+        get_datas_comemorativas_bd,
     )
 
     st.markdown("""
         <div style='background:#F0FDF4;border-left:4px solid #16A34A;
                     padding:12px 16px;border-radius:6px;margin-bottom:18px;'>
-            <strong style='color:#14532D;'>📅 Calendário Institucional — Dias Sem Aula</strong><br>
+            <strong style='color:#14532D;'>📅 Calendário Institucional</strong><br>
             <span style='color:#15803D;font-size:13px;'>
-                Registre dias em que não houve aula por motivo institucional
-                (reuniões internas, recessos, feriados locais, etc.).<br>
-                Esses dias são automaticamente excluídos do alerta de
-                <em>frequência pendente</em> nos relatórios.
+                Registre dias especiais: <strong>sem aula</strong> (reuniões, recessos,
+                feriados locais) ou <strong>datas comemorativas com aula</strong>
+                (aniversário da instituição, eventos festivos, etc.).<br>
+                Dias sem aula são excluídos do alerta de <em>frequência pendente</em>
+                nos relatórios. Datas comemorativas com aula ativam o
+                badge festivo 🎉 e os balões 🎈 na tela de Frequência.
             </span>
         </div>
     """, unsafe_allow_html=True)
@@ -1478,16 +1481,43 @@ def _tela_calendario_institucional():
     fk = st.session_state.get("cal_form_key", 0)
 
     # ── Formulário de cadastro ─────────────────────────────────────────────
-    st.markdown("### ➕ Registrar dia sem aula")
-    ca, cb, cc = st.columns([2, 4, 2])
+    st.markdown("### ➕ Registrar data especial")
+    ca, cb = st.columns([2, 5])
     novo_dia_cal   = ca.date_input("Data:", value=hoje_cal, format="DD/MM/YYYY",
                                    key=f"cal_data_novo_{fk}")
-    motivo_cal_txt = cb.text_input("Motivo:",
-                                   placeholder="Ex: Reunião pedagógica, Feriado municipal…",
-                                   key=f"cal_motivo_{fk}")
-    cc.markdown("<br>", unsafe_allow_html=True)
-    btn_reg_cal    = cc.button("✅ REGISTRAR", type="primary",
-                               use_container_width=True, key=f"cal_btn_reg_{fk}")
+    motivo_cal_txt = cb.text_input(
+        "Motivo / Descrição:",
+        placeholder="Ex: Reunião pedagógica, Aniversário IMBRA, Feriado municipal…",
+        key=f"cal_motivo_{fk}",
+    )
+
+    # Checkboxes de tipo — em linha para economizar espaço vertical
+    _cc1, _cc2, _cc3 = st.columns([3, 3, 2])
+    eh_comemorativa = _cc1.checkbox(
+        "🎉 É data comemorativa?",
+        key=f"cal_comemorativa_{fk}",
+        help="Marca como data festiva — exibe badge especial e balões na tela de Frequência.",
+    )
+    tem_aula = False
+    if eh_comemorativa:
+        tem_aula = _cc2.checkbox(
+            "✅ Haverá aula nesta data?",
+            key=f"cal_tem_aula_{fk}",
+            help=(
+                "Marcado → data festiva COM aula (badge + balões, chamada liberada).\n"
+                "Desmarcado → feriado comemorativo SEM aula (bloqueia chamada + badge)."
+            ),
+        )
+    else:
+        _cc2.markdown(
+            "<small style='color:#94A3B8;'>← Marque 'comemorativa' para habilitar</small>",
+            unsafe_allow_html=True,
+        )
+
+    _cc3.markdown("<br>", unsafe_allow_html=True)
+    btn_reg_cal = _cc3.button(
+        "✅ REGISTRAR", type="primary", use_container_width=True, key=f"cal_btn_reg_{fk}"
+    )
 
     if btn_reg_cal:
         with st.spinner("Salvando…"):
@@ -1495,30 +1525,50 @@ def _tela_calendario_institucional():
                 str(novo_dia_cal),
                 motivo_cal_txt,
                 criado_por=st.session_state.get("usuario_logado", "sistema"),
+                eh_comemorativa=eh_comemorativa,
+                tem_aula=tem_aula,
             )
         if ok:
-            st.toast(f"✅ {novo_dia_cal.strftime('%d/%m/%Y')} registrado como Sem Aula!", icon="✅")
+            # Invalida cache de comemorativas para o badge atualizar imediatamente
+            try:
+                get_datas_comemorativas_bd.clear()
+            except Exception:
+                pass
+            if tem_aula and eh_comemorativa:
+                msg = f"🎉 {novo_dia_cal.strftime('%d/%m/%Y')} registrada como data comemorativa com aula!"
+            elif eh_comemorativa:
+                msg = f"🎊 {novo_dia_cal.strftime('%d/%m/%Y')} registrada como feriado comemorativo (sem aula)."
+            else:
+                msg = f"📌 {novo_dia_cal.strftime('%d/%m/%Y')} registrado como dia sem aula."
+            st.toast(msg, icon="✅")
             st.session_state["cal_form_key"] = fk + 1
             st.rerun()
         else:
-            st.error("❌ Falha ao registrar. Verifique se a tabela `dias_sem_aula` foi criada no Supabase.")
-            with st.expander("ℹ️ SQL para criar a tabela (execute 1 vez no Supabase)", expanded=True):
+            st.error("❌ Falha ao registrar.")
+            with st.expander("ℹ️ SQL para criar/migrar a tabela (execute no Supabase)", expanded=True):
                 st.code("""
+-- Criação inicial
 CREATE TABLE IF NOT EXISTS dias_sem_aula (
-    id         uuid DEFAULT gen_random_uuid() PRIMARY KEY,
-    data       date NOT NULL UNIQUE,
-    motivo     text DEFAULT '',
-    criado_em  timestamptz DEFAULT now(),
-    criado_por text DEFAULT ''
+    id              uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+    data            date NOT NULL UNIQUE,
+    motivo          text DEFAULT '',
+    criado_em       timestamptz DEFAULT now(),
+    criado_por      text DEFAULT '',
+    eh_comemorativa boolean DEFAULT false,
+    tem_aula        boolean DEFAULT false
 );
 ALTER TABLE dias_sem_aula ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "allow_all" ON dias_sem_aula
     FOR ALL USING (true) WITH CHECK (true);
+
+-- Migração (se a tabela já existe — execute só as linhas ALTER)
+ALTER TABLE dias_sem_aula ADD COLUMN IF NOT EXISTS eh_comemorativa boolean DEFAULT false;
+ALTER TABLE dias_sem_aula ADD COLUMN IF NOT EXISTS tem_aula        boolean DEFAULT false;
                 """, language="sql")
 
     st.markdown("---")
 
-    # ── Lista automática — sem botão Buscar ───────────────────────────────
+    # ── Lista automática ───────────────────────────────────────────────────
     st.markdown("### 📋 Registros existentes")
     fl1, fl2 = st.columns([2, 2])
     cal_ini = fl1.date_input(
@@ -1530,9 +1580,19 @@ CREATE POLICY "allow_all" ON dias_sem_aula
         format="DD/MM/YYYY", key="cal_lista_fim"
     )
 
+    # Legenda visual
+    st.markdown(
+        "<div style='display:flex;gap:18px;flex-wrap:wrap;margin:6px 0 14px;font-size:12px;color:#475569;'>"
+        "<span>📌 Sem aula</span>"
+        "<span>🎊 Comemorativa sem aula</span>"
+        "<span>🎉 Comemorativa <strong>com aula</strong> (badge ativo)</span>"
+        "</div>",
+        unsafe_allow_html=True,
+    )
+
     df_cal = get_dias_sem_aula_periodo_df(str(cal_ini), str(cal_fim))
     if df_cal.empty:
-        st.info("Nenhum dia sem aula registrado no período selecionado.")
+        st.info("Nenhuma data especial registrada no período selecionado.")
     else:
         st.markdown(f"**{len(df_cal)} dia(s) encontrado(s):**")
         for _, row_cal in df_cal.iterrows():
@@ -1542,16 +1602,41 @@ CREATE POLICY "allow_all" ON dias_sem_aula
                 d_disp  = f"{d_obj.strftime('%d/%m/%Y')} ({weekday})"
             except Exception:
                 d_disp = str(row_cal["data"])
-            motivo_d = str(row_cal.get("motivo", "") or "—")
-            criado_d = str(row_cal.get("criado_por", "") or "sistema")
+
+            motivo_d  = str(row_cal.get("motivo", "") or "—")
+            criado_d  = str(row_cal.get("criado_por", "") or "sistema")
+            _comemorativa = bool(row_cal.get("eh_comemorativa", False))
+            _tem_aula     = bool(row_cal.get("tem_aula", False))
+
+            # Ícone e cor conforme tipo
+            if _comemorativa and _tem_aula:
+                _ico  = "🎉"
+                _cor  = "#92400E"
+                _tag  = "<span style='font-size:10px;font-weight:700;background:#FEF3C7;color:#92400E;border-radius:6px;padding:1px 6px;'>COMEMORATIVA · COM AULA</span>"
+            elif _comemorativa:
+                _ico  = "🎊"
+                _cor  = "#5B21B6"
+                _tag  = "<span style='font-size:10px;font-weight:700;background:#EDE9FE;color:#5B21B6;border-radius:6px;padding:1px 6px;'>COMEMORATIVA · SEM AULA</span>"
+            else:
+                _ico  = "📌"
+                _cor  = "#DC2626"
+                _tag  = ""
+
             col_d, col_m, col_x = st.columns([3, 5, 1])
-            col_d.markdown(f"📌 **{d_disp}**")
+            col_d.markdown(
+                f"<span style='color:{_cor};font-weight:700;'>{_ico} {d_disp}</span> {_tag}",
+                unsafe_allow_html=True,
+            )
             col_m.markdown(
                 f"<small style='color:#64748B;'>{motivo_d} · <em>por {criado_d}</em></small>",
                 unsafe_allow_html=True,
             )
             if col_x.button("🗑️", key=f"cal_del_{row_cal['data']}", help="Remover este dia"):
                 remover_dia_sem_aula(str(row_cal["data"]))
+                try:
+                    get_datas_comemorativas_bd.clear()
+                except Exception:
+                    pass
                 st.toast("🗑️ Registro removido.", icon="🗑️")
                 st.rerun()
 

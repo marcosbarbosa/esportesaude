@@ -24,6 +24,7 @@ from database import (
     alternar_presenca,
     get_ultima_presenca_batch,
     get_numero_aula_no_ano,
+    get_datas_comemorativas_bd,
 )
 from modulos_frequencia.tab_tablet import renderizar_aba_terminal
 from modulos_frequencia.tab_diario import renderizar_aba_diario
@@ -269,71 +270,80 @@ def _gerar_baloes_css(num_baloes: int = 14) -> str:
 def _renderizar_badge_aula(data_aula: datetime.date, num_aula: int) -> None:
     """
     Renderiza o badge de número da aula logo abaixo do date_input.
-    Detecta marcos e datas festivas, exibindo legenda especial e
-    injetando balões flutuantes na tela quando necessário.
+    Detecta marcos (50ª, 100ª…), datas fixas (_DATAS_FESTIVAS) e datas
+    comemorativas registradas pelo admin no Calendário Institucional.
+    Em celebrações: badge pulsa + balões sobem pela tela.
     """
-    # ── Detectar tipo de ocasião ──────────────────────────────────────────
-    marco      = _MARCOS_AULA.get(num_aula)
-    data_fest  = _DATAS_FESTIVAS.get((data_aula.month, data_aula.day))
-    eh_celebr  = bool(marco or data_fest)
-    eh_grande  = num_aula in _MARCOS_GRANDES
+    # ── 1. Marcos de aula ──────────────────────────────────────────────────
+    marco = _MARCOS_AULA.get(num_aula)
 
-    # Escolher configuração visual
+    # ── 2. Datas festivas fixas (hardcoded — anuais) ───────────────────────
+    data_fest = _DATAS_FESTIVAS.get((data_aula.month, data_aula.day))
+
+    # ── 3. Datas comemorativas registradas pelo admin no Calendário ─────────
+    db_fest = None
+    if not marco and not data_fest:
+        try:
+            _db_map = get_datas_comemorativas_bd()
+            _entrada = _db_map.get(data_aula.isoformat())
+            if _entrada:
+                motivo_db = _entrada.get("motivo") or "Data comemorativa!"
+                db_fest = ("🎉", "#92400E", "#FEF3C7", "#F59E0B", motivo_db)
+        except Exception:
+            pass
+
+    eh_celebr = bool(marco or data_fest or db_fest)
+    eh_grande = num_aula in _MARCOS_GRANDES
+
+    # ── 4. Escolher visual ─────────────────────────────────────────────────
     if marco:
         ico, txt_c, bg, borda, legenda = marco
     elif data_fest:
         ico, txt_c, bg, borda, legenda = data_fest
+    elif db_fest:
+        ico, txt_c, bg, borda, legenda = db_fest
     else:
         ico, txt_c, bg, borda, legenda = "📚", "#1E40AF", "#EFF6FF", "#BFDBFE", ""
 
-    # ── Badge HTML ────────────────────────────────────────────────────────
-    ano = data_aula.year
+    # ── 5. Montar HTML (style em linha única — evita interpretação Markdown) ─
+    ano        = data_aula.year
     aula_label = f"Aula #{num_aula}" if num_aula else "—"
 
-    _pulse_css = """
-    @keyframes _pulse_badge {
-        0%,100% { box-shadow: 0 0 0 0 rgba(239,68,68,0.4); }
-        50%      { box-shadow: 0 0 0 8px rgba(239,68,68,0); }
-    }
-    """ if eh_celebr else ""
+    _pulse_css = (
+        "@keyframes _pbadge{0%,100%{box-shadow:0 0 0 0 rgba(239,68,68,.4)}"
+        "50%{box-shadow:0 0 0 8px rgba(239,68,68,0)}}"
+    ) if eh_celebr else ""
 
-    _legenda_html = (
+    _anim = "animation:_pbadge 1.4s ease-in-out infinite;" if eh_celebr else ""
+
+    _style = (
+        f"display:inline-flex;align-items:center;gap:7px;"
+        f"background:{bg};border:1.5px solid {borda};border-radius:20px;"
+        f"padding:4px 13px 4px 9px;margin-top:6px;"
+        f"font-size:13px;font-weight:700;color:{txt_c};"
+        f"white-space:nowrap;{_anim}"
+        f"box-shadow:0 1px 5px rgba(0,0,0,.08);"
+    )
+
+    _leg = (
         f"<span style='font-size:11px;font-weight:700;color:{txt_c};"
         f"background:{bg};border-radius:8px;padding:1px 7px;"
         f"white-space:nowrap;'>{legenda}</span>"
-        if legenda else ""
+    ) if legenda else ""
+
+    badge_html = (
+        f"<style>{_pulse_css}</style>"
+        f"<div style='{_style}' role='status' aria-label='{aula_label} de {ano}'>"
+        f"<span aria-hidden='true' style='font-size:16px;line-height:1;'>{ico}</span>"
+        f"<span style='font-size:13px;font-weight:900;'>{aula_label} · {ano}</span>"
+        f"{_leg}"
+        f"</div>"
     )
-
-    _anim_style = (
-        f"animation:_pulse_badge 1.4s ease-in-out infinite;"
-    ) if eh_celebr else ""
-
-    badge_html = f"""
-    <style>{_pulse_css}</style>
-    <div style='
-        display:inline-flex;align-items:center;gap:7px;
-        background:{bg};
-        border:1.5px solid {borda};
-        border-radius:20px;
-        padding:4px 13px 4px 9px;
-        margin-top:6px;
-        font-size:13px;font-weight:700;
-        color:{txt_c};
-        white-space:nowrap;
-        {_anim_style}
-        box-shadow:0 1px 5px rgba(0,0,0,0.08);
-    '>
-      <span style='font-size:16px;line-height:1;'>{ico}</span>
-      <span style='font-size:13px;font-weight:900;'>{aula_label} · {ano}</span>
-      {_legenda_html}
-    </div>
-    """
     st.markdown(badge_html, unsafe_allow_html=True)
 
-    # ── Balões flutuantes (somente em celebrações) ────────────────────────
+    # ── 6. Balões flutuantes (somente em celebrações) ──────────────────────
     if eh_celebr:
-        n = 18 if eh_grande else 12
-        st.markdown(_gerar_baloes_css(n), unsafe_allow_html=True)
+        st.markdown(_gerar_baloes_css(18 if eh_grande else 12), unsafe_allow_html=True)
 
 
 def tela_frequencia():

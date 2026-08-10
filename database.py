@@ -2198,14 +2198,15 @@ def get_presentes_dia_todos(data: str) -> list:
 
 def get_dias_sem_aula(data_ini: str = None, data_fim: str = None) -> set:
     """
-    Retorna set de datetime.date com dias registrados como SEM AULA
-    (reuniões internas, recessos institucionais, feriados locais, etc.).
-    Filtra pelo intervalo se fornecido; caso contrário, retorna todos.
-    Tabela: dias_sem_aula (data date PK, motivo text, criado_em, criado_por)
+    Retorna set de datetime.date com dias registrados como SEM AULA.
+    Exclui automaticamente datas marcadas como 'tem_aula=True' (datas
+    comemorativas com aula), que aparecem no badge mas não bloqueiam a chamada.
+    Tabela: dias_sem_aula (data, motivo, criado_em, criado_por,
+                            eh_comemorativa bool, tem_aula bool)
     """
     import datetime as _dt
     try:
-        q = supabase.from_("dias_sem_aula").select("data")
+        q = supabase.from_("dias_sem_aula").select("data, tem_aula")
         if data_ini:
             q = q.gte("data", data_ini)
         if data_fim:
@@ -2214,7 +2215,7 @@ def get_dias_sem_aula(data_ini: str = None, data_fim: str = None) -> set:
         return {
             _dt.date.fromisoformat(str(r["data"]))
             for r in (res.data or [])
-            if r.get("data")
+            if r.get("data") and not r.get("tem_aula", False)
         }
     except Exception:
         return set()
@@ -2243,13 +2244,27 @@ def get_primeira_data_frequencia():
         return None
 
 
-def registrar_dia_sem_aula(data_iso: str, motivo: str = "", criado_por: str = "") -> bool:
+def registrar_dia_sem_aula(
+    data_iso: str,
+    motivo: str = "",
+    criado_por: str = "",
+    eh_comemorativa: bool = False,
+    tem_aula: bool = False,
+) -> bool:
     """
-    Registra um dia como SEM AULA no calendário institucional.
-    Tenta insert; se já existir (duplicate), faz update do motivo/criado_por.
-    Retorna True se sucesso.
+    Registra um dia no Calendário Institucional.
+    - eh_comemorativa=False, tem_aula=False → dia sem aula normal (bloqueia chamada)
+    - eh_comemorativa=True,  tem_aula=False → feriado/recesso comemorativo (bloqueia + badge)
+    - eh_comemorativa=True,  tem_aula=True  → data festiva COM aula (badge, não bloqueia)
+    Tenta insert; se já existir (duplicate key), faz update de todos os campos.
     """
-    payload = {"data": data_iso, "motivo": str(motivo or "").strip(), "criado_por": str(criado_por or "").strip()}
+    payload = {
+        "data":             data_iso,
+        "motivo":           str(motivo or "").strip(),
+        "criado_por":       str(criado_por or "").strip(),
+        "eh_comemorativa":  bool(eh_comemorativa),
+        "tem_aula":         bool(tem_aula),
+    }
     try:
         supabase.from_("dias_sem_aula").insert(payload).execute()
         return True
@@ -2257,7 +2272,7 @@ def registrar_dia_sem_aula(data_iso: str, motivo: str = "", criado_por: str = ""
         pass
     try:
         supabase.from_("dias_sem_aula").update(
-            {"motivo": str(motivo or "").strip(), "criado_por": str(criado_por or "").strip()}
+            {k: v for k, v in payload.items() if k != "data"}
         ).eq("data", data_iso).execute()
         return True
     except Exception:
@@ -2275,13 +2290,14 @@ def remover_dia_sem_aula(data_iso: str) -> bool:
 
 def get_dias_sem_aula_periodo_df(data_ini: str, data_fim: str):
     """
-    Retorna DataFrame com todos os campos dos dias sem aula no período,
-    para exibição na tela de gestão.
+    Retorna DataFrame com todos os campos dos dias no período, incluindo
+    os novos campos eh_comemorativa e tem_aula, para exibição na tela
+    de gestão do Calendário Institucional.
     """
     try:
         res = (
             supabase.from_("dias_sem_aula")
-            .select("data, motivo, criado_por, criado_em")
+            .select("data, motivo, criado_por, criado_em, eh_comemorativa, tem_aula")
             .gte("data", data_ini)
             .lte("data", data_fim)
             .order("data")
@@ -2292,6 +2308,32 @@ def get_dias_sem_aula_periodo_df(data_ini: str, data_fim: str):
     except Exception:
         import pandas as _pd
         return _pd.DataFrame()
+
+
+@st.cache_data(ttl=600, show_spinner=False)
+def get_datas_comemorativas_bd() -> dict:
+    """
+    Retorna dict { 'YYYY-MM-DD': {'motivo': str} } com as datas marcadas como
+    comemorativas COM aula (eh_comemorativa=True AND tem_aula=True).
+    Essas datas alimentam o badge festivo na tela de Gestão de Fluxo sem
+    bloquear a chamada — apenas exibem celebração visual (balões + badge especial).
+    Cache de 10 minutos.
+    """
+    try:
+        res = (
+            supabase.from_("dias_sem_aula")
+            .select("data, motivo")
+            .eq("eh_comemorativa", True)
+            .eq("tem_aula", True)
+            .execute()
+        )
+        return {
+            str(r["data"])[:10]: {"motivo": str(r.get("motivo") or "Data comemorativa!")}
+            for r in (res.data or [])
+            if r.get("data")
+        }
+    except Exception:
+        return {}
 
 
 def get_presentes_periodo_todos(data_ini: str, data_fim: str) -> dict:
