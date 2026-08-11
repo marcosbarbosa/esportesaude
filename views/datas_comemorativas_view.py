@@ -166,6 +166,27 @@ def tela_datas_comemorativas():
         )
         nova_lista = list(datas)  # cópia para mutação
 
+        # ── Botão de ordenação automática por mês e dia ───────────────────
+        if len(datas) >= 2 and editando_idx is None:
+            col_sort, _ = st.columns([3, 7])
+            with col_sort:
+                if st.button(
+                    "📅 Ordenar por data (Jan → Dez)",
+                    key="btn_ordenar_por_data",
+                    help="Reordena todas as datas automaticamente por mês e depois por dia.",
+                    use_container_width=True,
+                ):
+                    lista_ordenada = sorted(
+                        nova_lista,
+                        key=lambda d: (d.get("mes", 1), d.get("dia", 1)),
+                    )
+                    ok, msg = set_datas_comemorativas_custom(lista_ordenada)
+                    if ok:
+                        st.success("✅ Datas ordenadas por mês e dia!")
+                        st.rerun()
+                    else:
+                        st.error(f"Erro ao salvar ordem: {msg}")
+
         # ── Seção de reordenação (drag ou ↑/↓) ───────────────────────────
         if len(datas) >= 2 and editando_idx is None:
             with st.expander(
