@@ -24,6 +24,7 @@ from database import (
     alternar_presenca,
     get_ultima_presenca_batch,
     get_numero_aula_no_ano,
+    get_aulas_por_mes_no_ano,
     get_datas_comemorativas_bd,
     get_datas_comemorativas_custom,
 )
@@ -370,6 +371,102 @@ def _renderizar_badge_aula(data_aula: datetime.date, num_aula: int) -> None:
             st.markdown(_gerar_baloes_css(18 if eh_grande else 12), unsafe_allow_html=True)
 
 
+def _renderizar_progresso_anual(data_aula: datetime.date, num_aula_ate_hoje: int) -> None:
+    """
+    Exibe um expander "📈 Progresso do ano" abaixo do badge de número da aula.
+    Mostra um mini gráfico de barras horizontal (HTML/CSS) com aulas por mês,
+    o mês atual destacado, total no ano e projeção até dezembro.
+    """
+    ano = data_aula.year
+    mes_ref = data_aula.month
+
+    with st.expander("📈 Progresso do ano", expanded=False):
+        with st.spinner("Carregando..."):
+            aulas_mes = get_aulas_por_mes_no_ano(ano)
+
+        if not aulas_mes:
+            st.caption("Nenhuma aula registrada em %d ainda." % ano)
+            return
+
+        _MESES_PT = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun",
+                     "Jul", "Ago", "Set", "Out", "Nov", "Dez"]
+
+        max_val = max(aulas_mes.values()) if aulas_mes else 1
+        total_ano = sum(aulas_mes.values())
+
+        # Projeção: meses com dado real até mes_ref; projetar média dos meses completos
+        meses_completos = [m for m in range(1, mes_ref) if aulas_mes.get(m, 0) > 0]
+        if meses_completos:
+            media_mensal = total_ano / len(meses_completos)
+            meses_restantes = 12 - mes_ref  # meses futuros
+            projecao = round(total_ano + media_mensal * meses_restantes)
+        else:
+            projecao = None
+
+        # ── Gráfico de barras HTML/CSS ──────────────────────────────────────
+        barras_html = ""
+        for m in range(1, 13):
+            qtd = aulas_mes.get(m, 0)
+            eh_atual = (m == mes_ref)
+            eh_futuro = (m > mes_ref)
+
+            pct = round((qtd / max_val) * 100) if max_val > 0 and qtd > 0 else 0
+
+            if eh_atual:
+                cor_barra = "#3B82F6"   # azul — destaque
+                cor_label = "#1E40AF"
+                peso_mes = "font-weight:900;"
+                borda_ativa = "border:2px solid #3B82F6;border-radius:8px;padding:2px 4px;"
+            elif eh_futuro:
+                cor_barra = "#E2E8F0"   # cinza claro — ainda não aconteceu
+                cor_label = "#94A3B8"
+                peso_mes = "font-weight:400;"
+                borda_ativa = ""
+            else:
+                cor_barra = "#60A5FA"   # azul claro — mês passado
+                cor_label = "#1E40AF"
+                peso_mes = "font-weight:600;"
+                borda_ativa = ""
+
+            qtd_str = str(qtd) if qtd > 0 else "—"
+
+            barras_html += f"""
+            <div style='display:flex;align-items:center;gap:8px;margin-bottom:5px;'>
+              <span style='width:30px;font-size:11px;color:{cor_label};
+                           text-align:right;{peso_mes}{borda_ativa}'>{_MESES_PT[m-1]}</span>
+              <div style='flex:1;background:#F1F5F9;border-radius:6px;height:14px;overflow:hidden;'>
+                <div style='width:{pct}%;background:{cor_barra};height:100%;
+                             border-radius:6px;transition:width .3s;'></div>
+              </div>
+              <span style='width:28px;font-size:11px;color:{cor_label};
+                           font-weight:700;text-align:left;'>{qtd_str}</span>
+            </div>
+            """
+
+        # ── Rodapé: total + projeção ─────────────────────────────────────────
+        proj_html = ""
+        if projecao is not None and projecao != total_ano:
+            proj_html = (
+                f"<span style='margin-left:12px;color:#64748B;font-size:12px;'>"
+                f"· projeção até Dez: <strong>{projecao}</strong> aulas</span>"
+            )
+
+        rodape_html = (
+            f"<div style='margin-top:10px;padding-top:8px;border-top:1px solid #E2E8F0;'>"
+            f"<span style='color:#1E40AF;font-size:13px;font-weight:700;'>"
+            f"✅ {total_ano} aulas em {ano}</span>"
+            f"{proj_html}"
+            f"</div>"
+        )
+
+        st.markdown(
+            f"<div style='padding:4px 0 2px 0;font-size:12px;font-weight:600;"
+            f"color:#475569;margin-bottom:6px;'>Aulas por mês — {ano}</div>"
+            f"{barras_html}{rodape_html}",
+            unsafe_allow_html=True,
+        )
+
+
 def tela_frequencia():
     if st.session_state.pop("_force_reload_freq", False):
         for fn in (obter_todos_alunos_cache, obter_todos_alunos_com_inativos_cache):
@@ -426,6 +523,8 @@ def tela_frequencia():
             # ── Badge: número da aula no ano ──────────────────────────────
             _num_aula = get_numero_aula_no_ano(data_aula)
             _renderizar_badge_aula(data_aula, _num_aula)
+            # ── Expander: progresso anual (aulas por mês) ─────────────────
+            _renderizar_progresso_anual(data_aula, _num_aula)
 
         dia_semana = data_aula.weekday()
         if dia_semana in [5, 6]:

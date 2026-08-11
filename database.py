@@ -4334,6 +4334,49 @@ def limpar_chaves_menu_perm_orfas() -> int:
 
 
 @st.cache_data(ttl=600, show_spinner=False)
+def get_aulas_por_mes_no_ano(ano: int) -> dict:
+    """
+    Retorna um dicionário {mês (1-12): contagem de dias letivos distintos}
+    para o ano informado, lendo a tabela 'frequencia'.
+    Usado para o gráfico de progresso anual no badge de número de aula.
+    """
+    try:
+        import datetime as _dt
+        from collections import defaultdict
+        inicio_ano = _dt.date(ano, 1, 1).isoformat()
+        fim_ano = _dt.date(ano, 12, 31).isoformat()
+        PAGE = 1000
+        datas_unicas: set = set()
+        for start in range(0, 500_000, PAGE):
+            r = (
+                supabase.from_("frequencia")
+                .select("data_aula")
+                .gte("data_aula", inicio_ano)
+                .lte("data_aula", fim_ano)
+                .order("data_aula")
+                .range(start, start + PAGE - 1)
+                .execute()
+            )
+            batch = r.data or []
+            for row in batch:
+                d = str(row.get("data_aula", ""))[:10]
+                if d:
+                    datas_unicas.add(d)
+            if len(batch) < PAGE:
+                break
+        contagem: dict = defaultdict(int)
+        for d in datas_unicas:
+            try:
+                mes = int(d[5:7])
+                contagem[mes] += 1
+            except Exception:
+                pass
+        return dict(contagem)
+    except Exception:
+        return {}
+
+
+@st.cache_data(ttl=600, show_spinner=False)
 def get_numero_aula_no_ano(data_referencia) -> int:
     """
     Conta quantos dias letivos distintos foram registrados na tabela 'frequencia'
