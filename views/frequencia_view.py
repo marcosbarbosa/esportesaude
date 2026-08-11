@@ -495,9 +495,22 @@ def _renderizar_progresso_anual(data_aula: datetime.date, num_aula_ate_hoje: int
             counts_1 = [aulas_mes.get(m, 0) for m in meses_display]
             counts_2 = [aulas_mes_comp.get(m, 0) for m in meses_display]
 
+            # Diferença mês a mês: positivo = ano atual melhor
+            diffs = [c1 - c2 for c1, c2 in zip(counts_1, counts_2)]
+
             # Cores dos dois anos
             COR_ANO1 = "#3B82F6"   # azul — ano principal
             COR_ANO2 = "#F97316"   # laranja — ano comparado
+
+            # Texto de variação para os hovers
+            def _diff_hover(d: int) -> str:
+                if d > 0:
+                    return f"▲ +{d} aula{'s' if abs(d) != 1 else ''} vs {ano_comp}"
+                elif d < 0:
+                    return f"▼ {d} aula{'s' if abs(d) != 1 else ''} vs {ano_comp}"
+                return f"= igual a {ano_comp}"
+
+            diff_hover_labels = [_diff_hover(d) for d in diffs]
 
             fig = go.Figure()
             fig.add_trace(go.Bar(
@@ -509,7 +522,11 @@ def _renderizar_progresso_anual(data_aula: datetime.date, num_aula_ate_hoje: int
                 text=[str(c) if c > 0 else "" for c in counts_1],
                 textposition="outside",
                 cliponaxis=False,
-                hovertemplate=f"<b>%{{y}} {ano_grafico}</b>: %{{x}} aulas<extra></extra>",
+                customdata=diff_hover_labels,
+                hovertemplate=(
+                    f"<b>%{{y}} {ano_grafico}</b>: %{{x}} aulas<br>"
+                    f"<i>%{{customdata}}</i><extra></extra>"
+                ),
             ))
             fig.add_trace(go.Bar(
                 name=str(ano_comp),
@@ -520,15 +537,52 @@ def _renderizar_progresso_anual(data_aula: datetime.date, num_aula_ate_hoje: int
                 text=[str(c) if c > 0 else "" for c in counts_2],
                 textposition="outside",
                 cliponaxis=False,
-                hovertemplate=f"<b>%{{y}} {ano_comp}</b>: %{{x}} aulas<extra></extra>",
+                customdata=diff_hover_labels,
+                hovertemplate=(
+                    f"<b>%{{y}} {ano_comp}</b>: %{{x}} aulas<br>"
+                    f"<i>%{{customdata}}</i><extra></extra>"
+                ),
             ))
 
+            # ── Anotações nos top 3 meses com maior variação absoluta ─────────
+            diffs_ranked = sorted(
+                [(abs(d), i, d) for i, d in enumerate(diffs) if d != 0],
+                reverse=True,
+            )
+            top3_idx = {idx for _, idx, _ in diffs_ranked[:3]}
+
             max_val = max(max(counts_1, default=0), max(counts_2, default=0))
+            # Deixar espaço extra à direita para os badges de variação
+            x_range_max = max_val * 1.55 if max_val else 1
+            x_annot = max_val * 1.32 if max_val else 0.8
+
+            annot_x, annot_y, annot_text, annot_colors = [], [], [], []
+            for i, d in enumerate(diffs):
+                if i in top3_idx:
+                    seta = "▲" if d > 0 else "▼"
+                    sinal = "+" if d > 0 else ""
+                    annot_x.append(x_annot)
+                    annot_y.append(labels[i])
+                    annot_text.append(f"<b>{seta}{sinal}{d}</b>")
+                    annot_colors.append("#16A34A" if d > 0 else "#DC2626")
+
+            if annot_x:
+                fig.add_trace(go.Scatter(
+                    x=annot_x,
+                    y=annot_y,
+                    mode="text",
+                    text=annot_text,
+                    textfont=dict(size=11, color=annot_colors),
+                    hoverinfo="skip",
+                    showlegend=False,
+                    cliponaxis=False,
+                ))
+
             fig.update_layout(
                 barmode="group",
                 height=370,
-                margin=dict(l=0, r=45, t=4, b=0),
-                xaxis=dict(visible=False, range=[0, max_val * 1.30 if max_val else 1]),
+                margin=dict(l=0, r=10, t=4, b=0),
+                xaxis=dict(visible=False, range=[0, x_range_max]),
                 yaxis=dict(autorange="reversed", tickfont=dict(size=11)),
                 plot_bgcolor="white",
                 paper_bgcolor="white",
@@ -547,13 +601,35 @@ def _renderizar_progresso_anual(data_aula: datetime.date, num_aula_ate_hoje: int
 
             # ── Rodapé comparativo ───────────────────────────────────────────
             total_comp = sum(aulas_mes_comp.values())
-            diff = total_ano - total_comp
-            sinal = "+" if diff >= 0 else ""
-            cor_diff = "#16A34A" if diff >= 0 else "#DC2626"
+            diff_total = total_ano - total_comp
+            sinal_total = "+" if diff_total >= 0 else ""
+            cor_diff_total = "#16A34A" if diff_total >= 0 else "#DC2626"
             diff_txt = (
-                f"<span style='color:{cor_diff};font-weight:700;'>"
-                f"({sinal}{diff} vs {ano_comp})</span>"
+                f"<span style='color:{cor_diff_total};font-weight:700;'>"
+                f"({sinal_total}{diff_total} vs {ano_comp})</span>"
             )
+
+            # Meses com melhora / piora
+            meses_melhor = [labels[i] for i, d in enumerate(diffs) if d > 0]
+            meses_pior   = [labels[i] for i, d in enumerate(diffs) if d < 0]
+            partes_legenda = []
+            if meses_melhor:
+                partes_legenda.append(
+                    f"<span style='color:#16A34A;font-size:11px;'>"
+                    f"▲ Melhores: {', '.join(meses_melhor)}</span>"
+                )
+            if meses_pior:
+                partes_legenda.append(
+                    f"<span style='color:#DC2626;font-size:11px;'>"
+                    f"▼ Abaixo: {', '.join(meses_pior)}</span>"
+                )
+            legenda_meses_html = (
+                f"<div style='padding-top:4px;display:flex;gap:14px;flex-wrap:wrap;'>"
+                f"{'<span style=\"color:#CBD5E1;font-size:11px;\"> | </span>'.join(partes_legenda)}"
+                f"</div>"
+                if partes_legenda else ""
+            )
+
             st.markdown(
                 f"<div style='padding-top:6px;border-top:1px solid #E2E8F0;display:flex;"
                 f"align-items:center;gap:12px;flex-wrap:wrap;'>"
@@ -562,7 +638,8 @@ def _renderizar_progresso_anual(data_aula: datetime.date, num_aula_ate_hoje: int
                 f"<span style='color:#F97316;font-size:13px;font-weight:700;'>"
                 f"🟠 {ano_comp}: {total_comp} aulas</span>"
                 f"<span style='font-size:12px;color:#64748B;'>{diff_txt}</span>"
-                f"</div>",
+                f"</div>"
+                f"{legenda_meses_html}",
                 unsafe_allow_html=True,
             )
 
