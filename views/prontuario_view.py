@@ -26,9 +26,11 @@ from database import (
     get_estatisticas_frequencia_aluno,
     get_todas_turmas,
     get_ocupacao_turmas,
-    get_atestados_temporarios, 
-    salvar_atestado_temporario, 
+    get_atestados_temporarios,
+    salvar_atestado_temporario,
     supabase,
+    SQL_MIGRAR_SAIDA_ALUNO,
+    colunas_saida_aluno_existem,
 )
 
 try:
@@ -40,12 +42,84 @@ except ImportError:
 # ==============================================================================
 # 🚀 MOTORES SEGUROS (COM DIAGNÓSTICO E BLINDAGEM DE ARQUIVO MORTO)
 # ==============================================================================
-def alterar_status_aluno_local(aluno_id, novo_status):
+def alterar_status_aluno_local(aluno_id, novo_status, motivo_saida=None, data_saida=None, obs_saida=None):
     try:
-        supabase.from_("alunos").update({"status": novo_status}).eq("id", str(aluno_id)).execute()
+        payload = {"status": novo_status}
+        if novo_status == "Inativo":
+            if motivo_saida is not None:
+                payload["motivo_saida"] = motivo_saida
+            if data_saida is not None:
+                payload["data_saida"] = str(data_saida) if data_saida else None
+            if obs_saida is not None:
+                payload["obs_saida"] = obs_saida or None
+        else:
+            payload["motivo_saida"] = None
+            payload["data_saida"] = None
+            payload["obs_saida"] = None
+        supabase.from_("alunos").update(payload).eq("id", str(aluno_id)).execute()
+        # Invalida caches de alunos
+        try:
+            from database import buscar_aluno_por_id, buscar_alunos_geral, get_alunos_por_turma
+            for fn in (buscar_aluno_por_id, buscar_alunos_geral, get_alunos_por_turma):
+                try:
+                    fn.clear()
+                except Exception:
+                    pass
+        except Exception:
+            pass
         return True, f"Status alterado para {novo_status}"
     except Exception as e:
         return False, str(e)
+
+
+MOTIVOS_SAIDA = ["Óbito", "Desistência", "Transferência", "Conclusão", "Outro"]
+
+
+@st.dialog("🗄️ Arquivar Aluno")
+def _dialog_arquivar_aluno(aluno):
+    """Dialog para capturar motivo, data e observação antes de arquivar o aluno."""
+    st.markdown(
+        f"<p style='margin-bottom:6px;'>Você está prestes a arquivar <strong>{aluno.get('nome','')}</strong>."
+        " Preencha as informações abaixo para registro institucional.</p>",
+        unsafe_allow_html=True,
+    )
+    motivo = st.selectbox(
+        "Motivo da saída *",
+        options=MOTIVOS_SAIDA,
+        index=0,
+        key="arquivar_motivo",
+    )
+    data_saida = st.date_input(
+        "Data da saída *",
+        value=datetime.date.today(),
+        key="arquivar_data",
+    )
+    obs = st.text_area(
+        "Observação (opcional)",
+        placeholder="Detalhes adicionais sobre a saída do aluno…",
+        key="arquivar_obs",
+        height=90,
+    )
+
+    col_ok, col_cancel = st.columns(2)
+    with col_ok:
+        if st.button("✅ Confirmar Arquivamento", type="primary", use_container_width=True):
+            ok, msg = alterar_status_aluno_local(
+                aluno["id"], "Inativo",
+                motivo_saida=motivo,
+                data_saida=data_saida,
+                obs_saida=obs.strip() if obs else None,
+            )
+            if ok:
+                st.toast("Aluno arquivado com sucesso!", icon="🗄️")
+                st.session_state.aluno_prontuario = None
+                time.sleep(0.8)
+                st.rerun()
+            else:
+                st.error(f"Erro ao arquivar: {msg}")
+    with col_cancel:
+        if st.button("❌ Cancelar", use_container_width=True):
+            st.rerun()
 
 
 def _sanitize_payload(d: dict) -> dict:
@@ -430,6 +504,15 @@ def renderizar_ficha():
 
     st.divider()
 
+    # ── Aviso de migração: colunas de saída ainda não criadas no banco ─────────
+    if not colunas_saida_aluno_existem():
+        with st.expander("⚙️ Configuração necessária — clique para ver o SQL de migração", expanded=True):
+            st.warning(
+                "As colunas **motivo_saida**, **data_saida** e **obs_saida** ainda não existem na "
+                "tabela `alunos`. Execute o SQL abaixo no Supabase → SQL Editor e recarregue a página."
+            )
+            st.code(SQL_MIGRAR_SAIDA_ALUNO, language="sql")
+
     # 🔒 Banner LGPD — Autorização de Imagem (com botão de alteração)
     _ti = aluno.get("termo_imagem")
     _nao_autoriza_img = (_ti is False) or (_ti == 0) or (str(_ti).lower() in ["false", "0", ""])
@@ -516,13 +599,7 @@ def renderizar_ficha():
 
         if aluno.get("status", "Ativo") != "Inativo":
             if st.button("🗄️ Arquivar Aluno", use_container_width=True):
-                ok, msg = alterar_status_aluno_local(aluno["id"], "Inativo")
-                if ok:
-                    st.toast("Transferido para o Arquivo Morto!")
-                    aluno["status"] = "Inativo"
-                    time.sleep(1)
-                    st.session_state.aluno_prontuario = None
-                    st.rerun()
+                _dialog_arquivar_aluno(aluno)
         else:
             if st.button("♻️ Reativar Aluno", type="primary", use_container_width=True):
                 ok, msg = alterar_status_aluno_local(aluno["id"], "Ativo")
@@ -531,6 +608,33 @@ def renderizar_ficha():
                     aluno["status"] = "Ativo"
                     time.sleep(1)
                     st.rerun()
+
+    # Banner de saída para alunos inativos
+    if aluno.get("status", "Ativo") == "Inativo":
+        import html as _html
+        _motivo = aluno.get("motivo_saida") or ""
+        _data_s = aluno.get("data_saida") or ""
+        _obs_s  = aluno.get("obs_saida") or ""
+        _icone_motivo = {"Óbito": "⚰️", "Desistência": "🚪", "Transferência": "🔄", "Conclusão": "🎓", "Outro": "📋"}.get(_motivo, "📋")
+        if _motivo or _data_s:
+            _partes = []
+            if _motivo:
+                _partes.append(f"<strong>Motivo:</strong> {_icone_motivo} {_html.escape(_motivo)}")
+            if _data_s:
+                try:
+                    _dt_fmt = datetime.date.fromisoformat(str(_data_s)).strftime("%d/%m/%Y")
+                except Exception:
+                    _dt_fmt = _html.escape(str(_data_s))
+                _partes.append(f"<strong>Data de saída:</strong> {_dt_fmt}")
+            if _obs_s:
+                _partes.append(f"<strong>Obs.:</strong> {_html.escape(str(_obs_s))}")
+            st.markdown(
+                "<div style='background:#FEF3C7;border-left:5px solid #D97706;padding:10px 16px;"
+                "border-radius:6px;margin-bottom:8px;font-size:14px;color:#92400E;'>"
+                + " &nbsp;|&nbsp; ".join(_partes)
+                + "</div>",
+                unsafe_allow_html=True,
+            )
 
     edit = st.session_state.get("medicao_editar")
 

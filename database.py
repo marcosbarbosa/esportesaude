@@ -741,9 +741,19 @@ def atualizar_dados_sociais_aluno(aluno_id, dados_atualizados):
         return False, str(e)
 
 
-def alterar_status_aluno(aluno_id, novo_status):
+def alterar_status_aluno(aluno_id, novo_status, motivo_saida=None, data_saida=None, obs_saida=None):
     try:
-        supabase.from_("alunos").update({"status": novo_status}).eq(
+        payload = {"status": novo_status}
+        if novo_status == "Inativo":
+            if motivo_saida is not None:
+                payload["motivo_saida"] = motivo_saida
+            if data_saida is not None:
+                payload["data_saida"] = str(data_saida) if data_saida else None
+            if obs_saida is not None:
+                payload["obs_saida"] = obs_saida or None
+        # Ao reativar, os campos de saída são preservados intencionalmente
+        # para manter o registro histórico da última saída do aluno.
+        supabase.from_("alunos").update(payload).eq(
             "id", str(aluno_id)
         ).execute()
         _inv_alunos()
@@ -4456,6 +4466,23 @@ def get_numero_aula_no_ano(data_referencia) -> int:
         return len(datas_unicas)
     except Exception:
         return 0
+
+
+SQL_MIGRAR_SAIDA_ALUNO = """-- Execute no Supabase → SQL Editor para registrar o motivo de saída dos alunos:
+ALTER TABLE alunos
+  ADD COLUMN IF NOT EXISTS motivo_saida text,
+  ADD COLUMN IF NOT EXISTS data_saida   date,
+  ADD COLUMN IF NOT EXISTS obs_saida    text;
+"""
+
+def colunas_saida_aluno_existem() -> bool:
+    """Verifica se as colunas motivo_saida/data_saida/obs_saida existem na tabela alunos."""
+    try:
+        r = supabase.from_("alunos").select("motivo_saida, data_saida, obs_saida").limit(1).execute()
+        return True
+    except Exception as e:
+        msg = str(e).lower()
+        return "does not exist" not in msg and "column" not in msg
 
 
 # ── Limpeza única de chaves legadas ao carregar o módulo ─────────────────────
