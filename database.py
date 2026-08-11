@@ -4334,6 +4334,50 @@ def limpar_chaves_menu_perm_orfas() -> int:
 
 
 @st.cache_data(ttl=600, show_spinner=False)
+def get_datas_letivas_detalhadas_no_ano(ano: int) -> dict:
+    """
+    Retorna um dicionário {mês (1-12): [(date_str, num_aula_no_ano), ...]}
+    onde date_str é 'YYYY-MM-DD' e num_aula_no_ano é o número sequencial
+    da aula dentro do ano (1, 2, 3 ...).
+    Usado pelo gráfico de progresso para listar os dias letivos de um mês.
+    """
+    try:
+        import datetime as _dt
+        inicio_ano = _dt.date(ano, 1, 1).isoformat()
+        fim_ano = _dt.date(ano, 12, 31).isoformat()
+        PAGE = 1000
+        datas_unicas: set = set()
+        for start in range(0, 500_000, PAGE):
+            r = (
+                supabase.from_("frequencia")
+                .select("data_aula")
+                .gte("data_aula", inicio_ano)
+                .lte("data_aula", fim_ano)
+                .order("data_aula")
+                .range(start, start + PAGE - 1)
+                .execute()
+            )
+            batch = r.data or []
+            for row in batch:
+                d = str(row.get("data_aula", ""))[:10]
+                if d:
+                    datas_unicas.add(d)
+            if len(batch) < PAGE:
+                break
+        datas_ordenadas = sorted(datas_unicas)
+        resultado: dict = {}
+        for num_seq, d in enumerate(datas_ordenadas, start=1):
+            try:
+                mes = int(d[5:7])
+            except Exception:
+                continue
+            resultado.setdefault(mes, []).append((d, num_seq))
+        return resultado
+    except Exception:
+        return {}
+
+
+@st.cache_data(ttl=600, show_spinner=False)
 def get_aulas_por_mes_no_ano(ano: int) -> dict:
     """
     Retorna um dicionário {mês (1-12): contagem de dias letivos distintos}
