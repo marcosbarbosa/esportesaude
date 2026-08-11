@@ -362,9 +362,12 @@ def _renderizar_badge_aula(data_aula: datetime.date, num_aula: int) -> None:
     )
     st.markdown(badge_html, unsafe_allow_html=True)
 
-    # ── 6. Balões flutuantes (somente em celebrações) ──────────────────────
+    # ── 6. Balões flutuantes (somente em celebrações, uma vez por sessão/data) ──
     if eh_celebr:
-        st.markdown(_gerar_baloes_css(18 if eh_grande else 12), unsafe_allow_html=True)
+        _chave_celebr = f"_celebr_vista_{data_aula.isoformat()}"
+        if not st.session_state.get(_chave_celebr):
+            st.session_state[_chave_celebr] = True
+            st.markdown(_gerar_baloes_css(18 if eh_grande else 12), unsafe_allow_html=True)
 
 
 def tela_frequencia():
