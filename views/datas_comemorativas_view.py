@@ -150,7 +150,12 @@ def tela_datas_comemorativas():
     if "editando_data_idx" not in st.session_state:
         st.session_state.editando_data_idx = None
 
+    # Índice do item aguardando confirmação de remoção (None = nenhum)
+    if "confirmando_del_idx" not in st.session_state:
+        st.session_state.confirmando_del_idx = None
+
     editando_idx = st.session_state.editando_data_idx
+    confirmando_del_idx = st.session_state.confirmando_del_idx
 
     # ── Lista das datas cadastradas ──────────────────────────────────────────
     if datas:
@@ -219,16 +224,44 @@ def tela_datas_comemorativas():
                     st.rerun()
 
             with col_del:
-                if st.button("🗑️", key=f"del_data_{idx}", help="Remover esta data"):
-                    nova_lista.pop(idx)
-                    ok, msg = set_datas_comemorativas_custom(nova_lista)
-                    if ok:
-                        if st.session_state.editando_data_idx == idx:
-                            st.session_state.editando_data_idx = None
-                        st.success("Data removida.")
+                if confirmando_del_idx != idx:
+                    if st.button("🗑️", key=f"del_data_{idx}", help="Remover esta data"):
+                        st.session_state.confirmando_del_idx = idx
                         st.rerun()
-                    else:
-                        st.error(f"Erro ao remover: {msg}")
+                else:
+                    # Botão já clicado: mostrar confirmação inline abaixo do card
+                    pass  # handled below
+
+            # ── Confirmação de remoção inline ────────────────────────────
+            if confirmando_del_idx == idx:
+                st.markdown(
+                    "<div style='background:#FEF2F2;border:1.5px solid #EF4444;"
+                    "border-radius:8px;padding:10px 14px;margin-bottom:8px;"
+                    "display:flex;align-items:center;gap:12px;'>",
+                    unsafe_allow_html=True,
+                )
+                st.warning(
+                    f"⚠️ Tem certeza que deseja remover **{html.escape(nome)}**? "
+                    "Esta ação não pode ser desfeita."
+                )
+                conf_col1, conf_col2, _ = st.columns([1, 1, 4])
+                with conf_col1:
+                    if st.button("✅ Confirmar", key=f"confirm_del_{idx}", type="primary"):
+                        nova_lista.pop(idx)
+                        ok, msg = set_datas_comemorativas_custom(nova_lista)
+                        st.session_state.confirmando_del_idx = None
+                        if ok:
+                            if st.session_state.editando_data_idx == idx:
+                                st.session_state.editando_data_idx = None
+                            st.success("Data removida.")
+                            st.rerun()
+                        else:
+                            st.error(f"Erro ao remover: {msg}")
+                with conf_col2:
+                    if st.button("❌ Cancelar", key=f"cancel_del_{idx}"):
+                        st.session_state.confirmando_del_idx = None
+                        st.rerun()
+                st.markdown("</div>", unsafe_allow_html=True)
 
             # ── Formulário de edição inline (logo abaixo do item) ──────────
             if editando_idx == idx:
