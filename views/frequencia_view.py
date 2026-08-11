@@ -378,6 +378,7 @@ def _renderizar_progresso_anual(data_aula: datetime.date, num_aula_ate_hoje: int
     Mostra um mini gráfico de barras horizontal (HTML/CSS) com aulas por mês,
     o mês atual destacado, total no ano e projeção até dezembro.
     Permite navegar entre anos com botões ◀ / ▶ no topo do expander.
+    Suporta modo de comparação lado a lado de dois anos.
     """
     ano_data = data_aula.year
     mes_ref_data = data_aula.month
@@ -385,11 +386,18 @@ def _renderizar_progresso_anual(data_aula: datetime.date, num_aula_ate_hoje: int
     # Inicializa (ou reseta quando a data muda de ano) o ano exibido no gráfico
     _KEY_ANO = "_prog_ano_grafico"
     _KEY_ANO_BASE = "_prog_ano_base"
+    _KEY_COMPARAR = "_prog_comparar"
+    _KEY_ANO_COMP = "_prog_ano_comp"
+
     if st.session_state.get(_KEY_ANO_BASE) != ano_data:
         st.session_state[_KEY_ANO_BASE] = ano_data
         st.session_state[_KEY_ANO] = ano_data
+        st.session_state[_KEY_COMPARAR] = False
+        st.session_state[_KEY_ANO_COMP] = ano_data - 1
 
     ano_grafico = st.session_state.get(_KEY_ANO, ano_data)
+    modo_comparar = st.session_state.get(_KEY_COMPARAR, False)
+    ano_comp = st.session_state.get(_KEY_ANO_COMP, ano_grafico - 1)
 
     with st.expander("📈 Progresso do ano", expanded=False):
         # ── Navegação de anos ────────────────────────────────────────────────
@@ -398,6 +406,10 @@ def _renderizar_progresso_anual(data_aula: datetime.date, num_aula_ate_hoje: int
             if st.button(f"◀ {ano_grafico - 1}", key="_prog_ano_prev",
                          use_container_width=True):
                 st.session_state[_KEY_ANO] = ano_grafico - 1
+                # Atualiza ano de comparação para não colidir com o principal
+                new_ano = ano_grafico - 1
+                if st.session_state.get(_KEY_ANO_COMP, new_ano - 1) == new_ano:
+                    st.session_state[_KEY_ANO_COMP] = new_ano - 1
                 st.rerun()
         with col_ano_lbl:
             st.markdown(
@@ -409,6 +421,40 @@ def _renderizar_progresso_anual(data_aula: datetime.date, num_aula_ate_hoje: int
             if st.button(f"{ano_grafico + 1} ▶", key="_prog_ano_next",
                          use_container_width=True):
                 st.session_state[_KEY_ANO] = ano_grafico + 1
+                new_ano = ano_grafico + 1
+                if st.session_state.get(_KEY_ANO_COMP, new_ano - 1) == new_ano:
+                    st.session_state[_KEY_ANO_COMP] = new_ano - 1
+                st.rerun()
+
+        # ── Toggle de comparação ─────────────────────────────────────────────
+        comparar_novo = st.toggle(
+            "🔀 Comparar com outro ano",
+            value=modo_comparar,
+            key="_prog_toggle_comparar",
+        )
+        if comparar_novo != modo_comparar:
+            st.session_state[_KEY_COMPARAR] = comparar_novo
+            modo_comparar = comparar_novo
+            st.rerun()
+
+        if modo_comparar:
+            # Seletor do ano de comparação (exclui o ano principal)
+            anos_disponiveis = [a for a in range(ano_grafico - 5, ano_grafico + 6) if a != ano_grafico]
+            # Garantir que ano_comp esteja na lista
+            if ano_comp not in anos_disponiveis:
+                ano_comp = ano_grafico - 1
+                st.session_state[_KEY_ANO_COMP] = ano_comp
+            idx_default = anos_disponiveis.index(ano_comp) if ano_comp in anos_disponiveis else 0
+            ano_comp_sel = st.selectbox(
+                "Comparar com:",
+                options=anos_disponiveis,
+                index=idx_default,
+                key="_prog_sel_ano_comp",
+                format_func=lambda a: str(a),
+            )
+            if ano_comp_sel != ano_comp:
+                st.session_state[_KEY_ANO_COMP] = ano_comp_sel
+                ano_comp = ano_comp_sel
                 st.rerun()
 
         # Mês de referência: o mês da data selecionada só é relevante no ano atual
@@ -416,8 +462,12 @@ def _renderizar_progresso_anual(data_aula: datetime.date, num_aula_ate_hoje: int
 
         with st.spinner("Carregando..."):
             aulas_mes = get_aulas_por_mes_no_ano(ano_grafico)
+            if modo_comparar:
+                aulas_mes_comp = get_aulas_por_mes_no_ano(ano_comp)
+            else:
+                aulas_mes_comp = {}
 
-        if not aulas_mes:
+        if not aulas_mes and not aulas_mes_comp:
             st.caption("Nenhuma aula registrada em %d ainda." % ano_grafico)
             return
 
@@ -428,153 +478,228 @@ def _renderizar_progresso_anual(data_aula: datetime.date, num_aula_ate_hoje: int
 
         total_ano = sum(aulas_mes.values())
 
-        # Projeção: apenas para o ano atual e somente se há meses completos
+        # Projeção: apenas para o ano atual e somente se há meses completos (modo simples)
         projecao = None
-        if ano_grafico == ano_data:
+        if not modo_comparar and ano_grafico == ano_data:
             meses_completos = [m for m in range(1, mes_ref) if aulas_mes.get(m, 0) > 0]
             if meses_completos:
                 media_mensal = total_ano / len(meses_completos)
                 meses_restantes = 12 - mes_ref
                 projecao = round(total_ano + media_mensal * meses_restantes)
 
-        # ── Gráfico de barras interativo (Plotly) ────────────────────────────
-        # Meses em ordem Jan→Dez; Plotly com autorange="reversed" exibe Jan no topo.
-        _KEY_MES_SEL = f"_prog_mes_sel_{ano_grafico}"
-        meses_display = list(range(1, 13))          # índice 0 = Jan, 11 = Dez
-
-        counts = [aulas_mes.get(m, 0) for m in meses_display]
+        meses_display = list(range(1, 13))
         labels = [_MESES_PT[m - 1] for m in meses_display]
-        cores = []
-        for m in meses_display:
-            eh_atual = (m == mes_ref) and (ano_grafico == ano_data)
-            eh_futuro = (ano_grafico == ano_data) and (m > mes_ref)
-            if eh_atual:
-                cores.append("#3B82F6")   # azul vivo — mês de referência
-            elif eh_futuro:
-                cores.append("#CBD5E1")   # cinza — meses futuros
-            else:
-                cores.append("#60A5FA")   # azul claro — meses passados
 
-        # Mês atualmente selecionado (sessão); padrão = mês de referência
-        mes_sel_atual = st.session_state.get(_KEY_MES_SEL, mes_ref)
+        if modo_comparar:
+            # ── Gráfico de barras agrupadas (comparação) ─────────────────────
+            counts_1 = [aulas_mes.get(m, 0) for m in meses_display]
+            counts_2 = [aulas_mes_comp.get(m, 0) for m in meses_display]
 
-        # Destacar borda na barra selecionada
-        line_colors = [
-            "#1E40AF" if meses_display[i] == mes_sel_atual else "rgba(0,0,0,0)"
-            for i in range(12)
-        ]
-        line_widths = [
-            2 if meses_display[i] == mes_sel_atual else 0
-            for i in range(12)
-        ]
+            # Cores dos dois anos
+            COR_ANO1 = "#3B82F6"   # azul — ano principal
+            COR_ANO2 = "#F97316"   # laranja — ano comparado
 
-        text_vals = [str(c) if c > 0 else "" for c in counts]
+            fig = go.Figure()
+            fig.add_trace(go.Bar(
+                name=str(ano_grafico),
+                x=counts_1,
+                y=labels,
+                orientation="h",
+                marker_color=COR_ANO1,
+                text=[str(c) if c > 0 else "" for c in counts_1],
+                textposition="outside",
+                cliponaxis=False,
+                hovertemplate=f"<b>%{{y}} {ano_grafico}</b>: %{{x}} aulas<extra></extra>",
+            ))
+            fig.add_trace(go.Bar(
+                name=str(ano_comp),
+                x=counts_2,
+                y=labels,
+                orientation="h",
+                marker_color=COR_ANO2,
+                text=[str(c) if c > 0 else "" for c in counts_2],
+                textposition="outside",
+                cliponaxis=False,
+                hovertemplate=f"<b>%{{y}} {ano_comp}</b>: %{{x}} aulas<extra></extra>",
+            ))
 
-        fig = go.Figure(go.Bar(
-            x=counts,
-            y=labels,
-            orientation="h",
-            marker=dict(
-                color=cores,
-                line=dict(color=line_colors, width=line_widths),
-            ),
-            text=text_vals,
-            textposition="outside",
-            cliponaxis=False,
-            hovertemplate="<b>%{y}</b>: %{x} aulas<extra></extra>",
-        ))
-        fig.update_layout(
-            height=310,
-            margin=dict(l=0, r=35, t=4, b=0),
-            xaxis=dict(visible=False, range=[0, max(counts) * 1.25 if counts else 1]),
-            yaxis=dict(autorange="reversed", tickfont=dict(size=11)),
-            plot_bgcolor="white",
-            paper_bgcolor="white",
-            showlegend=False,
-            dragmode=False,
-        )
+            max_val = max(max(counts_1, default=0), max(counts_2, default=0))
+            fig.update_layout(
+                barmode="group",
+                height=370,
+                margin=dict(l=0, r=45, t=4, b=0),
+                xaxis=dict(visible=False, range=[0, max_val * 1.30 if max_val else 1]),
+                yaxis=dict(autorange="reversed", tickfont=dict(size=11)),
+                plot_bgcolor="white",
+                paper_bgcolor="white",
+                legend=dict(
+                    orientation="h",
+                    yanchor="bottom",
+                    y=1.01,
+                    xanchor="center",
+                    x=0.5,
+                    font=dict(size=12),
+                ),
+                dragmode=False,
+            )
 
-        chart_key = f"_prog_chart_{ano_grafico}"
-        evento = st.plotly_chart(
-            fig,
-            use_container_width=True,
-            on_select="rerun",
-            selection_mode="points",
-            key=chart_key,
-        )
+            st.plotly_chart(fig, use_container_width=True, key=f"_prog_chart_cmp_{ano_grafico}_{ano_comp}")
 
-        # Detectar clique e atualizar o mês selecionado
-        if evento and getattr(evento, "selection", None):
-            pts = getattr(evento.selection, "points", [])
-            if pts:
-                idx_clicado = pts[0].get("point_index", None)
-                if idx_clicado is not None and 0 <= idx_clicado < 12:
-                    mes_clicado = meses_display[idx_clicado]
-                    if mes_clicado != mes_sel_atual:
-                        st.session_state[_KEY_MES_SEL] = mes_clicado
-                        mes_sel_atual = mes_clicado
-                        st.rerun()
+            # ── Rodapé comparativo ───────────────────────────────────────────
+            total_comp = sum(aulas_mes_comp.values())
+            diff = total_ano - total_comp
+            sinal = "+" if diff >= 0 else ""
+            cor_diff = "#16A34A" if diff >= 0 else "#DC2626"
+            diff_txt = (
+                f"<span style='color:{cor_diff};font-weight:700;'>"
+                f"({sinal}{diff} vs {ano_comp})</span>"
+            )
+            st.markdown(
+                f"<div style='padding-top:6px;border-top:1px solid #E2E8F0;display:flex;"
+                f"align-items:center;gap:12px;flex-wrap:wrap;'>"
+                f"<span style='color:#3B82F6;font-size:13px;font-weight:700;'>"
+                f"🔵 {ano_grafico}: {total_ano} aulas</span>"
+                f"<span style='color:#F97316;font-size:13px;font-weight:700;'>"
+                f"🟠 {ano_comp}: {total_comp} aulas</span>"
+                f"<span style='font-size:12px;color:#64748B;'>{diff_txt}</span>"
+                f"</div>",
+                unsafe_allow_html=True,
+            )
 
-        # ── Rodapé: total + projeção ─────────────────────────────────────────
-        proj_txt = ""
-        if projecao is not None and projecao != total_ano:
-            proj_txt = f" · projeção até Dez: **{projecao}** aulas"
-
-        st.markdown(
-            f"<div style='padding-top:6px;border-top:1px solid #E2E8F0;'>"
-            f"<span style='color:#1E40AF;font-size:13px;font-weight:700;'>"
-            f"✅ {total_ano} aulas em {ano_grafico}</span>"
-            f"<span style='color:#64748B;font-size:12px;margin-left:10px;'>{proj_txt}</span>"
-            f"</div>",
-            unsafe_allow_html=True,
-        )
-
-        # ── Lista de dias letivos do mês selecionado pela barra ───────────────
-        qtd_mes_sel = aulas_mes.get(mes_sel_atual, 0)
-        st.markdown(
-            f"<div style='margin-top:8px;font-size:12px;color:#475569;'>"
-            f"📅 Clique em uma barra para ver os dias letivos &nbsp;·&nbsp; "
-            f"<strong style='color:#1E40AF;'>{_MESES_PT[mes_sel_atual - 1]}</strong>"
-            f" — {qtd_mes_sel} aula{'s' if qtd_mes_sel != 1 else ''}"
-            f"</div>",
-            unsafe_allow_html=True,
-        )
-
-        if qtd_mes_sel > 0:
-            with st.spinner(""):
-                datas_detalhadas = get_datas_letivas_detalhadas_no_ano(ano_grafico)
-
-            datas_do_mes = datas_detalhadas.get(mes_sel_atual, [])
-
-            _DIAS_PT = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"]
-            _MESES_ABR = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun",
-                          "Jul", "Ago", "Set", "Out", "Nov", "Dez"]
-            linhas_html = ""
-            for date_str, num_aula in datas_do_mes:
-                try:
-                    dt = datetime.date.fromisoformat(date_str)
-                except Exception:
-                    continue
-                dia_sem = _DIAS_PT[dt.weekday()]
-                mes_abr = _MESES_ABR[dt.month - 1]
-                linhas_html += (
-                    f"<div style='padding:3px 0;font-size:12px;color:#1E40AF;"
-                    f"border-bottom:1px solid #F1F5F9;'>"
-                    f"{dia_sem}, {dt.day:02d} {mes_abr}"
-                    f" &nbsp;·&nbsp; "
-                    f"<span style='color:#64748B;'>Aula #{num_aula}</span>"
-                    f"</div>"
-                )
-
-            if linhas_html:
-                st.markdown(
-                    f"<div style='background:#F8FAFC;border:1px solid #E2E8F0;"
-                    f"border-radius:8px;padding:8px 12px;margin-top:6px;'>"
-                    f"{linhas_html}</div>",
-                    unsafe_allow_html=True,
-                )
         else:
-            st.caption("Nenhuma aula registrada neste mês.")
+            # ── Gráfico de barras simples (modo original) ────────────────────
+            _KEY_MES_SEL = f"_prog_mes_sel_{ano_grafico}"
+
+            counts = [aulas_mes.get(m, 0) for m in meses_display]
+            cores = []
+            for m in meses_display:
+                eh_atual = (m == mes_ref) and (ano_grafico == ano_data)
+                eh_futuro = (ano_grafico == ano_data) and (m > mes_ref)
+                if eh_atual:
+                    cores.append("#3B82F6")
+                elif eh_futuro:
+                    cores.append("#CBD5E1")
+                else:
+                    cores.append("#60A5FA")
+
+            mes_sel_atual = st.session_state.get(_KEY_MES_SEL, mes_ref)
+
+            line_colors = [
+                "#1E40AF" if meses_display[i] == mes_sel_atual else "rgba(0,0,0,0)"
+                for i in range(12)
+            ]
+            line_widths = [
+                2 if meses_display[i] == mes_sel_atual else 0
+                for i in range(12)
+            ]
+
+            text_vals = [str(c) if c > 0 else "" for c in counts]
+
+            fig = go.Figure(go.Bar(
+                x=counts,
+                y=labels,
+                orientation="h",
+                marker=dict(
+                    color=cores,
+                    line=dict(color=line_colors, width=line_widths),
+                ),
+                text=text_vals,
+                textposition="outside",
+                cliponaxis=False,
+                hovertemplate="<b>%{y}</b>: %{x} aulas<extra></extra>",
+            ))
+            fig.update_layout(
+                height=310,
+                margin=dict(l=0, r=35, t=4, b=0),
+                xaxis=dict(visible=False, range=[0, max(counts) * 1.25 if counts else 1]),
+                yaxis=dict(autorange="reversed", tickfont=dict(size=11)),
+                plot_bgcolor="white",
+                paper_bgcolor="white",
+                showlegend=False,
+                dragmode=False,
+            )
+
+            chart_key = f"_prog_chart_{ano_grafico}"
+            evento = st.plotly_chart(
+                fig,
+                use_container_width=True,
+                on_select="rerun",
+                selection_mode="points",
+                key=chart_key,
+            )
+
+            # Detectar clique e atualizar o mês selecionado
+            if evento and getattr(evento, "selection", None):
+                pts = getattr(evento.selection, "points", [])
+                if pts:
+                    idx_clicado = pts[0].get("point_index", None)
+                    if idx_clicado is not None and 0 <= idx_clicado < 12:
+                        mes_clicado = meses_display[idx_clicado]
+                        if mes_clicado != mes_sel_atual:
+                            st.session_state[_KEY_MES_SEL] = mes_clicado
+                            mes_sel_atual = mes_clicado
+                            st.rerun()
+
+            # ── Rodapé: total + projeção ─────────────────────────────────────
+            proj_txt = ""
+            if projecao is not None and projecao != total_ano:
+                proj_txt = f" · projeção até Dez: **{projecao}** aulas"
+
+            st.markdown(
+                f"<div style='padding-top:6px;border-top:1px solid #E2E8F0;'>"
+                f"<span style='color:#1E40AF;font-size:13px;font-weight:700;'>"
+                f"✅ {total_ano} aulas em {ano_grafico}</span>"
+                f"<span style='color:#64748B;font-size:12px;margin-left:10px;'>{proj_txt}</span>"
+                f"</div>",
+                unsafe_allow_html=True,
+            )
+
+            # ── Lista de dias letivos do mês selecionado pela barra ──────────
+            qtd_mes_sel = aulas_mes.get(mes_sel_atual, 0)
+            st.markdown(
+                f"<div style='margin-top:8px;font-size:12px;color:#475569;'>"
+                f"📅 Clique em uma barra para ver os dias letivos &nbsp;·&nbsp; "
+                f"<strong style='color:#1E40AF;'>{_MESES_PT[mes_sel_atual - 1]}</strong>"
+                f" — {qtd_mes_sel} aula{'s' if qtd_mes_sel != 1 else ''}"
+                f"</div>",
+                unsafe_allow_html=True,
+            )
+
+            if qtd_mes_sel > 0:
+                with st.spinner(""):
+                    datas_detalhadas = get_datas_letivas_detalhadas_no_ano(ano_grafico)
+
+                datas_do_mes = datas_detalhadas.get(mes_sel_atual, [])
+
+                _DIAS_PT = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"]
+                _MESES_ABR = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun",
+                              "Jul", "Ago", "Set", "Out", "Nov", "Dez"]
+                linhas_html = ""
+                for date_str, num_aula in datas_do_mes:
+                    try:
+                        dt = datetime.date.fromisoformat(date_str)
+                    except Exception:
+                        continue
+                    dia_sem = _DIAS_PT[dt.weekday()]
+                    mes_abr = _MESES_ABR[dt.month - 1]
+                    linhas_html += (
+                        f"<div style='padding:3px 0;font-size:12px;color:#1E40AF;"
+                        f"border-bottom:1px solid #F1F5F9;'>"
+                        f"{dia_sem}, {dt.day:02d} {mes_abr}"
+                        f" &nbsp;·&nbsp; "
+                        f"<span style='color:#64748B;'>Aula #{num_aula}</span>"
+                        f"</div>"
+                    )
+
+                if linhas_html:
+                    st.markdown(
+                        f"<div style='background:#F8FAFC;border:1px solid #E2E8F0;"
+                        f"border-radius:8px;padding:8px 12px;margin-top:6px;'>"
+                        f"{linhas_html}</div>",
+                        unsafe_allow_html=True,
+                    )
+            else:
+                st.caption("Nenhuma aula registrada neste mês.")
 
 
 def tela_frequencia():
