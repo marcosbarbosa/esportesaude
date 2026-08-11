@@ -25,6 +25,13 @@ _EMOJIS_SUGERIDOS = [
 
 _COR_RE = _re.compile(r'^#[0-9A-Fa-f]{3,8}$')
 
+# Flag de disponibilidade do componente de arrastar
+try:
+    from streamlit_sortables import sort_items as _sort_items
+    _SORTABLES_OK = True
+except Exception:
+    _SORTABLES_OK = False
+
 
 def _safe_cor(cor: str) -> str:
     return cor if _COR_RE.match(cor) else "#F59E0B"
@@ -50,6 +57,81 @@ def _card_html(emoji: str, nome: str, dia: int, mes: int, cor: str) -> str:
         f"{html.escape(cor_s)}</span>"
         f"</div>"
     )
+
+
+def _label_para_data(dt: dict, idx: int) -> str:
+    """Gera rótulo único para o componente de ordenação."""
+    emoji = dt.get("emoji", "🎉")
+    nome = dt.get("nome", "—")
+    dia = dt.get("dia", 1)
+    mes = dt.get("mes", 1)
+    # Inclui o índice original para garantir unicidade mesmo com nomes iguais
+    return f"⠿  {emoji} {nome} — {dia:02d}/{mes:02d}  [{idx}]"
+
+
+def _reordenar_com_sortables(datas: list) -> list | None:
+    """
+    Exibe o componente de arrastar. Retorna a lista reordenada se o usuário
+    arrastou algo; None se não houve mudança.
+    """
+    if not _SORTABLES_OK or len(datas) < 2:
+        return None
+
+    labels_orig = [_label_para_data(dt, i) for i, dt in enumerate(datas)]
+
+    try:
+        labels_novos = _sort_items(
+            labels_orig,
+            direction="vertical",
+            key="sortable_datas_comemorativas",
+        )
+    except Exception:
+        return None
+
+    if labels_novos == labels_orig:
+        return None
+
+    # Mapeia rótulo → dict original
+    mapa = {label: datas[i] for i, label in enumerate(labels_orig)}
+    nova_lista = [mapa[lb] for lb in labels_novos if lb in mapa]
+
+    # Garante que nenhum item foi perdido
+    if len(nova_lista) != len(datas):
+        return None
+
+    return nova_lista
+
+
+def _reordenar_com_botoes(datas: list, nova_lista: list) -> bool:
+    """
+    Fallback: botões ↑/↓ quando streamlit-sortables não está disponível.
+    Retorna True se houve mudança e ela foi salva.
+    """
+    houve_mudanca = False
+    for idx, dt in enumerate(datas):
+        mes = dt.get("mes", 1)
+        emoji = dt.get("emoji", "🎉")
+        nome = dt.get("nome", "—")
+        dia = dt.get("dia", 1)
+
+        col_handle, col_up, col_down = st.columns([8, 1, 1])
+        with col_handle:
+            st.markdown(
+                f"<div style='padding:6px 0;color:#475569;font-size:0.9rem;'>"
+                f"<b>⠿</b>&ensp;{html.escape(emoji)} {html.escape(nome)} "
+                f"— {dia:02d}/{mes:02d}</div>",
+                unsafe_allow_html=True,
+            )
+        with col_up:
+            if idx > 0 and st.button("↑", key=f"up_{idx}", help="Mover para cima"):
+                nova_lista[idx], nova_lista[idx - 1] = nova_lista[idx - 1], nova_lista[idx]
+                houve_mudanca = True
+        with col_down:
+            if idx < len(datas) - 1 and st.button("↓", key=f"down_{idx}", help="Mover para baixo"):
+                nova_lista[idx], nova_lista[idx + 1] = nova_lista[idx + 1], nova_lista[idx]
+                houve_mudanca = True
+
+    return houve_mudanca
 
 
 def tela_datas_comemorativas():
@@ -79,6 +161,38 @@ def tela_datas_comemorativas():
         )
         nova_lista = list(datas)  # cópia para mutação
 
+        # ── Seção de reordenação (drag ou ↑/↓) ───────────────────────────
+        if len(datas) >= 2 and editando_idx is None:
+            with st.expander(
+                "⠿ Reordenar datas (arraste para reorganizar)" if _SORTABLES_OK
+                else "⠿ Reordenar datas (use os botões ↑/↓)",
+                expanded=False,
+            ):
+                if _SORTABLES_OK:
+                    st.markdown(
+                        "<p style='color:#64748B;font-size:0.85rem;margin-bottom:8px;'>"
+                        "Arraste os itens para definir a nova ordem. "
+                        "A ordem é salva automaticamente ao soltar.</p>",
+                        unsafe_allow_html=True,
+                    )
+                    reordenada = _reordenar_com_sortables(datas)
+                    if reordenada is not None:
+                        ok, msg = set_datas_comemorativas_custom(reordenada)
+                        if ok:
+                            st.success("✅ Ordem salva!")
+                            st.rerun()
+                        else:
+                            st.error(f"Erro ao salvar ordem: {msg}")
+                else:
+                    houve = _reordenar_com_botoes(datas, nova_lista)
+                    if houve:
+                        ok, msg = set_datas_comemorativas_custom(nova_lista)
+                        if ok:
+                            st.rerun()
+                        else:
+                            st.error(f"Erro ao salvar ordem: {msg}")
+
+        # ── Cards com edição/exclusão ────────────────────────────────────
         for idx, dt in enumerate(datas):
             mes = dt.get("mes", 1)
             emoji = dt.get("emoji", "🎉")
