@@ -120,8 +120,11 @@ def render_bi_individual():
         return
 
     def _lbl(r):
-        st = "🗃️ " if r.get("status") == "Inativo" else ""
-        return f"{st}{r.get('nome','?')}  [{r.get('turma','?')}]"
+        if r.get("status") == "Inativo":
+            pfx = "🕊️ " if (r.get("motivo_saida") or "") == "Óbito" else "🗃️ "
+        else:
+            pfx = ""
+        return f"{pfx}{r.get('nome','?')}  [{r.get('turma','?')}]"
 
     opcoes = {_lbl(r): r["id"] for _, r in df_todos.sort_values("nome").iterrows()}
     escolha = st.selectbox(
@@ -153,13 +156,22 @@ def render_bi_individual():
     idade  = _idade(aluno.get("data_nascimento"))
     created = _fmt_data(aluno.get("created_at"))
     cor_alerta = aluno.get("cor_alerta_atual", "")
-    badge_status = (
-        "<span style='background:#DCFCE7;color:#166534;padding:2px 10px;"
-        "border-radius:12px;font-size:12px;font-weight:700;'>✅ Ativo</span>"
-        if status == "Ativo" else
-        "<span style='background:#F1F5F9;color:#475569;padding:2px 10px;"
-        "border-radius:12px;font-size:12px;font-weight:700;'>🗃️ Inativo</span>"
-    )
+    _motivo_bi = aluno.get("motivo_saida") or ""
+    if status == "Ativo":
+        badge_status = (
+            "<span style='background:#DCFCE7;color:#166534;padding:2px 10px;"
+            "border-radius:12px;font-size:12px;font-weight:700;'>✅ Ativo</span>"
+        )
+    elif _motivo_bi == "Óbito":
+        badge_status = (
+            "<span style='background:#E5E7EB;color:#374151;padding:2px 10px;"
+            "border-radius:12px;font-size:12px;font-weight:700;'>🕊️ Falecido</span>"
+        )
+    else:
+        badge_status = (
+            "<span style='background:#F1F5F9;color:#475569;padding:2px 10px;"
+            "border-radius:12px;font-size:12px;font-weight:700;'>🗃️ Inativo</span>"
+        )
     badge_risco = {
         "🟢": "<span style='background:#DCFCE7;color:#166534;padding:2px 10px;border-radius:12px;font-size:12px;font-weight:700;'>🟢 Baixo risco</span>",
         "🟡": "<span style='background:#FEF9C3;color:#854D0E;padding:2px 10px;border-radius:12px;font-size:12px;font-weight:700;'>🟡 Atenção</span>",

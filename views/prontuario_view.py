@@ -578,7 +578,20 @@ def renderizar_ficha():
             )
 
     with cp_i:
-        st_badge = "<span style='background:#DCFCE7; color:#166534; padding:3px 10px; border-radius:12px; font-size:14px; margin-left: 10px; vertical-align: middle;'>Ativo</span>" if aluno.get("status", "Ativo") != "Inativo" else "<span style='background:#FEE2E2; color:#991B1B; padding:3px 10px; border-radius:12px; font-size:14px; margin-left: 10px; vertical-align: middle;'>Inativo</span>"
+        _motivo_badge = aluno.get("motivo_saida") or ""
+        _data_saida_badge = aluno.get("data_saida") or ""
+        if aluno.get("status", "Ativo") != "Inativo":
+            st_badge = "<span style='background:#DCFCE7; color:#166534; padding:3px 10px; border-radius:12px; font-size:14px; margin-left: 10px; vertical-align: middle;'>Ativo</span>"
+        elif _motivo_badge == "Óbito":
+            try:
+                import datetime as _dt_mod
+                _data_fal_fmt = _dt_mod.date.fromisoformat(str(_data_saida_badge)).strftime("%d/%m/%Y") if _data_saida_badge else ""
+            except Exception:
+                _data_fal_fmt = str(_data_saida_badge)
+            _fal_label = f"🕊️ Falecido em {_data_fal_fmt}" if _data_fal_fmt else "🕊️ Falecido"
+            st_badge = f"<span style='background:#E5E7EB; color:#374151; padding:3px 10px; border-radius:12px; font-size:14px; margin-left: 10px; vertical-align: middle;'>{_fal_label}</span>"
+        else:
+            st_badge = "<span style='background:#FEE2E2; color:#991B1B; padding:3px 10px; border-radius:12px; font-size:14px; margin-left: 10px; vertical-align: middle;'>Inativo</span>"
         st.markdown(f"<h2 style='margin-bottom:0px; padding-bottom:0px; display:inline-block;'>{aluno.get('nome', '')}</h2> {st_badge}", unsafe_allow_html=True)
         st.caption(f"Turma: {aluno.get('turma', '')}")
 
@@ -600,6 +613,13 @@ def renderizar_ficha():
         if aluno.get("status", "Ativo") != "Inativo":
             if st.button("🗄️ Arquivar Aluno", use_container_width=True):
                 _dialog_arquivar_aluno(aluno)
+        elif (aluno.get("motivo_saida") or "") == "Óbito":
+            st.markdown(
+                "<div style='background:#F3F4F6;border:1px solid #D1D5DB;border-radius:6px;"
+                "padding:8px 12px;font-size:13px;color:#6B7280;text-align:center;'>"
+                "🕊️ Aluno falecido<br><small>Reativação indisponível</small></div>",
+                unsafe_allow_html=True,
+            )
         else:
             if st.button("♻️ Reativar Aluno", type="primary", use_container_width=True):
                 ok, msg = alterar_status_aluno_local(aluno["id"], "Ativo")
