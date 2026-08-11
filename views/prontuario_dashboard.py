@@ -8,6 +8,7 @@ import pandas as pd
 import datetime
 import time
 import math
+import io
 
 try:
     from st_keyup import st_keyup
@@ -578,10 +579,53 @@ def renderizar_dashboard():
             if busca_inativo and len(busca_inativo.strip()) >= 2:
                 df_exibir = filtrar_alunos_df(df_exibir, busca_inativo, cols=["nome"], min_len=2)
 
+            # --- FILTRO POR MOTIVO DE SAÍDA ---
+            _MOTIVOS_SAIDA = ["Óbito", "Desistência", "Transferência", "Conclusão", "Outro"]
+            _motivos_disponiveis = ["Todos"] + sorted(
+                [m for m in _MOTIVOS_SAIDA if m in df_inativos.get("motivo_saida", pd.Series(dtype=str)).dropna().unique().tolist()]
+            ) if "motivo_saida" in df_inativos.columns else ["Todos"]
+            if len(_motivos_disponiveis) > 1:
+                _filtro_motivo = st.selectbox(
+                    "🚪 Filtrar por motivo de saída:",
+                    _motivos_disponiveis,
+                    key="filtro_motivo_saida_arq",
+                )
+                if _filtro_motivo != "Todos":
+                    df_exibir = df_exibir[df_exibir.get("motivo_saida", pd.Series(dtype=str)) == _filtro_motivo] if "motivo_saida" in df_exibir.columns else df_exibir
+
             if df_exibir.empty:
                 st.info("Nenhum aluno encontrado para essa busca.")
             else:
                 st.caption(f"Exibindo **{len(df_exibir)}** de {len(df_inativos)} arquivados.")
+
+            # --- EXPORTAÇÃO EXCEL DO ARQUIVO MORTO ---
+            if not df_exibir.empty and "motivo_saida" in df_inativos.columns:
+                _colunas_export = ["nome", "turma", "motivo_saida", "data_saida", "obs_saida"]
+                _colunas_exist  = [c for c in _colunas_export if c in df_exibir.columns]
+                if _colunas_exist:
+                    _df_exp = df_exibir[_colunas_exist].copy()
+                    _rename_map = {
+                        "nome": "Nome do Aluno", "turma": "Última Turma",
+                        "motivo_saida": "Motivo de Saída", "data_saida": "Data de Saída",
+                        "obs_saida": "Observação",
+                    }
+                    _df_exp.rename(columns={k: v for k, v in _rename_map.items() if k in _df_exp.columns}, inplace=True)
+                    _buf_exp = io.BytesIO()
+                    with pd.ExcelWriter(_buf_exp, engine="xlsxwriter") as _wr:
+                        _df_exp.to_excel(_wr, index=False, sheet_name="Arquivo_Morto")
+                        _ws = _wr.sheets["Arquivo_Morto"]
+                        _ws.set_column(0, 0, 35)
+                        _ws.set_column(1, 1, 20)
+                        _ws.set_column(2, 2, 20)
+                        _ws.set_column(3, 3, 15)
+                        _ws.set_column(4, 4, 40)
+                    st.download_button(
+                        "📥 Exportar lista (Excel)",
+                        _buf_exp.getvalue(),
+                        f"Arquivo_Morto_{datetime.date.today().strftime('%d_%m_%Y')}.xlsx",
+                        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                        use_container_width=True,
+                    )
 
             is_super = st.session_state.get("perfil") == "SuperAdmin"
             email_op = (
@@ -617,13 +661,36 @@ def renderizar_dashboard():
                     avatar_html = "<div class='avatar-placeholder' style='background-color: #F8FAFC; color: #CBD5E1;'>👤</div>"
 
                 ultima_turma = a.get('turma') or 'N/A'
+                _motivo_s = str(a.get('motivo_saida') or '').strip()
+                _data_s   = str(a.get('data_saida')   or '').strip()
+                _obs_s    = str(a.get('obs_saida')    or '').strip()
+                _ICONE_MOT = {"Óbito": "⚰️", "Desistência": "🚪", "Transferência": "🔄", "Conclusão": "🎓", "Outro": "📋"}
+                _icone_mot = _ICONE_MOT.get(_motivo_s, "📋") if _motivo_s else ""
+                # Formata data de saída para dd/mm/aaaa
+                if _data_s and _data_s not in ("None", "nan", "—"):
+                    try:
+                        import datetime as _dt
+                        _data_s_fmt = _dt.date.fromisoformat(_data_s).strftime("%d/%m/%Y")
+                    except Exception:
+                        _data_s_fmt = _data_s
+                else:
+                    _data_s_fmt = ""
+                _linha_saida = ""
+                if _motivo_s:
+                    _linha_saida = f"<br><span style='font-size:11px;color:#64748B;'>{_icone_mot} <b>Motivo:</b> {_motivo_s}"
+                    if _data_s_fmt:
+                        _linha_saida += f" &nbsp;·&nbsp; 📅 {_data_s_fmt}"
+                    _linha_saida += "</span>"
+                if _obs_s:
+                    _linha_saida += f"<br><span style='font-size:11px;color:#94A3B8;font-style:italic;'>💬 {_obs_s}</span>"
 
                 c1.markdown(f"""
                     <div style='display: flex; align-items: center; gap: 12px;'>
                         {avatar_html}
-                        <div style='line-height:1.3;'>
+                        <div style='line-height:1.4;'>
                             <strong style='font-size:14px; color:#64748B;'>{a['nome']}</strong><br>
                             <span style='font-size:12px;color:#94A3B8;'>🗄️ Arquivado · Última Turma: <strong>{ultima_turma}</strong></span>
+                            {_linha_saida}
                         </div>
                     </div>
                 """, unsafe_allow_html=True)

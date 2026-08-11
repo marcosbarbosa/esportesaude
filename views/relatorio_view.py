@@ -2886,6 +2886,7 @@ def tela_relatorio():
         ("rel_avaliacoes",    "🧪 Avaliações"),
         ("rel_patologias",    "🧬 Patologias"),
         ("rel_pa_lote",       "🩺 Coleta PA em Lote"),
+        ("rel_inativos",      "🗄️ Alunos Inativos"),
     ]
     _abas_vis = [(c, l) for c, l in _ABAS_REL_CAT if _rel_liberada(c)]
     if not _abas_vis:
@@ -2900,7 +2901,8 @@ def tela_relatorio():
     tab_w       = _tab_r.get("rel_prestacao_ped")
     tab_sem_av  = _tab_r.get("rel_avaliacoes")
     tab_clinico = _tab_r.get("rel_patologias")
-    tab_pa_lote = _tab_r.get("rel_pa_lote")
+    tab_pa_lote    = _tab_r.get("rel_pa_lote")
+    tab_inativos_r = _tab_r.get("rel_inativos")
 
     # ==============================================================================
     # --- ABA 1: FREQUÊNCIA (MOTOR ANTI-FURO IMPLEMENTADO) ---
@@ -3816,6 +3818,199 @@ def tela_relatorio():
     if tab_pa_lote is not None:
         with tab_pa_lote:
             tela_relatorio_pa_lote()
+
+    # ==============================================================================
+    # --- ABA 8: ALUNOS INATIVOS (MOTIVO / DATA / OBS DE SAÍDA) ---
+    # ==============================================================================
+    def _render_tab_inativos():
+        if not _rel_liberada("rel_inativos"):
+            st.info("🔒 Sem acesso a esta aba (Alunos Inativos). Contate o administrador.")
+            return
+
+        st.markdown("### 🗄️ Relatório de Alunos Inativos")
+        st.caption("Lista completa de alunos arquivados com motivo, data e observação de saída.")
+
+        df_inat = buscar_alunos_geral("", incluir_inativos=True)
+        if not df_inat.empty and "status" in df_inat.columns:
+            df_inat = df_inat[df_inat["status"] == "Inativo"].copy()
+
+        if df_inat.empty:
+            st.success("Nenhum aluno inativo encontrado.")
+            return
+
+        # ── verificar se colunas de saída existem ─────────────────────────────
+        _TEM_SAIDA = "motivo_saida" in df_inat.columns
+
+        # ── FILTROS ────────────────────────────────────────────────────────────
+        with st.container(border=True):
+            fc1, fc2 = st.columns(2)
+
+            # Filtro por turma
+            _turmas_inat = ["Todas"] + sorted([
+                t for t in df_inat["turma"].dropna().unique().tolist()
+                if isinstance(t, str)
+            ])
+            _filtro_turma = fc1.selectbox("🏫 Turma:", _turmas_inat, key="fi_turma_inat")
+
+            # Filtro por motivo de saída
+            if _TEM_SAIDA:
+                _MOTIVOS_REL = ["Todos"] + sorted(
+                    [m for m in df_inat["motivo_saida"].dropna().unique().tolist() if m]
+                )
+                _filtro_motivo = fc2.selectbox("🚪 Motivo de saída:", _MOTIVOS_REL, key="fi_motivo_inat")
+            else:
+                _filtro_motivo = "Todos"
+
+        df_vis = df_inat.copy()
+        if _filtro_turma != "Todas":
+            df_vis = df_vis[df_vis["turma"] == _filtro_turma]
+        if _TEM_SAIDA and _filtro_motivo != "Todos":
+            df_vis = df_vis[df_vis["motivo_saida"] == _filtro_motivo]
+
+        st.caption(f"Exibindo **{len(df_vis)}** de {len(df_inat)} aluno(s) inativo(s).")
+
+        if df_vis.empty:
+            st.info("Nenhum aluno encontrado com os filtros selecionados.")
+            return
+
+        # ── GRADE DE EXIBIÇÃO ─────────────────────────────────────────────────
+        _ICONE_MOT = {"Óbito": "⚰️", "Desistência": "🚪", "Transferência": "🔄", "Conclusão": "🎓", "Outro": "📋"}
+
+        def _fmt_data_saida(val):
+            v = str(val or "").strip()
+            if not v or v in ("None", "nan", "—", ""):
+                return "—"
+            try:
+                return datetime.date.fromisoformat(v).strftime("%d/%m/%Y")
+            except Exception:
+                return v
+
+        with st.container(border=True):
+            _hc = st.columns([3, 1.5, 1.5, 1.5, 2.5], vertical_alignment="center")
+            _hc[0].markdown("**Nome**")
+            _hc[1].markdown("**Última Turma**")
+            _hc[2].markdown("**Motivo de Saída**")
+            _hc[3].markdown("**Data de Saída**")
+            _hc[4].markdown("**Observação**")
+            st.markdown("<hr style='margin:4px 0 8px 0;border-color:#E2E8F0'/>", unsafe_allow_html=True)
+
+            for _, row in df_vis.sort_values("nome").iterrows():
+                _motivo = str(row.get("motivo_saida") or "").strip() if _TEM_SAIDA else "—"
+                _data   = _fmt_data_saida(row.get("data_saida")) if _TEM_SAIDA else "—"
+                _obs    = str(row.get("obs_saida") or "").strip() if _TEM_SAIDA else "—"
+                _icone  = _ICONE_MOT.get(_motivo, "📋") if _motivo else "—"
+
+                _rc = st.columns([3, 1.5, 1.5, 1.5, 2.5], vertical_alignment="center")
+                _rc[0].write(row.get("nome", ""))
+                _rc[1].write(row.get("turma") or "—")
+                _rc[2].markdown(
+                    f"<span style='font-size:13px'>{_icone + ' ' if _motivo else ''}{_motivo or '—'}</span>",
+                    unsafe_allow_html=True,
+                )
+                _rc[3].write(_data)
+                _rc[4].write(_obs or "—")
+                st.markdown("<hr style='margin:2px 0;border-color:#F1F5F9'/>", unsafe_allow_html=True)
+
+        # ── EXPORTAÇÕES ────────────────────────────────────────────────────────
+        st.markdown("#### 📤 Exportar")
+        _ec1, _ec2 = st.columns(2)
+
+        # ── Excel ─────────────────────────────────────────────────────────────
+        _cols_base = ["nome", "turma"]
+        if _TEM_SAIDA:
+            _cols_base += ["motivo_saida", "data_saida", "obs_saida"]
+        _df_exp = df_vis[[c for c in _cols_base if c in df_vis.columns]].copy()
+        _df_exp["data_saida"] = _df_exp["data_saida"].apply(_fmt_data_saida) if "data_saida" in _df_exp.columns else "—"
+        _rename_exp = {
+            "nome": "Nome do Aluno", "turma": "Última Turma",
+            "motivo_saida": "Motivo de Saída", "data_saida": "Data de Saída",
+            "obs_saida": "Observação",
+        }
+        _df_exp.rename(columns={k: v for k, v in _rename_exp.items() if k in _df_exp.columns}, inplace=True)
+
+        _buf_xl = io.BytesIO()
+        with pd.ExcelWriter(_buf_xl, engine="xlsxwriter") as _wr_i:
+            _df_exp.to_excel(_wr_i, index=False, sheet_name="Alunos_Inativos")
+            _ws_i = _wr_i.sheets["Alunos_Inativos"]
+            _ws_i.set_column(0, 0, 35)
+            _ws_i.set_column(1, 1, 20)
+            _ws_i.set_column(2, 2, 20)
+            _ws_i.set_column(3, 3, 15)
+            _ws_i.set_column(4, 4, 40)
+
+        _ec1.download_button(
+            "📥 Exportar Excel",
+            _buf_xl.getvalue(),
+            f"Alunos_Inativos_{datetime.date.today().strftime('%d_%m_%Y')}.xlsx",
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            use_container_width=True,
+        )
+
+        # ── PDF ───────────────────────────────────────────────────────────────
+        if XHTML_DISPONIVEL:
+            _rows_html = ""
+            for _, row in df_vis.sort_values("nome").iterrows():
+                _m = str(row.get("motivo_saida") or "").strip() if _TEM_SAIDA else "—"
+                _d = _fmt_data_saida(row.get("data_saida")) if _TEM_SAIDA else "—"
+                _o = str(row.get("obs_saida") or "").strip() if _TEM_SAIDA else "—"
+                _rows_html += (
+                    f"<tr><td>{row.get('nome','')}</td><td>{row.get('turma') or '—'}</td>"
+                    f"<td>{_m or '—'}</td><td>{_d}</td><td>{_o or '—'}</td></tr>"
+                )
+
+            _html_pdf = f"""
+            <html><head><meta charset='utf-8'>
+            <style>
+              body {{ font-family: Arial, sans-serif; font-size: 10px; margin: 20px; }}
+              h2 {{ font-size: 14px; color: #1E3A5F; }}
+              table {{ border-collapse: collapse; width: 100%; margin-top: 12px; }}
+              th {{ background: #1E3A5F; color: #fff; padding: 6px 8px; text-align: left; font-size: 10px; }}
+              td {{ padding: 5px 8px; border-bottom: 1px solid #E2E8F0; font-size: 9px; }}
+              tr:nth-child(even) td {{ background: #F8FAFC; }}
+              .rodape {{ margin-top: 16px; font-size: 8px; color: #94A3B8; text-align: center; }}
+            </style></head><body>
+            <h2>🗄️ Relatório de Alunos Inativos</h2>
+            <p style='font-size:9px; color:#64748B;'>
+              Gerado em: {datetime.date.today().strftime('%d/%m/%Y')}
+              {f" | Turma: {_filtro_turma}" if _filtro_turma != "Todas" else ""}
+              {f" | Motivo: {_filtro_motivo}" if _filtro_motivo != "Todos" else ""}
+              &nbsp;·&nbsp; Total: {len(df_vis)} aluno(s)
+            </p>
+            <table>
+              <thead><tr>
+                <th>Nome do Aluno</th><th>Última Turma</th>
+                <th>Motivo de Saída</th><th>Data de Saída</th><th>Observação</th>
+              </tr></thead>
+              <tbody>{_rows_html}</tbody>
+            </table>
+            <div class='rodape'>Moveright™ Gestão Inteligente — Relatório Oficial</div>
+            </body></html>
+            """
+
+            _buf_pdf = io.BytesIO()
+            _status = pisa.CreatePDF(io.StringIO(_html_pdf), dest=_buf_pdf)
+            if not _status.err:
+                _ec2.download_button(
+                    "📕 Exportar PDF",
+                    _buf_pdf.getvalue(),
+                    f"Alunos_Inativos_{datetime.date.today().strftime('%d_%m_%Y')}.pdf",
+                    "application/pdf",
+                    use_container_width=True,
+                )
+            else:
+                _ec2.warning("Erro ao gerar PDF.")
+        else:
+            _ec2.info("📄 PDF indisponível no servidor (xhtml2pdf não instalado).")
+
+        if not _TEM_SAIDA:
+            st.warning(
+                "⚠️ As colunas **motivo_saida**, **data_saida** e **obs_saida** ainda não existem na base de dados. "
+                "Execute a migração no Prontuário para habilitar os dados de saída."
+            )
+
+    if tab_inativos_r is not None:
+        with tab_inativos_r:
+            _render_tab_inativos()
 
     st.markdown(
         "<br><p style='text-align:center; color:#94a3b8; font-size:10px;'>Moveright™ Gestão Inteligente - Projeto Esporte e Saúde Community Phase 2 - v8.40 PRIMEMAX</p>",
