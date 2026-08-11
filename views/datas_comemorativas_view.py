@@ -4,6 +4,7 @@
 # ==============================================================================
 
 import html
+import re as _re
 import streamlit as st
 from database import get_datas_comemorativas_custom, set_datas_comemorativas_custom
 
@@ -22,6 +23,34 @@ _EMOJIS_SUGERIDOS = [
     "🌺", "💝", "🎆", "🪘", "⭐", "🔥", "🏅", "🎖️", "🎗️", "💫",
 ]
 
+_COR_RE = _re.compile(r'^#[0-9A-Fa-f]{3,8}$')
+
+
+def _safe_cor(cor: str) -> str:
+    return cor if _COR_RE.match(cor) else "#F59E0B"
+
+
+def _card_html(emoji: str, nome: str, dia: int, mes: int, cor: str) -> str:
+    cor_s = _safe_cor(cor)
+    mes_nome = _MESES[mes] if 1 <= mes <= 12 else "?"
+    return (
+        f"<div style='background:#F8FAFC;border:1.5px solid {cor_s};"
+        f"border-radius:10px;padding:10px 14px;margin-bottom:6px;"
+        f"display:flex;align-items:center;gap:12px;'>"
+        f"<span style='font-size:26px;'>{html.escape(emoji)}</span>"
+        f"<div>"
+        f"<p style='margin:0;font-weight:800;color:#0A2540;font-size:1rem;'>"
+        f"{html.escape(nome)}</p>"
+        f"<p style='margin:0;color:#64748B;font-size:0.85rem;'>"
+        f"Todo dia {dia} de {html.escape(mes_nome)}"
+        f"</p>"
+        f"</div>"
+        f"<span style='margin-left:auto;background:{cor_s};color:#fff;"
+        f"border-radius:20px;padding:3px 12px;font-size:0.78rem;font-weight:700;'>"
+        f"{html.escape(cor_s)}</span>"
+        f"</div>"
+    )
+
 
 def tela_datas_comemorativas():
     st.markdown(
@@ -35,6 +64,12 @@ def tela_datas_comemorativas():
 
     datas = get_datas_comemorativas_custom()
 
+    # Índice do item em edição (None = nenhum)
+    if "editando_data_idx" not in st.session_state:
+        st.session_state.editando_data_idx = None
+
+    editando_idx = st.session_state.editando_data_idx
+
     # ── Lista das datas cadastradas ──────────────────────────────────────────
     if datas:
         st.markdown(
@@ -45,47 +80,166 @@ def tela_datas_comemorativas():
         nova_lista = list(datas)  # cópia para mutação
 
         for idx, dt in enumerate(datas):
-            mes_nome = _MESES[dt.get("mes", 1)] if 1 <= dt.get("mes", 1) <= 12 else "?"
+            mes = dt.get("mes", 1)
             emoji = dt.get("emoji", "🎉")
             cor = dt.get("cor", "#F59E0B")
             nome = dt.get("nome", "—")
             dia = dt.get("dia", 1)
 
-            col_info, col_del = st.columns([5, 1])
+            col_info, col_edit, col_del = st.columns([5, 1, 1])
+
             with col_info:
-                # Escape all user-supplied text to prevent stored XSS
-                _safe_nome     = html.escape(nome)
-                _safe_emoji    = html.escape(emoji)
-                _safe_mes_nome = html.escape(mes_nome)
-                # cor is validated to be a CSS hex color — only allow safe chars
-                import re as _re
-                _safe_cor = cor if _re.match(r'^#[0-9A-Fa-f]{3,8}$', cor) else "#F59E0B"
                 st.markdown(
-                    f"<div style='background:#F8FAFC;border:1.5px solid {_safe_cor};"
-                    f"border-radius:10px;padding:10px 14px;margin-bottom:6px;"
-                    f"display:flex;align-items:center;gap:12px;'>"
-                    f"<span style='font-size:26px;'>{_safe_emoji}</span>"
-                    f"<div>"
-                    f"<p style='margin:0;font-weight:800;color:#0A2540;font-size:1rem;'>{_safe_nome}</p>"
-                    f"<p style='margin:0;color:#64748B;font-size:0.85rem;'>"
-                    f"Todo dia {dia} de {_safe_mes_nome}"
-                    f"</p>"
-                    f"</div>"
-                    f"<span style='margin-left:auto;background:{_safe_cor};color:#fff;"
-                    f"border-radius:20px;padding:3px 12px;font-size:0.78rem;font-weight:700;'>"
-                    f"{html.escape(_safe_cor)}</span>"
-                    f"</div>",
+                    _card_html(emoji, nome, dia, mes, cor),
                     unsafe_allow_html=True,
                 )
+
+            with col_edit:
+                label_edit = "✏️" if editando_idx != idx else "✖️"
+                help_edit = "Editar esta data" if editando_idx != idx else "Cancelar edição"
+                if st.button(label_edit, key=f"edit_data_{idx}", help=help_edit):
+                    if st.session_state.editando_data_idx == idx:
+                        st.session_state.editando_data_idx = None
+                    else:
+                        st.session_state.editando_data_idx = idx
+                    st.rerun()
+
             with col_del:
                 if st.button("🗑️", key=f"del_data_{idx}", help="Remover esta data"):
                     nova_lista.pop(idx)
                     ok, msg = set_datas_comemorativas_custom(nova_lista)
                     if ok:
+                        if st.session_state.editando_data_idx == idx:
+                            st.session_state.editando_data_idx = None
                         st.success("Data removida.")
                         st.rerun()
                     else:
                         st.error(f"Erro ao remover: {msg}")
+
+            # ── Formulário de edição inline (logo abaixo do item) ──────────
+            if editando_idx == idx:
+                with st.container():
+                    st.markdown(
+                        "<div style='background:#EFF6FF;border:1.5px solid #3B82F6;"
+                        "border-radius:10px;padding:14px 16px;margin-bottom:10px;'>",
+                        unsafe_allow_html=True,
+                    )
+                    st.markdown(
+                        f"<p style='margin:0 0 10px;font-weight:800;color:#1D4ED8;'>"
+                        f"✏️ Editando: {html.escape(nome)}</p>",
+                        unsafe_allow_html=True,
+                    )
+
+                    with st.form(f"form_editar_data_{idx}", clear_on_submit=False):
+                        ec1, ec2 = st.columns(2)
+                        novo_nome = ec1.text_input(
+                            "Nome da data *",
+                            value=nome,
+                            max_chars=80,
+                            key=f"edit_nome_{idx}",
+                        )
+                        novo_emoji = ec2.text_input(
+                            "Emoji *",
+                            value=emoji,
+                            max_chars=4,
+                            help="Um emoji que representa a data. Sugestões: "
+                                 + " ".join(_EMOJIS_SUGERIDOS[:10]),
+                            key=f"edit_emoji_{idx}",
+                        )
+
+                        ec3, ec4 = st.columns(2)
+                        novo_mes = ec3.selectbox(
+                            "Mês *",
+                            options=list(range(1, 13)),
+                            format_func=lambda m: _MESES[m],
+                            index=mes - 1,
+                            key=f"edit_mes_{idx}",
+                        )
+                        max_dia = _DIAS_POR_MES.get(novo_mes, 31)
+                        novo_dia = ec4.number_input(
+                            "Dia *",
+                            min_value=1,
+                            max_value=max_dia,
+                            value=min(dia, max_dia),
+                            step=1,
+                            key=f"edit_dia_{idx}",
+                        )
+
+                        nova_cor = st.color_picker(
+                            "Cor do badge",
+                            value=_safe_cor(cor),
+                            help="Cor da borda e do badge exibido na tela de Frequência.",
+                            key=f"edit_cor_{idx}",
+                        )
+
+                        # Preview inline
+                        if novo_nome.strip():
+                            st.markdown(
+                                f"<div style='margin-top:6px;'>"
+                                + _card_html(
+                                    (novo_emoji or "🎉").strip(),
+                                    novo_nome.strip(),
+                                    int(novo_dia),
+                                    novo_mes,
+                                    nova_cor,
+                                )
+                                + "</div>",
+                                unsafe_allow_html=True,
+                            )
+
+                        cb1, cb2 = st.columns(2)
+                        salvar_edicao = cb1.form_submit_button(
+                            "💾 Salvar alterações",
+                            type="primary",
+                            use_container_width=True,
+                        )
+                        cancelar_edicao = cb2.form_submit_button(
+                            "✖️ Cancelar",
+                            use_container_width=True,
+                        )
+
+                    st.markdown("</div>", unsafe_allow_html=True)
+
+                    if cancelar_edicao:
+                        st.session_state.editando_data_idx = None
+                        st.rerun()
+
+                    if salvar_edicao:
+                        nome_strip = novo_nome.strip()
+                        emoji_strip = (novo_emoji or "🎉").strip()
+
+                        if not nome_strip:
+                            st.error("O nome da data é obrigatório.")
+                        else:
+                            # Verificar duplicata de mês+dia em outro item
+                            duplicata = any(
+                                i != idx
+                                and d.get("mes") == int(novo_mes)
+                                and d.get("dia") == int(novo_dia)
+                                for i, d in enumerate(datas)
+                            )
+                            if duplicata:
+                                st.warning(
+                                    f"⚠️ Já existe outra data cadastrada para "
+                                    f"{int(novo_dia)} de {_MESES[novo_mes]}."
+                                )
+                            else:
+                                nova_lista[idx] = {
+                                    "nome": nome_strip,
+                                    "mes": int(novo_mes),
+                                    "dia": int(novo_dia),
+                                    "emoji": emoji_strip,
+                                    "cor": nova_cor,
+                                }
+                                ok, msg = set_datas_comemorativas_custom(nova_lista)
+                                if ok:
+                                    st.session_state.editando_data_idx = None
+                                    st.success(
+                                        f"✅ '{nome_strip}' atualizado com sucesso!"
+                                    )
+                                    st.rerun()
+                                else:
+                                    st.error(f"Erro ao salvar: {msg}")
     else:
         st.info(
             "Nenhuma data comemorativa personalizada cadastrada ainda. "
@@ -94,103 +248,108 @@ def tela_datas_comemorativas():
 
     st.markdown("---")
 
-    # ── Formulário de cadastro ───────────────────────────────────────────────
-    st.markdown(
-        "<p style='font-weight:800;color:#0A2540;font-size:1rem;margin-bottom:4px;'>"
-        "➕ Cadastrar nova data comemorativa</p>",
-        unsafe_allow_html=True,
-    )
-
-    with st.form("form_nova_data_comemorativa", clear_on_submit=True):
-        c1, c2 = st.columns(2)
-        nome_data = c1.text_input(
-            "Nome da data *",
-            placeholder="Ex: Aniversário da Academia",
-            max_chars=80,
-        )
-        emoji_input = c2.text_input(
-            "Emoji *",
-            value="🎉",
-            max_chars=4,
-            help="Um emoji que representa a data. Sugestões: " + " ".join(_EMOJIS_SUGERIDOS[:10]),
+    # ── Formulário de cadastro (apenas quando nenhum item está em edição) ───
+    if editando_idx is None:
+        st.markdown(
+            "<p style='font-weight:800;color:#0A2540;font-size:1rem;margin-bottom:4px;'>"
+            "➕ Cadastrar nova data comemorativa</p>",
+            unsafe_allow_html=True,
         )
 
-        c3, c4 = st.columns(2)
-        mes_sel = c3.selectbox(
-            "Mês *",
-            options=list(range(1, 13)),
-            format_func=lambda m: _MESES[m],
-            index=0,
-        )
-        max_dia = _DIAS_POR_MES.get(mes_sel, 31)
-        dia_sel = c4.number_input(
-            "Dia *",
-            min_value=1,
-            max_value=max_dia,
-            value=1,
-            step=1,
-        )
-
-        cor_sel = st.color_picker(
-            "Cor do badge",
-            value="#F59E0B",
-            help="Cor da borda e do badge exibido na tela de Frequência.",
-        )
-
-        # Preview inline (escape user input to prevent XSS)
-        if nome_data.strip():
-            import re as _re
-            _prev_cor = cor_sel if _re.match(r'^#[0-9A-Fa-f]{3,8}$', cor_sel) else "#F59E0B"
-            st.markdown(
-                f"<div style='margin-top:8px;background:#F8FAFC;border:1.5px solid {_prev_cor};"
-                f"border-radius:10px;padding:10px 14px;display:inline-flex;align-items:center;gap:10px;'>"
-                f"<span style='font-size:24px;'>{html.escape((emoji_input or '🎉').strip())}</span>"
-                f"<div>"
-                f"<p style='margin:0;font-weight:800;color:#0A2540;'>{html.escape(nome_data.strip())}</p>"
-                f"<p style='margin:0;color:#64748B;font-size:0.82rem;'>"
-                f"Todo dia {int(dia_sel)} de {html.escape(_MESES[mes_sel])}</p>"
-                f"</div>"
-                f"</div>",
-                unsafe_allow_html=True,
+        with st.form("form_nova_data_comemorativa", clear_on_submit=True):
+            c1, c2 = st.columns(2)
+            nome_data = c1.text_input(
+                "Nome da data *",
+                placeholder="Ex: Aniversário da Academia",
+                max_chars=80,
+            )
+            emoji_input = c2.text_input(
+                "Emoji *",
+                value="🎉",
+                max_chars=4,
+                help="Um emoji que representa a data. Sugestões: " + " ".join(_EMOJIS_SUGERIDOS[:10]),
             )
 
-        salvar = st.form_submit_button("💾 Salvar data comemorativa", type="primary", use_container_width=True)
-
-    if salvar:
-        nome_strip = nome_data.strip()
-        emoji_strip = (emoji_input or "🎉").strip()
-
-        if not nome_strip:
-            st.error("O nome da data é obrigatório.")
-        else:
-            # Verificar duplicata (mesmo mês+dia)
-            duplicata = any(
-                d.get("mes") == int(mes_sel) and d.get("dia") == int(dia_sel)
-                for d in datas
+            c3, c4 = st.columns(2)
+            mes_sel = c3.selectbox(
+                "Mês *",
+                options=list(range(1, 13)),
+                format_func=lambda m: _MESES[m],
+                index=0,
             )
-            if duplicata:
-                st.warning(
-                    f"⚠️ Já existe uma data comemorativa cadastrada para "
-                    f"{int(dia_sel)} de {_MESES[mes_sel]}. Remova-a antes de substituir."
-                )
-            else:
-                nova = {
-                    "nome": nome_strip,
-                    "mes": int(mes_sel),
-                    "dia": int(dia_sel),
-                    "emoji": emoji_strip,
-                    "cor": cor_sel,
-                }
-                nova_lista = list(datas) + [nova]
-                ok, msg = set_datas_comemorativas_custom(nova_lista)
-                if ok:
-                    st.success(
-                        f"✅ Data '{nome_strip}' salva! "
-                        f"A celebração aparecerá automaticamente em {int(dia_sel)} de {_MESES[mes_sel]}."
+            max_dia = _DIAS_POR_MES.get(mes_sel, 31)
+            dia_sel = c4.number_input(
+                "Dia *",
+                min_value=1,
+                max_value=max_dia,
+                value=1,
+                step=1,
+            )
+
+            cor_sel = st.color_picker(
+                "Cor do badge",
+                value="#F59E0B",
+                help="Cor da borda e do badge exibido na tela de Frequência.",
+            )
+
+            # Preview inline
+            if nome_data.strip():
+                st.markdown(
+                    f"<div style='margin-top:8px;'>"
+                    + _card_html(
+                        (emoji_input or "🎉").strip(),
+                        nome_data.strip(),
+                        int(dia_sel),
+                        mes_sel,
+                        cor_sel,
                     )
-                    st.rerun()
+                    + "</div>",
+                    unsafe_allow_html=True,
+                )
+
+            salvar = st.form_submit_button(
+                "💾 Salvar data comemorativa",
+                type="primary",
+                use_container_width=True,
+            )
+
+        if salvar:
+            nome_strip = nome_data.strip()
+            emoji_strip = (emoji_input or "🎉").strip()
+
+            if not nome_strip:
+                st.error("O nome da data é obrigatório.")
+            else:
+                # Verificar duplicata (mesmo mês+dia)
+                duplicata = any(
+                    d.get("mes") == int(mes_sel) and d.get("dia") == int(dia_sel)
+                    for d in datas
+                )
+                if duplicata:
+                    st.warning(
+                        f"⚠️ Já existe uma data comemorativa cadastrada para "
+                        f"{int(dia_sel)} de {_MESES[mes_sel]}. Remova-a antes de substituir."
+                    )
                 else:
-                    st.error(f"Erro ao salvar: {msg}")
+                    nova = {
+                        "nome": nome_strip,
+                        "mes": int(mes_sel),
+                        "dia": int(dia_sel),
+                        "emoji": emoji_strip,
+                        "cor": cor_sel,
+                    }
+                    nova_lista = list(datas) + [nova]
+                    ok, msg = set_datas_comemorativas_custom(nova_lista)
+                    if ok:
+                        st.success(
+                            f"✅ Data '{nome_strip}' salva! "
+                            f"A celebração aparecerá automaticamente em {int(dia_sel)} de {_MESES[mes_sel]}."
+                        )
+                        st.rerun()
+                    else:
+                        st.error(f"Erro ao salvar: {msg}")
+    else:
+        st.info("💡 Termine a edição acima antes de cadastrar uma nova data.")
 
     # ── Datas fixas do sistema (informativo) ─────────────────────────────────
     with st.expander("ℹ️ Datas fixas já incluídas no sistema", expanded=False):
