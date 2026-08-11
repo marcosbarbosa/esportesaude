@@ -45,7 +45,7 @@ outputType = "webview"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
-args = "STREAMLIT_SERVER_PORT=8000 streamlit run main.py"
+args = "PYTHONDONTWRITEBYTECODE=1 python cleanup.py && STREAMLIT_SERVER_PORT=8000 PYTHONDONTWRITEBYTECODE=1 streamlit run main.py"
 waitForPort = 8000
 
 [agent]
