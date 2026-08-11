@@ -2203,19 +2203,38 @@ def get_dias_sem_aula(data_ini: str = None, data_fim: str = None) -> set:
     comemorativas com aula), que aparecem no badge mas não bloqueiam a chamada.
     Tabela: dias_sem_aula (data, motivo, criado_em, criado_por,
                             eh_comemorativa bool, tem_aula bool)
+    Fallback: se as colunas eh_comemorativa/tem_aula não existirem no schema
+    ainda (pré-migração), seleciona apenas 'data' e trata todos os registros
+    como dias sem aula (comportamento original pré-colunas).
     """
     import datetime as _dt
-    try:
-        q = supabase.from_("dias_sem_aula").select("data, tem_aula")
+
+    def _build_query(cols: str):
+        q = supabase.from_("dias_sem_aula").select(cols)
         if data_ini:
             q = q.gte("data", data_ini)
         if data_fim:
             q = q.lte("data", data_fim)
-        res = q.order("data").execute()
+        return q.order("data").execute()
+
+    # Tentativa 1: schema atualizado com tem_aula
+    try:
+        res = _build_query("data, tem_aula")
         return {
             _dt.date.fromisoformat(str(r["data"]))
             for r in (res.data or [])
             if r.get("data") and not r.get("tem_aula", False)
+        }
+    except Exception:
+        pass
+
+    # Fallback: schema legado sem tem_aula — inclui todos os registros
+    try:
+        res = _build_query("data")
+        return {
+            _dt.date.fromisoformat(str(r["data"]))
+            for r in (res.data or [])
+            if r.get("data")
         }
     except Exception:
         return set()
@@ -2293,20 +2312,33 @@ def get_dias_sem_aula_periodo_df(data_ini: str, data_fim: str):
     Retorna DataFrame com todos os campos dos dias no período, incluindo
     os novos campos eh_comemorativa e tem_aula, para exibição na tela
     de gestão do Calendário Institucional.
+    Fallback: se as colunas extras não existirem (schema pré-migração),
+    retorna apenas os campos base (data, motivo, criado_por, criado_em).
     """
-    try:
-        res = (
+    import pandas as _pd
+
+    def _query(cols: str):
+        return (
             supabase.from_("dias_sem_aula")
-            .select("data, motivo, criado_por, criado_em, eh_comemorativa, tem_aula")
+            .select(cols)
             .gte("data", data_ini)
             .lte("data", data_fim)
             .order("data")
             .execute()
         )
-        import pandas as _pd
+
+    # Tentativa 1: schema atualizado com colunas extras
+    try:
+        res = _query("data, motivo, criado_por, criado_em, eh_comemorativa, tem_aula")
         return _pd.DataFrame(res.data or [])
     except Exception:
-        import pandas as _pd
+        pass
+
+    # Fallback: schema legado
+    try:
+        res = _query("data, motivo, criado_por, criado_em")
+        return _pd.DataFrame(res.data or [])
+    except Exception:
         return _pd.DataFrame()
 
 
@@ -2334,6 +2366,39 @@ def get_datas_comemorativas_bd() -> dict:
         }
     except Exception:
         return {}
+
+
+# ==============================================================================
+# 📅 DATAS COMEMORATIVAS PERSONALIZADAS (cadastradas pelo admin)
+# Persistidas em configuracoes_sistema com chave datas_comemorativas_json.
+# Formato: JSON lista de {nome, mes, dia, emoji, cor}
+# ==============================================================================
+_CHAVE_DATAS_CUSTOM = "datas_comemorativas_json"
+
+
+@st.cache_data(ttl=300)
+def get_datas_comemorativas_custom() -> list:
+    """Retorna lista de datas comemorativas customizadas pelo admin.
+    Cada item: {'nome': str, 'mes': int, 'dia': int, 'emoji': str, 'cor': str}
+    """
+    import json as _json
+    raw = get_config_valor(_CHAVE_DATAS_CUSTOM, "[]")
+    try:
+        dados = _json.loads(raw or "[]")
+        if isinstance(dados, list):
+            return dados
+    except Exception:
+        pass
+    return []
+
+
+def set_datas_comemorativas_custom(lista: list) -> tuple:
+    """Persiste a lista de datas comemorativas customizadas."""
+    import json as _json
+    ok, msg = set_config_valor(_CHAVE_DATAS_CUSTOM, _json.dumps(lista, ensure_ascii=False))
+    if ok:
+        get_datas_comemorativas_custom.clear()
+    return ok, msg
 
 
 def get_presentes_periodo_todos(data_ini: str, data_fim: str) -> dict:

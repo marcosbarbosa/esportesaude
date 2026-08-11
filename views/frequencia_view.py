@@ -25,6 +25,7 @@ from database import (
     get_ultima_presenca_batch,
     get_numero_aula_no_ano,
     get_datas_comemorativas_bd,
+    get_datas_comemorativas_custom,
 )
 from modulos_frequencia.tab_tablet import renderizar_aba_terminal
 from modulos_frequencia.tab_diario import renderizar_aba_diario
@@ -280,9 +281,27 @@ def _renderizar_badge_aula(data_aula: datetime.date, num_aula: int) -> None:
     # ── 2. Datas festivas fixas (hardcoded — anuais) ───────────────────────
     data_fest = _DATAS_FESTIVAS.get((data_aula.month, data_aula.day))
 
+    # ── 2b. Datas comemorativas anuais cadastradas pelo admin (configuracoes_sistema) ──
+    custom_fest = None
+    if not marco and not data_fest:
+        try:
+            import html as _html
+            import re as _re_cor
+            for _c in get_datas_comemorativas_custom():
+                if _c.get("mes") == data_aula.month and _c.get("dia") == data_aula.day:
+                    # Escape user-controlled text; validate color to prevent CSS injection
+                    _emoji = _html.escape((str(_c.get("emoji") or "🎉")).strip())
+                    _raw_cor = str(_c.get("cor") or "#F59E0B")
+                    _cor = _raw_cor if _re_cor.match(r'^#[0-9A-Fa-f]{3,8}$', _raw_cor) else "#F59E0B"
+                    _nome  = _html.escape(str(_c.get("nome") or "Data comemorativa!"))
+                    custom_fest = (_emoji, "#92400E", "#FEF3C7", _cor, _nome)
+                    break
+        except Exception:
+            pass
+
     # ── 3. Datas comemorativas registradas pelo admin no Calendário ─────────
     db_fest = None
-    if not marco and not data_fest:
+    if not marco and not data_fest and not custom_fest:
         try:
             _db_map = get_datas_comemorativas_bd()
             _entrada = _db_map.get(data_aula.isoformat())
@@ -292,7 +311,7 @@ def _renderizar_badge_aula(data_aula: datetime.date, num_aula: int) -> None:
         except Exception:
             pass
 
-    eh_celebr = bool(marco or data_fest or db_fest)
+    eh_celebr = bool(marco or data_fest or custom_fest or db_fest)
     eh_grande = num_aula in _MARCOS_GRANDES
 
     # ── 4. Escolher visual ─────────────────────────────────────────────────
@@ -300,6 +319,8 @@ def _renderizar_badge_aula(data_aula: datetime.date, num_aula: int) -> None:
         ico, txt_c, bg, borda, legenda = marco
     elif data_fest:
         ico, txt_c, bg, borda, legenda = data_fest
+    elif custom_fest:
+        ico, txt_c, bg, borda, legenda = custom_fest
     elif db_fest:
         ico, txt_c, bg, borda, legenda = db_fest
     else:

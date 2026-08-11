@@ -390,7 +390,6 @@ def load_niver_geral():
         return pd.DataFrame()
 
 
-
 # ==============================================================================
 # 🛡️ MÓDULO DE SEGURANÇA E SESSÃO (8 HORAS)
 # ==============================================================================
@@ -3806,6 +3805,7 @@ elif st.session_state.menu_atual in (
                 "🏫 Turmas", "💬 Mensagens", "🔔 Auto Niver", "🎨 Identidade Visual",
                 "🗄️ Bck Adm", "🔀 Mescla Cad", "📅 Calendário", "📧 Email BI",
                 "👥 Usuários", "🔒 LGPD", "🏷️ Tags Saúde", "🤝 Voluntariado",
+                "🎊 Datas Comemorativas",
             ])
             with _aba_cfg[0]:
                 from views.turmas_view import tela_gestao_turmas
@@ -3877,6 +3877,10 @@ elif st.session_state.menu_atual in (
             with _aba_cfg[11]:
                 from views.voluntariado_config_view import tela_voluntariado_config
                 tela_voluntariado_config()
+
+            with _aba_cfg[12]:
+                from views.datas_comemorativas_view import tela_datas_comemorativas
+                tela_datas_comemorativas()
 
 # ── Rodapé Fixo ─────────────────────────────────────────────────────────────
 from utils.identidade import get_config as _gcfg_rodape
