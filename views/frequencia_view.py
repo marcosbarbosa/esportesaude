@@ -376,16 +376,48 @@ def _renderizar_progresso_anual(data_aula: datetime.date, num_aula_ate_hoje: int
     Exibe um expander "📈 Progresso do ano" abaixo do badge de número da aula.
     Mostra um mini gráfico de barras horizontal (HTML/CSS) com aulas por mês,
     o mês atual destacado, total no ano e projeção até dezembro.
+    Permite navegar entre anos com botões ◀ / ▶ no topo do expander.
     """
-    ano = data_aula.year
-    mes_ref = data_aula.month
+    ano_data = data_aula.year
+    mes_ref_data = data_aula.month
+
+    # Inicializa (ou reseta quando a data muda de ano) o ano exibido no gráfico
+    _KEY_ANO = "_prog_ano_grafico"
+    _KEY_ANO_BASE = "_prog_ano_base"
+    if st.session_state.get(_KEY_ANO_BASE) != ano_data:
+        st.session_state[_KEY_ANO_BASE] = ano_data
+        st.session_state[_KEY_ANO] = ano_data
+
+    ano_grafico = st.session_state.get(_KEY_ANO, ano_data)
 
     with st.expander("📈 Progresso do ano", expanded=False):
+        # ── Navegação de anos ────────────────────────────────────────────────
+        col_prev, col_ano_lbl, col_next = st.columns([1, 2, 1])
+        with col_prev:
+            if st.button(f"◀ {ano_grafico - 1}", key="_prog_ano_prev",
+                         use_container_width=True):
+                st.session_state[_KEY_ANO] = ano_grafico - 1
+                st.rerun()
+        with col_ano_lbl:
+            st.markdown(
+                f"<div style='text-align:center;font-size:15px;font-weight:800;"
+                f"color:#1E40AF;padding:4px 0;'>{ano_grafico}</div>",
+                unsafe_allow_html=True,
+            )
+        with col_next:
+            if st.button(f"{ano_grafico + 1} ▶", key="_prog_ano_next",
+                         use_container_width=True):
+                st.session_state[_KEY_ANO] = ano_grafico + 1
+                st.rerun()
+
+        # Mês de referência: o mês da data selecionada só é relevante no ano atual
+        mes_ref = mes_ref_data if ano_grafico == ano_data else 12
+
         with st.spinner("Carregando..."):
-            aulas_mes = get_aulas_por_mes_no_ano(ano)
+            aulas_mes = get_aulas_por_mes_no_ano(ano_grafico)
 
         if not aulas_mes:
-            st.caption("Nenhuma aula registrada em %d ainda." % ano)
+            st.caption("Nenhuma aula registrada em %d ainda." % ano_grafico)
             return
 
         _MESES_PT = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun",
@@ -394,21 +426,21 @@ def _renderizar_progresso_anual(data_aula: datetime.date, num_aula_ate_hoje: int
         max_val = max(aulas_mes.values()) if aulas_mes else 1
         total_ano = sum(aulas_mes.values())
 
-        # Projeção: meses com dado real até mes_ref; projetar média dos meses completos
-        meses_completos = [m for m in range(1, mes_ref) if aulas_mes.get(m, 0) > 0]
-        if meses_completos:
-            media_mensal = total_ano / len(meses_completos)
-            meses_restantes = 12 - mes_ref  # meses futuros
-            projecao = round(total_ano + media_mensal * meses_restantes)
-        else:
-            projecao = None
+        # Projeção: apenas para o ano atual e somente se há meses completos
+        projecao = None
+        if ano_grafico == ano_data:
+            meses_completos = [m for m in range(1, mes_ref) if aulas_mes.get(m, 0) > 0]
+            if meses_completos:
+                media_mensal = total_ano / len(meses_completos)
+                meses_restantes = 12 - mes_ref
+                projecao = round(total_ano + media_mensal * meses_restantes)
 
         # ── Gráfico de barras HTML/CSS ──────────────────────────────────────
         barras_html = ""
         for m in range(1, 13):
             qtd = aulas_mes.get(m, 0)
-            eh_atual = (m == mes_ref)
-            eh_futuro = (m > mes_ref)
+            eh_atual = (m == mes_ref) and (ano_grafico == ano_data)
+            eh_futuro = (ano_grafico == ano_data) and (m > mes_ref)
 
             pct = round((qtd / max_val) * 100) if max_val > 0 and qtd > 0 else 0
 
@@ -423,7 +455,7 @@ def _renderizar_progresso_anual(data_aula: datetime.date, num_aula_ate_hoje: int
                 peso_mes = "font-weight:400;"
                 borda_ativa = ""
             else:
-                cor_barra = "#60A5FA"   # azul claro — mês passado
+                cor_barra = "#60A5FA"   # azul claro — mês passado / outros anos
                 cor_label = "#1E40AF"
                 peso_mes = "font-weight:600;"
                 borda_ativa = ""
@@ -454,14 +486,12 @@ def _renderizar_progresso_anual(data_aula: datetime.date, num_aula_ate_hoje: int
         rodape_html = (
             f"<div style='margin-top:10px;padding-top:8px;border-top:1px solid #E2E8F0;'>"
             f"<span style='color:#1E40AF;font-size:13px;font-weight:700;'>"
-            f"✅ {total_ano} aulas em {ano}</span>"
+            f"✅ {total_ano} aulas em {ano_grafico}</span>"
             f"{proj_html}"
             f"</div>"
         )
 
         st.markdown(
-            f"<div style='padding:4px 0 2px 0;font-size:12px;font-weight:600;"
-            f"color:#475569;margin-bottom:6px;'>Aulas por mês — {ano}</div>"
             f"{barras_html}{rodape_html}",
             unsafe_allow_html=True,
         )
