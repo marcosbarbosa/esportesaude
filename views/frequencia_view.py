@@ -623,9 +623,10 @@ def _renderizar_progresso_anual(data_aula: datetime.date, num_aula_ate_hoje: int
                     f"<span style='color:#DC2626;font-size:11px;'>"
                     f"▼ Abaixo: {', '.join(meses_pior)}</span>"
                 )
+            _sep_legenda = "<span style='color:#CBD5E1;font-size:11px;'> | </span>"
             legenda_meses_html = (
                 f"<div style='padding-top:4px;display:flex;gap:14px;flex-wrap:wrap;'>"
-                f"{'<span style=\"color:#CBD5E1;font-size:11px;\"> | </span>'.join(partes_legenda)}"
+                f"{_sep_legenda.join(partes_legenda)}"
                 f"</div>"
                 if partes_legenda else ""
             )
