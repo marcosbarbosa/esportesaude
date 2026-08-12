@@ -741,7 +741,7 @@ def atualizar_dados_sociais_aluno(aluno_id, dados_atualizados):
         return False, str(e)
 
 
-def alterar_status_aluno(aluno_id, novo_status, motivo_saida=None, data_saida=None, obs_saida=None):
+def alterar_status_aluno(aluno_id, novo_status, motivo_saida=None, data_saida=None, obs_saida=None, operador=None):
     try:
         payload = {"status": novo_status}
         if novo_status == "Inativo":
@@ -757,6 +757,22 @@ def alterar_status_aluno(aluno_id, novo_status, motivo_saida=None, data_saida=No
             "id", str(aluno_id)
         ).execute()
         _inv_alunos()
+        # Registrar no histórico de status
+        if novo_status == "Inativo":
+            registrar_historico_status_aluno(
+                aluno_id,
+                tipo="arquivamento",
+                motivo_saida=motivo_saida,
+                data_saida=data_saida,
+                obs_saida=obs_saida,
+                operador=operador,
+            )
+        else:
+            registrar_historico_status_aluno(
+                aluno_id,
+                tipo="reativacao",
+                operador=operador,
+            )
         return True, "Status alterado."
     except Exception as e:
         return False, str(e)
@@ -4483,6 +4499,84 @@ def colunas_saida_aluno_existem() -> bool:
     except Exception as e:
         msg = str(e).lower()
         return "does not exist" not in msg and "column" not in msg
+
+
+# ── Histórico de status do aluno ──────────────────────────────────────────────
+
+SQL_MIGRAR_HISTORICO_STATUS_ALUNO = """-- Execute no Supabase → SQL Editor para criar o histórico de status dos alunos:
+CREATE TABLE IF NOT EXISTS historico_status_aluno (
+  id         uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  aluno_id   uuid NOT NULL REFERENCES alunos(id) ON DELETE CASCADE,
+  tipo       text NOT NULL CHECK (tipo IN ('arquivamento', 'reativacao')),
+  motivo_saida text,
+  data_saida   date,
+  obs_saida    text,
+  operador     text,
+  criado_em    timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_hist_status_aluno ON historico_status_aluno(aluno_id, criado_em DESC);
+"""
+
+
+def historico_status_aluno_existe() -> bool:
+    """Verifica se a tabela historico_status_aluno existe no banco."""
+    try:
+        supabase.from_("historico_status_aluno").select("id").limit(1).execute()
+        return True
+    except Exception as e:
+        msg = str(e).lower()
+        return "does not exist" not in msg and "relation" not in msg
+
+
+def registrar_historico_status_aluno(
+    aluno_id: str,
+    tipo: str,
+    motivo_saida: str | None = None,
+    data_saida=None,
+    obs_saida: str | None = None,
+    operador: str | None = None,
+) -> bool:
+    """Insere um registro na tabela historico_status_aluno.
+    tipo deve ser 'arquivamento' ou 'reativacao'.
+    Retorna True se gravado com sucesso, False caso contrário.
+    """
+    try:
+        if not historico_status_aluno_existe():
+            return False
+        payload: dict = {
+            "aluno_id": str(aluno_id),
+            "tipo": tipo,
+        }
+        if motivo_saida:
+            payload["motivo_saida"] = motivo_saida
+        if data_saida is not None:
+            payload["data_saida"] = str(data_saida)
+        if obs_saida:
+            payload["obs_saida"] = obs_saida
+        if operador:
+            payload["operador"] = operador
+        supabase.from_("historico_status_aluno").insert(payload).execute()
+        return True
+    except Exception:
+        return False
+
+
+def get_historico_status_aluno(aluno_id: str) -> list[dict]:
+    """Retorna a lista de transições de status do aluno, mais recente primeiro."""
+    try:
+        if not historico_status_aluno_existe():
+            return []
+        res = (
+            supabase.from_("historico_status_aluno")
+            .select("tipo, motivo_saida, data_saida, obs_saida, operador, criado_em")
+            .eq("aluno_id", str(aluno_id))
+            .order("criado_em", desc=True)
+            .limit(50)
+            .execute()
+        )
+        return res.data or []
+    except Exception:
+        return []
 
 
 # ── Limpeza única de chaves legadas ao carregar o módulo ─────────────────────

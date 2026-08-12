@@ -38,6 +38,10 @@ from database import (
     supabase,
     SQL_MIGRAR_SAIDA_ALUNO,
     colunas_saida_aluno_existem,
+    registrar_historico_status_aluno,
+    get_historico_status_aluno,
+    historico_status_aluno_existe,
+    SQL_MIGRAR_HISTORICO_STATUS_ALUNO,
 )
 from views.anamnese_dores_view import render_aba_mapa_dores
 from modulos_prontuario.tab_pressao_arterial import renderizar_aba_pressao_arterial
@@ -67,7 +71,7 @@ def blindar_float(valor):
 # ==============================================================================
 # 🛠️ 1. MOTORES SEGUROS E DIAGNÓSTICO
 # ==============================================================================
-def alterar_status_aluno_local(aluno_id, novo_status, motivo_saida=None, data_saida=None, obs_saida=None):
+def alterar_status_aluno_local(aluno_id, novo_status, motivo_saida=None, data_saida=None, obs_saida=None, operador=None):
     try:
         payload = {"status": novo_status}
         if novo_status == "Inativo":
@@ -80,6 +84,22 @@ def alterar_status_aluno_local(aluno_id, novo_status, motivo_saida=None, data_sa
         # Ao reativar, os campos de saída são preservados intencionalmente
         # para manter o registro histórico da última saída do aluno.
         supabase.from_("alunos").update(payload).eq("id", str(aluno_id)).execute()
+        # Registrar no histórico de status
+        if novo_status == "Inativo":
+            registrar_historico_status_aluno(
+                aluno_id,
+                tipo="arquivamento",
+                motivo_saida=motivo_saida,
+                data_saida=data_saida,
+                obs_saida=obs_saida,
+                operador=operador,
+            )
+        else:
+            registrar_historico_status_aluno(
+                aluno_id,
+                tipo="reativacao",
+                operador=operador,
+            )
         # Invalida caches de alunos
         for fn in (buscar_aluno_por_id, buscar_alunos_geral, get_alunos_por_turma):
             try:
@@ -125,11 +145,13 @@ def _dialog_arquivar_aluno(aluno):
     col_ok, col_cancel = st.columns(2)
     with col_ok:
         if st.button("✅ Confirmar Arquivamento", type="primary", use_container_width=True):
+            _operador_arq = st.session_state.get("usuario_nome", "") or st.session_state.get("usuario_email", "")
             ok, msg = alterar_status_aluno_local(
                 aluno["id"], "Inativo",
                 motivo_saida=motivo,
                 data_saida=data_saida,
                 obs_saida=obs.strip() if obs else None,
+                operador=_operador_arq,
             )
             if ok:
                 st.toast("Aluno arquivado com sucesso!", icon="🗄️")
@@ -1086,7 +1108,8 @@ def render_cabecalho_aluno(aluno):
                 _dialog_arquivar_aluno(aluno)
         else:
             if st.button("♻️ Reativar Aluno", type="primary", use_container_width=True):
-                ok, _ = alterar_status_aluno_local(aluno["id"], "Ativo")
+                _operador_reat = st.session_state.get("usuario_nome", "") or st.session_state.get("usuario_email", "")
+                ok, _ = alterar_status_aluno_local(aluno["id"], "Ativo", operador=_operador_reat)
                 if ok:
                     aluno["status"] = "Ativo"
                     st.rerun()
@@ -1136,6 +1159,68 @@ def render_cabecalho_aluno(aluno):
                 + "</div>",
                 unsafe_allow_html=True,
             )
+
+    # ── Linha do tempo de status (arquivamentos e reativações) ────────────────
+    import html as _html_tl
+    if not historico_status_aluno_existe():
+        with st.expander("⚙️ Histórico de status — configuração necessária", expanded=False):
+            st.warning(
+                "A tabela **historico_status_aluno** ainda não existe no banco de dados. "
+                "Execute o SQL abaixo no Supabase → SQL Editor e recarregue a página."
+            )
+            st.code(SQL_MIGRAR_HISTORICO_STATUS_ALUNO, language="sql")
+    else:
+        _hist = get_historico_status_aluno(aluno.get("id", ""))
+        if _hist:
+            _icones_tipo = {"arquivamento": "🗄️", "reativacao": "♻️"}
+            _cores_tipo  = {"arquivamento": ("#FEE2E2", "#991B1B", "#EF4444"), "reativacao": ("#DCFCE7", "#166534", "#22C55E")}
+            _icones_mot  = {"Óbito": "⚰️", "Desistência": "🚪", "Transferência": "🔄", "Conclusão": "🎓", "Outro": "📋"}
+            with st.expander(f"🕐 Histórico de Status ({len(_hist)} registro{'s' if len(_hist) != 1 else ''})", expanded=False):
+                st.markdown("<div style='margin-top:4px;'>", unsafe_allow_html=True)
+                for _ev in _hist:
+                    _tipo  = _ev.get("tipo", "")
+                    _bg, _fg, _border = _cores_tipo.get(_tipo, ("#F3F4F6", "#374151", "#9CA3AF"))
+                    _icone = _icones_tipo.get(_tipo, "📋")
+                    _label = "Arquivado" if _tipo == "arquivamento" else "Reativado"
+                    # Formatar data do evento
+                    _criado_em = _ev.get("criado_em", "")
+                    try:
+                        import datetime as _dt_tl
+                        _criado_fmt = _dt_tl.datetime.fromisoformat(
+                            str(_criado_em).replace("Z", "+00:00")
+                        ).strftime("%d/%m/%Y %H:%M")
+                    except Exception:
+                        _criado_fmt = str(_criado_em)[:16] if _criado_em else "—"
+                    # Detalhes extras (motivo, data de saída, obs, operador)
+                    _extras = []
+                    _mot = _ev.get("motivo_saida") or ""
+                    _ds  = _ev.get("data_saida") or ""
+                    _obs = _ev.get("obs_saida") or ""
+                    _op  = _ev.get("operador") or ""
+                    if _mot:
+                        _icone_mot = _icones_mot.get(_mot, "📋")
+                        _extras.append(f"<strong>Motivo:</strong> {_icone_mot} {_html_tl.escape(_mot)}")
+                    if _ds:
+                        try:
+                            _ds_fmt = _dt_tl.date.fromisoformat(str(_ds)).strftime("%d/%m/%Y")
+                        except Exception:
+                            _ds_fmt = str(_ds)
+                        _extras.append(f"<strong>Saída:</strong> {_ds_fmt}")
+                    if _obs:
+                        _extras.append(f"<strong>Obs.:</strong> {_html_tl.escape(str(_obs))}")
+                    if _op:
+                        _extras.append(f"<small style='color:#6B7280;'>por {_html_tl.escape(_op)}</small>")
+                    _extras_html = " &nbsp;·&nbsp; ".join(_extras)
+                    st.markdown(
+                        f"<div style='border-left:4px solid {_border};background:{_bg};border-radius:6px;"
+                        f"padding:8px 14px;margin-bottom:8px;font-size:13px;color:{_fg};'>"
+                        f"<span style='font-weight:700;'>{_icone} {_label}</span>"
+                        f"<span style='float:right;font-size:12px;color:#6B7280;'>{_criado_fmt}</span>"
+                        f"<br/>{_extras_html}"
+                        f"</div>",
+                        unsafe_allow_html=True,
+                    )
+                st.markdown("</div>", unsafe_allow_html=True)
 
     # 🏷️ Banner Tags Clínicas — visível em TODAS as abas do prontuário
     _tags_raw_cab = str(aluno.get("tags_saude") or "").strip()
