@@ -535,6 +535,16 @@ def renderizar_ficha():
             )
             st.code(SQL_MIGRAR_SAIDA_ALUNO, language="sql")
 
+    # ── Última data de vencimento do atestado de aptidão (calculada aqui para
+    #    reutilizar no banner e na aba de Documentação sem dobrar a query) ──────
+    _ats_prontuario = get_atestados_temporarios(aluno["id"])
+    _dv_aptidao = None
+    if _ats_prontuario is not None and not _ats_prontuario.empty:
+        if "tipo_atestado" in _ats_prontuario.columns:
+            _apt_rows = _ats_prontuario[_ats_prontuario["tipo_atestado"] == "aptidao_fisica"]
+            if not _apt_rows.empty and "data_vencimento" in _apt_rows.columns:
+                _dv_aptidao = _apt_rows.iloc[0].get("data_vencimento")
+
     # 🔒 Banner LGPD — Autorização de Imagem (com botão de alteração)
     _ti = aluno.get("termo_imagem")
     _nao_autoriza_img = (_ti is False) or (_ti == 0) or (str(_ti).lower() in ["false", "0", ""])
@@ -566,6 +576,9 @@ def renderizar_ficha():
                 _op = st.session_state.get("usuario_nome", "")
                 _ok, _msg = atualizar_termo_imagem(aluno["id"], True, _op, aluno.get("nome", ""))
                 if _ok:
+                    # Atualiza o campo diretamente para garantir que o rerun
+                    # reflita o novo valor mesmo que o re-fetch falhe por cache/timeout
+                    st.session_state.aluno_prontuario["termo_imagem"] = True
                     _fresh = buscar_aluno_por_id(aluno["id"])
                     if _fresh:
                         st.session_state.aluno_prontuario = _fresh
@@ -579,13 +592,46 @@ def renderizar_ficha():
                 _op = st.session_state.get("usuario_nome", "")
                 _ok, _msg = atualizar_termo_imagem(aluno["id"], False, _op, aluno.get("nome", ""))
                 if _ok:
+                    # Idem: atualiza direto antes do re-fetch para UX imediata
+                    st.session_state.aluno_prontuario["termo_imagem"] = False
                     _fresh = buscar_aluno_por_id(aluno["id"])
                     if _fresh:
                         st.session_state.aluno_prontuario = _fresh
                     st.rerun()
                 else:
                     st.error(_msg)
-    st.markdown("<div style='margin-bottom:10px;'></div>", unsafe_allow_html=True)
+    # ── Badge de validade do atestado de aptidão — sempre visível ────────────
+    import datetime as _dt_pv
+    _hoje_pv = _dt_pv.date.today()
+    if _dv_aptidao:
+        try:
+            _dv_parsed = _dt_pv.date.fromisoformat(str(_dv_aptidao)[:10])
+            _dias_pv = (_dv_parsed - _hoje_pv).days
+            _dv_fmt  = _dv_parsed.strftime("%d/%m/%Y")
+            if _dias_pv < 0:
+                _apt_bg, _apt_fg, _apt_ico = "#FEF2F2", "#991B1B", "⛔"
+                _apt_txt = f"Atestado de aptidão <b>VENCIDO</b> em {_dv_fmt}"
+            elif _dias_pv <= 30:
+                _apt_bg, _apt_fg, _apt_ico = "#FFFBEB", "#92400E", "⚠️"
+                _apt_txt = f"Atestado de aptidão vence em <b>{_dias_pv} dia(s)</b> — {_dv_fmt}"
+            else:
+                _apt_bg, _apt_fg, _apt_ico = "#F0FDF4", "#166534", "✅"
+                _apt_txt = f"Atestado de aptidão válido até <b>{_dv_fmt}</b>"
+        except Exception:
+            _apt_bg, _apt_fg, _apt_ico = "#F1F5F9", "#475569", "📋"
+            _apt_txt = f"Atestado de aptidão: {_dv_aptidao}"
+    else:
+        _apt_bg, _apt_fg, _apt_ico = "#FEF2F2", "#991B1B", "🚨"
+        _apt_txt = "Atestado de aptidão <b>não cadastrado</b> — necessário para aulas"
+
+    st.markdown(
+        f"<div style='background:{_apt_bg};border-left:4px solid {_apt_fg};"
+        f"border-radius:6px;padding:6px 14px;display:flex;align-items:center;"
+        f"gap:8px;margin-bottom:6px;'>"
+        f"<span style='font-size:16px;'>{_apt_ico}</span>"
+        f"<span style='color:{_apt_fg};font-size:13px;'>{_apt_txt}</span></div>",
+        unsafe_allow_html=True,
+    )
 
     u_v = aluno.get("foto_url")
     cp_f, cp_i, cp_pdf = st.columns([1, 4.5, 1.5], vertical_alignment="center")
@@ -987,6 +1033,11 @@ def renderizar_ficha():
                     else:
                         st.error("⚠️ Atestado em falta!")
                         st.caption("↳ Adicione no **Histórico de Atestados** abaixo.")
+                    # Badge de validade — reutiliza dado calculado no topo
+                    st.markdown(
+                        validade_badge_html(_dv_aptidao),
+                        unsafe_allow_html=True,
+                    )
 
                 st.markdown("---")
                 btn_doc_bot = st.button("💾 Guardar Novos Documentos Permanentes", key="save_bot_doc", type="primary", use_container_width=True)
