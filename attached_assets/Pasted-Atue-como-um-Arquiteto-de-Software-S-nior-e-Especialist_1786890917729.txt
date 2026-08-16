@@ -1,0 +1,36 @@
+Atue como um Arquiteto de Software Sênior e Especialista em Segurança e Controle de Acesso (RBAC) para aplicações Python/Streamlit.
+
+CONTEXTO DA MISSÃO:
+O nosso sistema possui um módulo de 'Gestão de Operadores' com uma seção de 'Permissões de Menu'. Contudo, essa tela está desatualizada. Precisamos agregar TODOS os módulos do sistema a este controle de forma inteligente.
+
+AS REGRAS DE OURO:
+
+Não altere ou quebre a estrutura da base de dados atual (Supabase/JSON). Apenas adicione as novas chaves necessárias para as permissões.
+
+Siga os 3 passos abaixo rigorosamente na ordem.
+
+PASSO 1: Auditoria, Mapeamento Profundo e Documentação
+Faça uma varredura completa em todo o nosso código (arquivos app.py, diretórios views/, pages/, modulos_*/, etc.). Mapeie a árvore completa de forma recursiva:
+
+Pais (Módulos Principais): Ex: Portal do Aluno, Relatórios, Gestor, Configurações.
+
+Filhos (Abas/Tabs): Todas as sub-abas dentro de cada página.
+
+Netos (Ações Específicas): Funcionalidades críticas ou botões.
+
+📄 DOCUMENTO EXIGIDO: Após mapear, gere um arquivo chamado mapeamento_sistema.md na raiz do projeto. Este arquivo deve conter a árvore hierárquica detalhada (em formato de lista Markdown) com tudo o que você encontrou.
+
+PASSO 2: Diagnóstico da Tela de Permissões
+Analise o arquivo responsável pela tela atual de 'Permissões de Menu'. Entenda como as checkboxes são geradas e salvas (são fixas ou dinâmicas?).
+
+PASSO 3: A Implementação da Correção (Refatoração da View)
+Atualize o código da tela de 'Permissões de Menu' para incluir TODA a árvore documentada.
+
+Organize visualmente as novas checkboxes em categorias hierárquicas.
+
+Garanta que a função de guardar ('Salvar Permissões') capture o estado de todas estas novas chaves sem afetar as antigas.
+
+Mantenha a UI no padrão visual atual do Streamlit.
+
+AÇÃO IMEDIATA:
+Execute o PASSO 1. Crie o arquivo mapeamento_sistema.md e imprima o conteúdo dele aqui no chat para a minha aprovação, ANTES de avançar para os Passos 2 e 3 ou alterar qualquer linha de código visual.
