@@ -1157,39 +1157,69 @@ def tela_frequencia():
         st.markdown("---")
         st.caption("⬇️ Recursos adicionais disponíveis nas abas:")
 
-    nomes_abas = ["📱 Chamada Tablet", "📝 Diário", "🖨️ Dossiê", "🚨 Emergência",
-                  "🔒 LGPD", "🏥 Atestado", label_niver]
+    # ── Filtra abas conforme permissões do operador ───────────────────────
+    def _freq_lib(chave: str) -> bool:
+        if st.session_state.get("perfil") == "SuperAdmin":
+            return True
+        _p = st.session_state.get("_menu_perms_cache") or {}
+        return _p.get(chave, True)
+
+    _FREQ_ABAS_CFG = [
+        ("freq_chamada_tablet", "📱 Chamada Tablet"),
+        ("freq_diario",         "📝 Diário"),
+        ("freq_dossie",         "🖨️ Dossiê"),
+        ("freq_emergencia_tab", "🚨 Emergência"),
+        ("freq_lgpd",           "🔒 LGPD"),
+        ("freq_atestado",       "🏥 Atestado"),
+        ("freq_niver",          label_niver),
+    ]
     if eh_admin:
-        nomes_abas.append("📅 Dias Regist./Anamnese")
+        _FREQ_ABAS_CFG.append(("freq_admin", "📅 Dias Regist./Anamnese"))
 
-    abas = st.tabs(nomes_abas)
+    _freq_vis = [(c, n) for c, n in _FREQ_ABAS_CFG if _freq_lib(c)]
+    if not _freq_vis:
+        st.warning("🔒 Você não tem acesso a nenhuma aba da Frequência. Contate o administrador.")
+        return
 
-    with abas[0]:
-        if _ir_tablet:
-            st.caption("👆 Grade de chamada exibida acima — role para cima para ver.")
-        else:
-            renderizar_aba_terminal(
-                df_alunos, data_aula, presencas_turma_geral, bloqueio_ativo, chave_unica
-            )
+    abas = st.tabs([n for _, n in _freq_vis])
+    _aba_idx = {c: i for i, (c, _) in enumerate(_freq_vis)}
 
-    with abas[1]:
-        renderizar_aba_diario(data_aula, turmas_combo, chave_unica)
+    def _aba(chave):
+        return _aba_idx.get(chave)
 
-    with abas[2]:
-        renderizar_aba_dossie(df_alunos, data_aula, turma_selecionada, chave_unica)
+    if _aba("freq_chamada_tablet") is not None:
+        with abas[_aba("freq_chamada_tablet")]:
+            if _ir_tablet:
+                st.caption("👆 Grade de chamada exibida acima — role para cima para ver.")
+            else:
+                renderizar_aba_terminal(
+                    df_alunos, data_aula, presencas_turma_geral, bloqueio_ativo, chave_unica
+                )
 
-    with abas[3]:
-        renderizar_aba_emergencia(df_alunos, turma_selecionada)
+    if _aba("freq_diario") is not None:
+        with abas[_aba("freq_diario")]:
+            renderizar_aba_diario(data_aula, turmas_combo, chave_unica)
 
-    with abas[4]:
-        renderizar_aba_lgpd()
+    if _aba("freq_dossie") is not None:
+        with abas[_aba("freq_dossie")]:
+            renderizar_aba_dossie(df_alunos, data_aula, turma_selecionada, chave_unica)
 
-    with abas[5]:
-        renderizar_aba_atestado()
+    if _aba("freq_emergencia_tab") is not None:
+        with abas[_aba("freq_emergencia_tab")]:
+            renderizar_aba_emergencia(df_alunos, turma_selecionada)
 
-    with abas[6]:
-        renderizar_aba_niver()
+    if _aba("freq_lgpd") is not None:
+        with abas[_aba("freq_lgpd")]:
+            renderizar_aba_lgpd()
 
-    if eh_admin:
-        with abas[7]:
+    if _aba("freq_atestado") is not None:
+        with abas[_aba("freq_atestado")]:
+            renderizar_aba_atestado()
+
+    if _aba("freq_niver") is not None:
+        with abas[_aba("freq_niver")]:
+            renderizar_aba_niver()
+
+    if eh_admin and _aba("freq_admin") is not None:
+        with abas[_aba("freq_admin")]:
             renderizar_aba_admin()

@@ -545,6 +545,13 @@ def renderizar_ficha():
             if not _apt_rows.empty and "data_vencimento" in _apt_rows.columns:
                 _dv_aptidao = _apt_rows.iloc[0].get("data_vencimento")
 
+    # ── Helper de permissões (segue o padrão _menu_liberado de main.py) ─────────
+    def _pront_lib(chave: str) -> bool:
+        if st.session_state.get("perfil") == "SuperAdmin":
+            return True
+        _p = st.session_state.get("_menu_perms_cache") or {}
+        return _p.get(chave, True)
+
     # 🔒 Banner LGPD — Autorização de Imagem (com botão de alteração)
     _ti = aluno.get("termo_imagem")
     _nao_autoriza_img = (_ti is False) or (_ti == 0) or (str(_ti).lower() in ["false", "0", ""])
@@ -569,7 +576,9 @@ def renderizar_ficha():
                 unsafe_allow_html=True,
             )
     with _lgpd_col_btn:
-        if _nao_autoriza_img:
+        # Botão de toggle visível apenas se o operador tem permissão portal_lgpd_toggle
+        _pode_lgpd = _pront_lib("portal_lgpd_toggle")
+        if _nao_autoriza_img and _pode_lgpd:
             if st.button("✅ Autorizar", key="lgpd_toggle_view",
                          use_container_width=True, help="Registrar autorização de uso de imagem e voz"):
                 from database import atualizar_termo_imagem, buscar_aluno_por_id
@@ -585,7 +594,7 @@ def renderizar_ficha():
                     st.rerun()
                 else:
                     st.error(_msg)
-        else:
+        elif not _nao_autoriza_img and _pode_lgpd:
             if st.button("🚫 Revogar", key="lgpd_toggle_view",
                          use_container_width=True, help="Revogar autorização de uso de imagem e voz"):
                 from database import atualizar_termo_imagem, buscar_aluno_por_id
@@ -664,22 +673,22 @@ def renderizar_ficha():
         st.caption(f"Turma: {aluno.get('turma', '')}")
 
     with cp_pdf:
-        estatisticas_pdf = get_estatisticas_frequencia_aluno(aluno.get("id", ""))
-        avaliacoes_pdf = get_avaliacoes_aluno(aluno.get("id", ""))
-        historico_pdf = get_historico_aulas_aluno(aluno.get("id", ""))
-        pdf_bytes = criar_documento_aluno_pdf(aluno, avaliacoes_pdf, historico_pdf, estatisticas_pdf)
-
-        st.download_button(
-            label="🖨️ Exportar Dossiê",
-            data=pdf_bytes,
-            file_name=f"Dossie_Clinico_{aluno.get('nome', '')[:15].replace(' ', '_')}.pdf",
-            mime="application/pdf",
-            type="primary",
-            use_container_width=True,
-        )
+        if _pront_lib("portal_exportar_pdf"):
+            estatisticas_pdf = get_estatisticas_frequencia_aluno(aluno.get("id", ""))
+            avaliacoes_pdf = get_avaliacoes_aluno(aluno.get("id", ""))
+            historico_pdf = get_historico_aulas_aluno(aluno.get("id", ""))
+            pdf_bytes = criar_documento_aluno_pdf(aluno, avaliacoes_pdf, historico_pdf, estatisticas_pdf)
+            st.download_button(
+                label="🖨️ Exportar Dossiê",
+                data=pdf_bytes,
+                file_name=f"Dossie_Clinico_{aluno.get('nome', '')[:15].replace(' ', '_')}.pdf",
+                mime="application/pdf",
+                type="primary",
+                use_container_width=True,
+            )
 
         if aluno.get("status", "Ativo") != "Inativo":
-            if st.button("🗄️ Arquivar Aluno", use_container_width=True):
+            if _pront_lib("portal_arquivar_aluno") and st.button("🗄️ Arquivar Aluno", use_container_width=True):
                 _dialog_arquivar_aluno(aluno)
         elif (aluno.get("motivo_saida") or "") == "Óbito":
             st.markdown(
@@ -689,7 +698,7 @@ def renderizar_ficha():
                 unsafe_allow_html=True,
             )
         else:
-            if st.button("♻️ Reativar Aluno", type="primary", use_container_width=True):
+            if _pront_lib("portal_reativar_aluno") and st.button("♻️ Reativar Aluno", type="primary", use_container_width=True):
                 _operador_reat = st.session_state.get("usuario_nome", "") or st.session_state.get("usuario_email", "")
                 ok, msg = alterar_status_aluno_local(aluno["id"], "Ativo", operador=_operador_reat)
                 if ok:
@@ -1105,7 +1114,7 @@ def renderizar_ficha():
                     )
                     arq_atestado = st.file_uploader("Anexar Atestado (foto ou PDF):", type=["jpg", "png", "jpeg", "pdf"])
 
-                    if st.form_submit_button("➕ Arquivar Atestado", type="primary", use_container_width=True):
+                    if _pront_lib("portal_atestado_arquivar") and st.form_submit_button("➕ Arquivar Atestado", type="primary", use_container_width=True):
                         if not arq_atestado:
                             st.error("Por favor, anexe o arquivo do atestado.")
                         elif tipo_val == "aptidao_fisica" and not data_vencimento:
