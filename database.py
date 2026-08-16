@@ -3323,32 +3323,85 @@ def get_emails_sistema() -> list:
 # ── Catálogo de menus controlados por permissão ──────────────────────────────
 MENU_CATALOGO = [
     # ── Menus principais ──────────────────────────────────────────────────
-    ("principal",               "🏠 Início"),
-    ("frequencia",              "✅ Frequência"),
-    ("portal_aluno",            "🩺 Portal do Aluno"),
-    ("relatorios_bi",           "📊 Relatórios & BI"),
-    ("gestor",                  "🎯 Gestor (acesso geral)"),
-    # ── Sub-itens: Frequência ────────────────────────────────────────────
-    ("freq_conf_facial",        "📸 Frequência → Conferência Facial"),
-    # ── Sub-itens: Portal do Aluno ───────────────────────────────────────
-    ("portal_prontuario",       "🩺 Portal → Prontuário / Ficha Individual"),
-    ("portal_ficha_impressao",  "🖨️ Portal → Impressão de Ficha"),
-    # ── Sub-itens: Relatórios & BI ───────────────────────────────────────
-    ("rel_relatorios",          "📋 Relatórios & BI → Relatórios"),
-    ("rel_bi_dashboard",        "📊 Relatórios & BI → BI Dashboard"),
-    ("rel_bi_individual",       "👤 Relatórios & BI → BI Individual"),
-    # ── Sub-itens: Abas internas de Relatórios ───────────────────────────
-    ("rel_lista_freq",          "📋 Relatórios → Lista Frequência Oficial"),
-    ("rel_plan_freq",           "📊 Relatórios → Plan. Frequência"),
-    ("rel_auditoria",           "🔎 Relatórios → Auditoria"),
-    ("rel_prestacao_ped",       "🏆 Relatórios → Prestação Pedagógica"),
-    ("rel_avaliacoes",          "🧪 Relatórios → Avaliações"),
-    ("rel_patologias",          "🧬 Relatórios → Patologias"),
-    ("rel_pa_lote",             "🩺 Relatórios → Coleta PA em Lote"),
-    # ── Sub-itens: Gestor ────────────────────────────────────────────────
-    ("gestor_radar",            "💙 Gestor → Radar"),
-    ("gestor_satisfacao",       "⭐ Gestor → Satisfação"),
-    ("gestor_emergencia",       "🚨 Gestor → Emergência"),
+    ("principal",                       "🏠 Início"),
+    ("frequencia",                      "✅ Frequência"),
+    ("portal_aluno",                    "🩺 Portal do Aluno"),
+    ("relatorios_bi",                   "📊 Relatórios & BI"),
+    ("gestor",                          "🎯 Gestor (acesso geral)"),
+    # ── Início → Ações do painel ─────────────────────────────────────────
+    ("principal_snapshot_lote",         "⚙️ Início → Processar em Lote"),
+    ("principal_agenda",                "🗓️ Início → Agenda do Dia"),
+    ("principal_risco",                 "🚨 Início → Cards de Risco"),
+    ("principal_niver",                 "🎂 Início → Aniversariantes do Dia"),
+    # ── Frequência → Abas da chamada ─────────────────────────────────────
+    ("freq_chamada_tablet",             "📱 Frequência → Chamada Tablet"),
+    ("freq_diario",                     "📝 Frequência → Diário de Aulas"),
+    ("freq_dossie",                     "🖨️ Frequência → Dossiê"),
+    ("freq_emergencia_tab",             "🚨 Frequência → Emergência"),
+    ("freq_lgpd",                       "🔒 Frequência → LGPD"),
+    ("freq_atestado",                   "🏥 Frequência → Atestado"),
+    ("freq_niver",                      "🎂 Frequência → Aniversariantes"),
+    ("freq_admin",                      "📅 Frequência → Admin (Dias/Anamnese)"),
+    # ── Frequência → Ferramentas ─────────────────────────────────────────
+    ("freq_conf_facial",                "📸 Frequência → Conferência Facial"),
+    ("freq_niver_pdf",                  "🎁 Frequência → PDF Parabéns"),
+    ("freq_admin_validade_anamnese",    "📋 Frequência → Salvar Validade Anamnese"),
+    ("freq_admin_excluir_aula",         "🗑️ Frequência → Excluir Dia Letivo"),
+    # ── Portal → Abas do Dashboard ───────────────────────────────────────
+    ("portal_tab_alunos",               "👥 Portal → Alunos"),
+    ("portal_tab_patologias",           "🧬 Portal → Patologias"),
+    ("portal_tab_cracha",               "🪪 Portal → Cara-crachá"),
+    ("portal_tab_novo_aluno",           "📝 Portal → Novo Aluno"),
+    ("portal_tab_triagem",              "🔍 Portal → Triagem"),
+    ("portal_tab_agenda",               "🗓️ Portal → Agenda Médica"),
+    ("portal_tab_medidos",              "📊 Portal → Já Medidos"),
+    ("portal_tab_sem_medicoes",         "⚠️ Portal → Sem Medições"),
+    ("portal_tab_inativos",             "🗄️ Portal → Arquivo Morto"),
+    ("portal_tab_pa",                   "🩸 Portal → Pressão Arterial (lote)"),
+    # ── Portal → Prontuário Individual ───────────────────────────────────
+    ("portal_prontuario",               "🩺 Portal → Prontuário / Ficha Individual"),
+    ("portal_pront_perfil",             "👤 Prontuário → Perfil e Contato"),
+    ("portal_pront_medicao",            "📝 Prontuário → Nova Medição"),
+    ("portal_pront_historico",          "📊 Prontuário → Histórico Clínico"),
+    ("portal_pront_docs",               "📂 Prontuário → Documentação Legal"),
+    ("portal_pront_social",             "🏘️ Prontuário → Perfil Social"),
+    ("portal_pront_dores",              "🩻 Prontuário → Mapa de Dores"),
+    ("portal_pront_pa_ind",             "🩺 Prontuário → PA Individual"),
+    # ── Portal → Exportação e Impressão ──────────────────────────────────
+    ("portal_ficha_impressao",          "🖨️ Portal → Central de Impressão"),
+    ("portal_exportar_pdf",             "📄 Portal → Exportar PDF Dossiê"),
+    ("portal_exportar_word",            "📝 Portal → Exportar Word"),
+    # ── Portal → Ações Administrativas ───────────────────────────────────
+    ("portal_lgpd_toggle",              "✅ Portal → Autorizar/Revogar Imagem (LGPD)"),
+    ("portal_atestado_arquivar",        "🏥 Portal → Arquivar Atestado"),
+    ("portal_agendamento_criar",        "🗓️ Portal → Criar Agendamento"),
+    ("portal_validador",                "🔗 Portal → Validador Público"),
+    ("portal_merge",                    "🔀 Portal → Mesclar Fichas"),
+    # ── Portal → Ações Críticas ───────────────────────────────────────────
+    ("portal_arquivar_aluno",           "🗄️ Portal → Arquivar Aluno"),
+    ("portal_reativar_aluno",           "♻️ Portal → Reativar Aluno"),
+    ("portal_excluir_aluno",            "🗑️ Portal → Excluir Permanentemente"),
+    # ── Relatórios → Sub-módulos ─────────────────────────────────────────
+    ("rel_relatorios",                  "📋 Relatórios & BI → Relatórios"),
+    ("rel_bi_dashboard",                "📊 Relatórios & BI → BI Dashboard"),
+    ("rel_bi_individual",               "👤 Relatórios & BI → BI Individual"),
+    # ── Relatórios → Abas internas ───────────────────────────────────────
+    ("rel_lista_freq",                  "📋 Relatórios → Lista Frequência Oficial"),
+    ("rel_plan_freq",                   "📊 Relatórios → Plan. Frequência"),
+    ("rel_auditoria",                   "🔎 Relatórios → Auditoria"),
+    ("rel_prestacao_ped",               "🏆 Relatórios → Prestação Pedagógica"),
+    ("rel_avaliacoes",                  "🧪 Relatórios → Avaliações"),
+    ("rel_patologias",                  "🧬 Relatórios → Patologias"),
+    ("rel_pa_lote",                     "🩺 Relatórios → Coleta PA em Lote"),
+    ("rel_inativos",                    "🗄️ Relatórios → Alunos Inativos"),
+    # ── Relatórios → Ações de Exportação ─────────────────────────────────
+    ("rel_exportar_excel",              "📥 Relatórios → Exportar Excel/CSV"),
+    ("rel_exportar_word",               "📝 Relatórios → Gerar Word Pedagógico"),
+    ("rel_satisfacao",                  "📊 Relatórios → Dados de Satisfação"),
+    # ── Gestor ────────────────────────────────────────────────────────────
+    ("gestor_radar",                    "💙 Gestor → Radar de Acolhimento"),
+    ("gestor_satisfacao",               "⭐ Gestor → Satisfação"),
+    ("gestor_emergencia",               "🚨 Gestor → Emergência"),
 ]
 
 
