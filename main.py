@@ -856,19 +856,11 @@ if not st.session_state.usuario_logado:
                     "<hr style='border:none;border-top:1px solid #F1F5F9;margin:10px 0;'>",
                     unsafe_allow_html=True,
                 )
-                cp, cq = st.columns(2)
-                with cp:
-                    st.markdown(
-                        '<a href="/?rota=inscricao" target="_self" class="pub-pill">'
-                        "➕ Novo Aluno</a>",
-                        unsafe_allow_html=True,
-                    )
-                with cq:
-                    st.markdown(
-                        '<a href="/?rota=pesquisa" target="_self" class="pub-pill">'
-                        "⭐ Avaliar Projeto</a>",
-                        unsafe_allow_html=True,
-                    )
+                st.markdown(
+                    '<a href="/?rota=pesquisa" target="_self" class="pub-pill">'
+                    "⭐ Avaliar Projeto</a>",
+                    unsafe_allow_html=True,
+                )
 
             elif st.session_state.auth_tab == "up":
                 if st.button("← Voltar", type="secondary"):
