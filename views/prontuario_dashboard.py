@@ -587,201 +587,382 @@ def renderizar_dashboard():
     # --- ABA 5: ARQUIVO MORTO ---
     if tab_inativos is not None:
         with tab_inativos:
-            st.markdown("### 🗄️ Arquivo Morto")
-            st.caption("Alunos desativados. Os dados clínicos ficam preservados. Use **📂 Ver Ficha** para editar, excluir ou gerar dossiê. Use **↩️ Reativar** para devolver ao sistema.")
+            # Pré-calcula falecidos para o label das sub-abas
+            _df_falecidos_pre = (
+                df_inativos[df_inativos["motivo_saida"] == "Óbito"]
+                if "motivo_saida" in df_inativos.columns and not df_inativos.empty
+                else pd.DataFrame()
+            )
+            _n_falecidos_pre = len(_df_falecidos_pre)
 
-            if df_inativos.empty:
-                st.success("Nenhum aluno no Arquivo Morto.")
-            else:
-                # --- BUSCA DENTRO DO ARQUIVO ---
-                if HAS_KEYUP:
-                    busca_inativo = st_keyup(
-                        "🔍 Buscar no Arquivo Morto:",
-                        placeholder="🔍 Filtrar (mín. 2 letras)...",
-                        key="busca_arquivo_morto",
-                        label_visibility="collapsed",
-                        debounce=300,
-                    )
+            _sub_todos, _sub_falecidos = st.tabs([
+                f"🗄️ Todos os Arquivados ({len(df_inativos)})",
+                f"🕊️ Falecidos ({_n_falecidos_pre})",
+            ])
+
+            # ── SUB-ABA: TODOS OS ARQUIVADOS ─────────────────────────────────────
+            with _sub_todos:
+                st.caption("Alunos desativados. Os dados clínicos ficam preservados. Use **📂 Ver Ficha** para editar, excluir ou gerar dossiê. Use **↩️ Reativar** para devolver ao sistema.")
+
+                if df_inativos.empty:
+                    st.success("Nenhum aluno no Arquivo Morto.")
                 else:
-                    busca_inativo = st.text_input(
-                        "🔍 Buscar no Arquivo Morto:",
-                        placeholder="Digite parte do nome...",
-                        key="busca_arquivo_morto",
-                        label_visibility="collapsed",
-                    )
-
-                df_exibir = df_inativos.copy()
-                if busca_inativo and len(busca_inativo.strip()) >= 2:
-                    df_exibir = filtrar_alunos_df(df_exibir, busca_inativo, cols=["nome"], min_len=2)
-
-                # --- FILTRO POR MOTIVO DE SAÍDA ---
-                _MOTIVOS_SAIDA = ["Óbito", "Desistência", "Transferência", "Conclusão", "Outro"]
-                _motivos_disponiveis = ["Todos"] + sorted(
-                    [m for m in _MOTIVOS_SAIDA if m in df_inativos.get("motivo_saida", pd.Series(dtype=str)).dropna().unique().tolist()]
-                ) if "motivo_saida" in df_inativos.columns else ["Todos"]
-                if len(_motivos_disponiveis) > 1:
-                    _filtro_motivo = st.selectbox(
-                        "🚪 Filtrar por motivo de saída:",
-                        _motivos_disponiveis,
-                        key="filtro_motivo_saida_arq",
-                    )
-                    if _filtro_motivo != "Todos":
-                        df_exibir = df_exibir[df_exibir.get("motivo_saida", pd.Series(dtype=str)) == _filtro_motivo] if "motivo_saida" in df_exibir.columns else df_exibir
-
-                if df_exibir.empty:
-                    st.info("Nenhum aluno encontrado para essa busca.")
-                else:
-                    st.caption(f"Exibindo **{len(df_exibir)}** de {len(df_inativos)} arquivados.")
-
-                # --- EXPORTAÇÃO EXCEL DO ARQUIVO MORTO ---
-                if not df_exibir.empty and "motivo_saida" in df_inativos.columns:
-                    _colunas_export = ["nome", "turma", "motivo_saida", "data_saida", "obs_saida"]
-                    _colunas_exist  = [c for c in _colunas_export if c in df_exibir.columns]
-                    if _colunas_exist:
-                        _df_exp = df_exibir[_colunas_exist].copy()
-                        _rename_map = {
-                            "nome": "Nome do Aluno", "turma": "Última Turma",
-                            "motivo_saida": "Motivo de Saída", "data_saida": "Data de Saída",
-                            "obs_saida": "Observação",
-                        }
-                        _df_exp.rename(columns={k: v for k, v in _rename_map.items() if k in _df_exp.columns}, inplace=True)
-                        _buf_exp = io.BytesIO()
-                        with pd.ExcelWriter(_buf_exp, engine="xlsxwriter") as _wr:
-                            _df_exp.to_excel(_wr, index=False, sheet_name="Arquivo_Morto")
-                            _ws = _wr.sheets["Arquivo_Morto"]
-                            _ws.set_column(0, 0, 35)
-                            _ws.set_column(1, 1, 20)
-                            _ws.set_column(2, 2, 20)
-                            _ws.set_column(3, 3, 15)
-                            _ws.set_column(4, 4, 40)
-                        st.download_button(
-                            "📥 Exportar lista (Excel)",
-                            _buf_exp.getvalue(),
-                            f"Arquivo_Morto_{datetime.date.today().strftime('%d_%m_%Y')}.xlsx",
-                            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                            use_container_width=True,
+                    # --- BUSCA DENTRO DO ARQUIVO ---
+                    if HAS_KEYUP:
+                        busca_inativo = st_keyup(
+                            "🔍 Buscar no Arquivo Morto:",
+                            placeholder="🔍 Filtrar (mín. 2 letras)...",
+                            key="busca_arquivo_morto",
+                            label_visibility="collapsed",
+                            debounce=300,
+                        )
+                    else:
+                        busca_inativo = st.text_input(
+                            "🔍 Buscar no Arquivo Morto:",
+                            placeholder="Digite parte do nome...",
+                            key="busca_arquivo_morto",
+                            label_visibility="collapsed",
                         )
 
-                is_super = st.session_state.get("perfil") == "SuperAdmin"
-                email_op = (
-                    st.session_state.get("usuario_email")
-                    or st.session_state.get("email_usuario")
-                    or st.session_state.get("email", "sistema")
-                )
+                    df_exibir = df_inativos.copy()
+                    if busca_inativo and len(busca_inativo.strip()) >= 2:
+                        df_exibir = filtrar_alunos_df(df_exibir, busca_inativo, cols=["nome"], min_len=2)
 
-                for _, a in df_exibir.iterrows():
-                    chave_excl = f"conf_excluir_{a['id']}"
-                    aguardando_excl = is_super and st.session_state.get(chave_excl)
-
-                    # Destaque vermelho na linha que aguarda confirmação de exclusão
-                    if aguardando_excl:
-                        st.markdown(
-                            f"<div style='background:#FEF2F2; border:2px solid #EF4444; border-radius:8px; padding:6px 10px; margin-bottom:2px;'>"
-                            f"<span style='color:#B91C1C; font-size:12px; font-weight:700;'>⚠️ Confirmar exclusão permanente de: {a['nome']}</span>"
-                            f"</div>",
-                            unsafe_allow_html=True,
+                    # --- FILTRO POR MOTIVO DE SAÍDA ---
+                    _MOTIVOS_SAIDA = ["Óbito", "Desistência", "Transferência", "Conclusão", "Outro"]
+                    _motivos_disponiveis = ["Todos"] + sorted(
+                        [m for m in _MOTIVOS_SAIDA if m in df_inativos.get("motivo_saida", pd.Series(dtype=str)).dropna().unique().tolist()]
+                    ) if "motivo_saida" in df_inativos.columns else ["Todos"]
+                    if len(_motivos_disponiveis) > 1:
+                        _filtro_motivo = st.selectbox(
+                            "🚪 Filtrar por motivo de saída:",
+                            _motivos_disponiveis,
+                            key="filtro_motivo_saida_arq",
                         )
+                        if _filtro_motivo != "Todos":
+                            df_exibir = df_exibir[df_exibir.get("motivo_saida", pd.Series(dtype=str)) == _filtro_motivo] if "motivo_saida" in df_exibir.columns else df_exibir
 
-                    cols = [4, 1.1, 1.1, 1.1] if is_super else [4, 1.1, 1.1]
-                    colunas = st.columns(cols, vertical_alignment="center")
-                    c1 = colunas[0]
-                    c2 = colunas[1]
-                    c3 = colunas[2]
-                    c4 = colunas[3] if is_super else None
-
-                    foto_url = a.get('foto_url')
-                    if pd.notna(foto_url) and str(foto_url).strip() and str(foto_url).strip().lower() not in ["none", "nan", "null", ""]:
-                        avatar_html = f"<img src='{foto_url}' class='zoom-avatar-dash' style='filter: grayscale(100%); opacity: 0.7;' alt='Foto'>"
+                    if df_exibir.empty:
+                        st.info("Nenhum aluno encontrado para essa busca.")
                     else:
-                        avatar_html = "<div class='avatar-placeholder' style='background-color: #F8FAFC; color: #CBD5E1;'>👤</div>"
+                        st.caption(f"Exibindo **{len(df_exibir)}** de {len(df_inativos)} arquivados.")
 
-                    ultima_turma = a.get('turma') or 'N/A'
-                    _motivo_s = str(a.get('motivo_saida') or '').strip()
-                    _data_s   = str(a.get('data_saida')   or '').strip()
-                    _obs_s    = str(a.get('obs_saida')    or '').strip()
-                    _ICONE_MOT = {"Óbito": "⚰️", "Desistência": "🚪", "Transferência": "🔄", "Conclusão": "🎓", "Outro": "📋"}
-                    _icone_mot = _ICONE_MOT.get(_motivo_s, "📋") if _motivo_s else ""
-                    # Formata data de saída para dd/mm/aaaa
-                    if _data_s and _data_s not in ("None", "nan", "—"):
-                        try:
-                            import datetime as _dt
-                            _data_s_fmt = _dt.date.fromisoformat(_data_s).strftime("%d/%m/%Y")
-                        except Exception:
-                            _data_s_fmt = _data_s
-                    else:
-                        _data_s_fmt = ""
-                    _linha_saida = ""
-                    if _motivo_s:
-                        _linha_saida = f"<br><span style='font-size:11px;color:#64748B;'>{_icone_mot} <b>Motivo:</b> {_motivo_s}"
-                        if _data_s_fmt:
-                            _linha_saida += f" &nbsp;·&nbsp; 📅 {_data_s_fmt}"
-                        _linha_saida += "</span>"
-                    if _obs_s:
-                        _linha_saida += f"<br><span style='font-size:11px;color:#94A3B8;font-style:italic;'>💬 {_obs_s}</span>"
+                    # --- EXPORTAÇÃO EXCEL DO ARQUIVO MORTO ---
+                    if not df_exibir.empty and "motivo_saida" in df_inativos.columns:
+                        _colunas_export = ["nome", "turma", "motivo_saida", "data_saida", "obs_saida"]
+                        _colunas_exist  = [c for c in _colunas_export if c in df_exibir.columns]
+                        if _colunas_exist:
+                            _df_exp = df_exibir[_colunas_exist].copy()
+                            _rename_map = {
+                                "nome": "Nome do Aluno", "turma": "Última Turma",
+                                "motivo_saida": "Motivo de Saída", "data_saida": "Data de Saída",
+                                "obs_saida": "Observação",
+                            }
+                            _df_exp.rename(columns={k: v for k, v in _rename_map.items() if k in _df_exp.columns}, inplace=True)
+                            _buf_exp = io.BytesIO()
+                            with pd.ExcelWriter(_buf_exp, engine="xlsxwriter") as _wr:
+                                _df_exp.to_excel(_wr, index=False, sheet_name="Arquivo_Morto")
+                                _ws = _wr.sheets["Arquivo_Morto"]
+                                _ws.set_column(0, 0, 35)
+                                _ws.set_column(1, 1, 20)
+                                _ws.set_column(2, 2, 20)
+                                _ws.set_column(3, 3, 15)
+                                _ws.set_column(4, 4, 40)
+                            st.download_button(
+                                "📥 Exportar lista (Excel)",
+                                _buf_exp.getvalue(),
+                                f"Arquivo_Morto_{datetime.date.today().strftime('%d_%m_%Y')}.xlsx",
+                                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                                use_container_width=True,
+                            )
 
-                    c1.markdown(f"""
-                        <div style='display: flex; align-items: center; gap: 12px;'>
-                            {avatar_html}
-                            <div style='line-height:1.4;'>
-                                <strong style='font-size:14px; color:#64748B;'>{a['nome']}</strong><br>
-                                <span style='font-size:12px;color:#94A3B8;'>🗄️ Arquivado · Última Turma: <strong>{ultima_turma}</strong></span>
-                                {_linha_saida}
-                            </div>
-                        </div>
-                    """, unsafe_allow_html=True)
+                    is_super = st.session_state.get("perfil") == "SuperAdmin"
+                    email_op = (
+                        st.session_state.get("usuario_email")
+                        or st.session_state.get("email_usuario")
+                        or st.session_state.get("email", "sistema")
+                    )
 
-                    with c2:
-                        if st.button("📂 Ver Ficha", key=f"in_av_{a['id']}", use_container_width=True):
-                            st.session_state.aluno_prontuario = a.to_dict()
-                            st.rerun()
+                    for _, a in df_exibir.iterrows():
+                        chave_excl = f"conf_excluir_{a['id']}"
+                        aguardando_excl = is_super and st.session_state.get(chave_excl)
 
-                    with c3:
-                        chave_conf = f"conf_reativar_{a['id']}"
-                        if st.session_state.get(chave_conf):
-                            col_sim, col_nao = st.columns(2)
-                            with col_sim:
-                                if st.button("✅", key=f"sim_reat_{a['id']}", help="Confirmar reativação", use_container_width=True):
-                                    ok, msg = alterar_status_aluno(a['id'], "Ativo")
-                                    st.session_state.pop(chave_conf, None)
-                                    if ok:
-                                        st.success(f"{a['nome']} reativado!")
-                                        st.rerun()
-                                    else:
-                                        st.error(msg)
-                            with col_nao:
-                                if st.button("❌", key=f"nao_reat_{a['id']}", help="Cancelar", use_container_width=True):
-                                    st.session_state.pop(chave_conf, None)
-                                    st.rerun()
+                        # Destaque vermelho na linha que aguarda confirmação de exclusão
+                        if aguardando_excl:
+                            st.markdown(
+                                f"<div style='background:#FEF2F2; border:2px solid #EF4444; border-radius:8px; padding:6px 10px; margin-bottom:2px;'>"
+                                f"<span style='color:#B91C1C; font-size:12px; font-weight:700;'>⚠️ Confirmar exclusão permanente de: {a['nome']}</span>"
+                                f"</div>",
+                                unsafe_allow_html=True,
+                            )
+
+                        cols = [4, 1.1, 1.1, 1.1] if is_super else [4, 1.1, 1.1]
+                        colunas = st.columns(cols, vertical_alignment="center")
+                        c1 = colunas[0]
+                        c2 = colunas[1]
+                        c3 = colunas[2]
+                        c4 = colunas[3] if is_super else None
+
+                        foto_url = a.get('foto_url')
+                        if pd.notna(foto_url) and str(foto_url).strip() and str(foto_url).strip().lower() not in ["none", "nan", "null", ""]:
+                            avatar_html = f"<img src='{foto_url}' class='zoom-avatar-dash' style='filter: grayscale(100%); opacity: 0.7;' alt='Foto'>"
                         else:
-                            if st.button("↩️ Reativar", key=f"reat_{a['id']}", use_container_width=True):
-                                st.session_state[chave_conf] = True
+                            avatar_html = "<div class='avatar-placeholder' style='background-color: #F8FAFC; color: #CBD5E1;'>👤</div>"
+
+                        ultima_turma = a.get('turma') or 'N/A'
+                        _motivo_s = str(a.get('motivo_saida') or '').strip()
+                        _data_s   = str(a.get('data_saida')   or '').strip()
+                        _obs_s    = str(a.get('obs_saida')    or '').strip()
+                        _ICONE_MOT = {"Óbito": "⚰️", "Desistência": "🚪", "Transferência": "🔄", "Conclusão": "🎓", "Outro": "📋"}
+                        _icone_mot = _ICONE_MOT.get(_motivo_s, "📋") if _motivo_s else ""
+                        # Formata data de saída para dd/mm/aaaa
+                        if _data_s and _data_s not in ("None", "nan", "—"):
+                            try:
+                                import datetime as _dt
+                                _data_s_fmt = _dt.date.fromisoformat(_data_s).strftime("%d/%m/%Y")
+                            except Exception:
+                                _data_s_fmt = _data_s
+                        else:
+                            _data_s_fmt = ""
+                        _linha_saida = ""
+                        if _motivo_s:
+                            _linha_saida = f"<br><span style='font-size:11px;color:#64748B;'>{_icone_mot} <b>Motivo:</b> {_motivo_s}"
+                            if _data_s_fmt:
+                                _linha_saida += f" &nbsp;·&nbsp; 📅 {_data_s_fmt}"
+                            _linha_saida += "</span>"
+                        if _obs_s:
+                            _linha_saida += f"<br><span style='font-size:11px;color:#94A3B8;font-style:italic;'>💬 {_obs_s}</span>"
+
+                        c1.markdown(f"""
+                            <div style='display: flex; align-items: center; gap: 12px;'>
+                                {avatar_html}
+                                <div style='line-height:1.4;'>
+                                    <strong style='font-size:14px; color:#64748B;'>{a['nome']}</strong><br>
+                                    <span style='font-size:12px;color:#94A3B8;'>🗄️ Arquivado · Última Turma: <strong>{ultima_turma}</strong></span>
+                                    {_linha_saida}
+                                </div>
+                            </div>
+                        """, unsafe_allow_html=True)
+
+                        with c2:
+                            if st.button("📂 Ver Ficha", key=f"in_av_{a['id']}", use_container_width=True):
+                                st.session_state.aluno_prontuario = a.to_dict()
                                 st.rerun()
 
-                    # --- BOTÃO EXCLUIR (somente SuperAdmin) ---
-                    if is_super and c4 is not None:
-                        with c4:
-                            if st.session_state.get(chave_excl):
-                                col_ok, col_x = st.columns(2)
-                                with col_ok:
-                                    if st.button("✅", key=f"sim_excl_{a['id']}", help="Confirmar exclusão permanente", use_container_width=True):
-                                        ok, msg = excluir_aluno_completo(a['id'], email_op)
-                                        st.session_state.pop(chave_excl, None)
+                        with c3:
+                            chave_conf = f"conf_reativar_{a['id']}"
+                            if st.session_state.get(chave_conf):
+                                col_sim, col_nao = st.columns(2)
+                                with col_sim:
+                                    if st.button("✅", key=f"sim_reat_{a['id']}", help="Confirmar reativação", use_container_width=True):
+                                        ok, msg = alterar_status_aluno(a['id'], "Ativo")
+                                        st.session_state.pop(chave_conf, None)
                                         if ok:
-                                            st.success(f"'{a['nome']}' excluído permanentemente.")
+                                            st.success(f"{a['nome']} reativado!")
                                             st.rerun()
                                         else:
-                                            st.error(f"Erro: {msg}")
-                                with col_x:
-                                    if st.button("❌", key=f"nao_excl_{a['id']}", help="Cancelar", use_container_width=True):
-                                        st.session_state.pop(chave_excl, None)
+                                            st.error(msg)
+                                with col_nao:
+                                    if st.button("❌", key=f"nao_reat_{a['id']}", help="Cancelar", use_container_width=True):
+                                        st.session_state.pop(chave_conf, None)
                                         st.rerun()
                             else:
-                                if st.button("🗑️ Excluir", key=f"excl_{a['id']}", use_container_width=True, type="secondary", help="Exclusão permanente — irreversível"):
-                                    st.session_state[chave_excl] = True
+                                if st.button("↩️ Reativar", key=f"reat_{a['id']}", use_container_width=True):
+                                    st.session_state[chave_conf] = True
                                     st.rerun()
 
-                    st.markdown("<div class='linha-divisoria'></div>", unsafe_allow_html=True)
+                        # --- BOTÃO EXCLUIR (somente SuperAdmin) ---
+                        if is_super and c4 is not None:
+                            with c4:
+                                if st.session_state.get(chave_excl):
+                                    col_ok, col_x = st.columns(2)
+                                    with col_ok:
+                                        if st.button("✅", key=f"sim_excl_{a['id']}", help="Confirmar exclusão permanente", use_container_width=True):
+                                            ok, msg = excluir_aluno_completo(a['id'], email_op)
+                                            st.session_state.pop(chave_excl, None)
+                                            if ok:
+                                                st.success(f"'{a['nome']}' excluído permanentemente.")
+                                                st.rerun()
+                                            else:
+                                                st.error(f"Erro: {msg}")
+                                    with col_x:
+                                        if st.button("❌", key=f"nao_excl_{a['id']}", help="Cancelar", use_container_width=True):
+                                            st.session_state.pop(chave_excl, None)
+                                            st.rerun()
+                                else:
+                                    if st.button("🗑️ Excluir", key=f"excl_{a['id']}", use_container_width=True, type="secondary", help="Exclusão permanente — irreversível"):
+                                        st.session_state[chave_excl] = True
+                                        st.rerun()
 
+                        st.markdown("<div class='linha-divisoria'></div>", unsafe_allow_html=True)
+
+            # ── SUB-ABA: FALECIDOS ────────────────────────────────────────────────
+            with _sub_falecidos:
+                if _df_falecidos_pre.empty:
+                    st.success("Nenhum aluno registrado com motivo de saída **Óbito**.")
+                else:
+                    # Cabeçalho memorial
+                    st.markdown(
+                        f"<div style='background:#F1F5F9;border-left:4px solid #64748B;border-radius:6px;"
+                        f"padding:12px 16px;margin-bottom:16px;'>"
+                        f"<span style='font-size:22px;'>🕊️</span>&nbsp;"
+                        f"<strong style='font-size:16px;color:#334155;'>"
+                        f"{_n_falecidos_pre} aluno{'s' if _n_falecidos_pre != 1 else ''} falecido{'s' if _n_falecidos_pre != 1 else ''}</strong><br>"
+                        f"<span style='font-size:12px;color:#64748B;'>"
+                        f"Registros preservados. Use <b>📂 Ver Ficha</b> para acessar o prontuário completo.</span>"
+                        f"</div>",
+                        unsafe_allow_html=True,
+                    )
+
+                    # Busca dentro da lista de falecidos
+                    if HAS_KEYUP:
+                        _busca_falecido = st_keyup(
+                            "🔍 Buscar entre falecidos:",
+                            placeholder="🔍 Filtrar por nome (mín. 2 letras)...",
+                            key="busca_falecidos",
+                            label_visibility="collapsed",
+                            debounce=300,
+                        )
+                    else:
+                        _busca_falecido = st.text_input(
+                            "🔍 Buscar entre falecidos:",
+                            placeholder="Digite parte do nome...",
+                            key="busca_falecidos",
+                            label_visibility="collapsed",
+                        )
+
+                    _df_falecidos_exibir = _df_falecidos_pre.copy()
+                    if _busca_falecido and len(_busca_falecido.strip()) >= 2:
+                        _df_falecidos_exibir = filtrar_alunos_df(
+                            _df_falecidos_exibir, _busca_falecido, cols=["nome"], min_len=2
+                        )
+
+                    if _df_falecidos_exibir.empty:
+                        st.info("Nenhum falecido encontrado para essa busca.")
+                    else:
+                        _is_super_f = st.session_state.get("perfil") == "SuperAdmin"
+                        _email_op_f = (
+                            st.session_state.get("usuario_email")
+                            or st.session_state.get("email_usuario")
+                            or st.session_state.get("email", "sistema")
+                        )
+
+                        for _, _fa in _df_falecidos_exibir.sort_values("nome").iterrows():
+                            _fa_id    = _fa['id']
+                            _fa_nome  = str(_fa.get('nome') or '').strip()
+                            _fa_turma = str(_fa.get('turma') or 'N/A').strip()
+                            _fa_data  = str(_fa.get('data_saida') or '').strip()
+                            _fa_obs   = str(_fa.get('obs_saida') or '').strip()
+
+                            # Formata data de óbito para dd/mm/aaaa
+                            if _fa_data and _fa_data not in ("None", "nan", "—", ""):
+                                try:
+                                    import datetime as _dt2
+                                    _fa_data_fmt = _dt2.date.fromisoformat(_fa_data).strftime("%d/%m/%Y")
+                                except Exception:
+                                    _fa_data_fmt = _fa_data
+                            else:
+                                _fa_data_fmt = "—"
+
+                            # Avatar com filtro monocromático
+                            _fa_foto = _fa.get('foto_url')
+                            if pd.notna(_fa_foto) and str(_fa_foto).strip() and str(_fa_foto).strip().lower() not in ["none", "nan", "null", ""]:
+                                _fa_avatar = (
+                                    f"<img src='{_fa_foto}' class='zoom-avatar-dash' "
+                                    f"style='filter:grayscale(100%) brightness(0.85);opacity:0.75;' alt='Foto'>"
+                                )
+                            else:
+                                _fa_avatar = (
+                                    "<div class='avatar-placeholder' "
+                                    "style='background:#E2E8F0;color:#94A3B8;font-size:22px;'>🕊️</div>"
+                                )
+
+                            _chave_excl_f = f"conf_excluir_{_fa_id}"
+                            _aguardando_excl_f = _is_super_f and st.session_state.get(_chave_excl_f)
+
+                            if _aguardando_excl_f:
+                                st.markdown(
+                                    f"<div style='background:#FEF2F2;border:2px solid #EF4444;border-radius:8px;"
+                                    f"padding:6px 10px;margin-bottom:2px;'>"
+                                    f"<span style='color:#B91C1C;font-size:12px;font-weight:700;'>"
+                                    f"⚠️ Confirmar exclusão permanente de: {_fa_nome}</span></div>",
+                                    unsafe_allow_html=True,
+                                )
+
+                            _cols_f = [4, 1.1, 1.1, 1.1] if _is_super_f else [4, 1.1, 1.1]
+                            _colunas_f = st.columns(_cols_f, vertical_alignment="center")
+                            _fc1, _fc2, _fc3 = _colunas_f[0], _colunas_f[1], _colunas_f[2]
+                            _fc4 = _colunas_f[3] if _is_super_f else None
+
+                            _fc1.markdown(
+                                f"<div style='display:flex;align-items:center;gap:12px;"
+                                f"background:#F8FAFC;border-radius:8px;padding:8px 10px;'>"
+                                f"{_fa_avatar}"
+                                f"<div style='line-height:1.5;'>"
+                                f"<strong style='font-size:14px;color:#334155;'>🕊️ {_fa_nome}</strong><br>"
+                                f"<span style='font-size:12px;color:#64748B;'>"
+                                f"Última turma: <strong>{_fa_turma}</strong></span><br>"
+                                f"<span style='font-size:12px;color:#475569;'>"
+                                f"⚰️ <b>Data de óbito:</b> {_fa_data_fmt}</span>"
+                                + (
+                                    f"<br><span style='font-size:11px;color:#94A3B8;font-style:italic;'>"
+                                    f"💬 {_fa_obs}</span>"
+                                    if _fa_obs else ""
+                                )
+                                + f"</div></div>",
+                                unsafe_allow_html=True,
+                            )
+
+                            with _fc2:
+                                if st.button("📂 Ver Ficha", key=f"fal_av_{_fa_id}", use_container_width=True):
+                                    st.session_state.aluno_prontuario = _fa.to_dict()
+                                    st.rerun()
+
+                            with _fc3:
+                                _chave_conf_f = f"conf_reativar_{_fa_id}"
+                                if st.session_state.get(_chave_conf_f):
+                                    _csim, _cnao = st.columns(2)
+                                    with _csim:
+                                        if st.button("✅", key=f"fal_sim_reat_{_fa_id}", help="Confirmar reativação", use_container_width=True):
+                                            ok, msg = alterar_status_aluno(_fa_id, "Ativo")
+                                            st.session_state.pop(_chave_conf_f, None)
+                                            if ok:
+                                                st.success(f"{_fa_nome} reativado!")
+                                                st.rerun()
+                                            else:
+                                                st.error(msg)
+                                    with _cnao:
+                                        if st.button("❌", key=f"fal_nao_reat_{_fa_id}", help="Cancelar", use_container_width=True):
+                                            st.session_state.pop(_chave_conf_f, None)
+                                            st.rerun()
+                                else:
+                                    if st.button("↩️ Reativar", key=f"fal_reat_{_fa_id}", use_container_width=True):
+                                        st.session_state[_chave_conf_f] = True
+                                        st.rerun()
+
+                            if _is_super_f and _fc4 is not None:
+                                with _fc4:
+                                    if st.session_state.get(_chave_excl_f):
+                                        _cok, _cx = st.columns(2)
+                                        with _cok:
+                                            if st.button("✅", key=f"fal_sim_excl_{_fa_id}", help="Confirmar exclusão permanente", use_container_width=True):
+                                                ok, msg = excluir_aluno_completo(_fa_id, _email_op_f)
+                                                st.session_state.pop(_chave_excl_f, None)
+                                                if ok:
+                                                    st.success(f"'{_fa_nome}' excluído permanentemente.")
+                                                    st.rerun()
+                                                else:
+                                                    st.error(f"Erro: {msg}")
+                                        with _cx:
+                                            if st.button("❌", key=f"fal_nao_excl_{_fa_id}", help="Cancelar", use_container_width=True):
+                                                st.session_state.pop(_chave_excl_f, None)
+                                                st.rerun()
+                                    else:
+                                        if st.button("🗑️ Excluir", key=f"fal_excl_{_fa_id}", use_container_width=True, type="secondary", help="Exclusão permanente — irreversível"):
+                                            st.session_state[_chave_excl_f] = True
+                                            st.rerun()
+
+                            st.markdown("<div class='linha-divisoria'></div>", unsafe_allow_html=True)
     # --- ABA 6: NOVOS ALUNOS (TRIAGEM) ---
     if tab_triagem is not None:
         with tab_triagem:
