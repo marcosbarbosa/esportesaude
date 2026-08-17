@@ -1696,44 +1696,23 @@ if (
     except Exception:
         pass
 
+# ── Lista de páginas disponíveis (usada para lógica de redirect) ─────────────
 menu = [
     m for m in ["Principal", "Frequência", "Portal do Aluno", "Relatórios & BI", "Gestor"]
     if _menu_liberado(_CHAVES_MENU[m])
 ]
-menu.append("Sair")
 
-# Se a página atual é um item de menu de primeiro nível que foi revogado,
-# redirecionar para a primeira página permitida sem esperar o próximo clique.
-# Sub-páginas internas (Conferência Facial, Ficha de Matrícula, Nova Matrícula)
-# não são afetadas — elas são controladas pelo fluxo interno de seus pais.
+# Se a página ativa foi revogada, redirecionar para a primeira disponível
 _TOP_LEVEL_PAGES = {"Principal", "Frequência", "Portal do Aluno", "Relatórios & BI", "Gestor"}
 _current_page = st.session_state.get("menu_atual", "Principal")
 if _current_page in _TOP_LEVEL_PAGES and _current_page not in menu:
-    # Primeira opção válida excluindo "Sair"
-    _allowed_pages = [m for m in menu if m != "Sair"]
-    if _allowed_pages:
-        _redirect_page = _allowed_pages[0]
-        st.session_state.menu_atual = _redirect_page
-        st.session_state["nav"] = _redirect_page
+    if menu:
+        st.session_state.menu_atual = menu[0]
     else:
-        # Sem nenhuma página disponível: encerrar sessão
         st.session_state.clear()
         st.rerun()
 
-
-def format_nav(opt):
-    mapa = {
-        "Principal": "🏠 Início",
-        "Frequência": "✅ Frequência",
-        "Portal do Aluno": "🩺 Portal do Aluno",
-        "Relatórios & BI": "📊 Relatórios & BI",
-        "Gestor": "🎯 Gestor",
-        "Sair": "🔓 Sair",
-    }
-    return mapa.get(opt, opt)
-
-
-# ── Telemetria de navegação principal ────────────────────────────────────────
+# ── Slugs de telemetria por destino ──────────────────────────────────────────
 _NAV_SLUG = {
     "Principal":        "nav_principal",
     "Frequência":       "nav_frequencia",
@@ -1743,31 +1722,166 @@ _NAV_SLUG = {
 }
 
 
-def _on_nav_change() -> None:
-    """Callback do st.radio de navegação — atualiza menu_atual e registra telemetria."""
-    _dest = st.session_state.get("nav", "")
-    st.session_state.update({"menu_atual": _dest})
-    _slug = _NAV_SLUG.get(_dest)
+def _navegar(destino: str) -> None:
+    """Muda de página e registra telemetria — sem depender de key de widget."""
+    st.session_state.menu_atual = destino
+    _slug = _NAV_SLUG.get(destino)
     if _slug:
         try:
             from database import registrar_telemetria as _rt
             _rt(_slug)
         except Exception:
             pass
-
-
-st.radio(
-    "Nav",
-    menu,
-    format_func=format_nav,
-    horizontal=True,
-    key="nav",
-    on_change=_on_nav_change,
-    label_visibility="collapsed",
-)
-if st.session_state.nav == "Sair":
-    st.session_state.clear()
     st.rerun()
+
+
+# ── CSS da sidebar de navegação ───────────────────────────────────────────────
+st.markdown("""
+<style>
+/* ─── Sidebar: fundo e padding ──────────────────────────────────────── */
+section[data-testid="stSidebar"] > div:first-child {
+    padding-top: 0 !important;
+    background: #FFFFFF !important;
+    border-right: 1px solid #E2E8F0 !important;
+}
+/* ─── Botão de nav — inativo ─────────────────────────────────────────── */
+section[data-testid="stSidebar"] button[kind="secondary"] {
+    background: transparent !important;
+    border: none !important;
+    color: #374151 !important;
+    font-weight: 600 !important;
+    font-size: 13.5px !important;
+    text-align: left !important;
+    padding: 7px 12px !important;
+    border-radius: 8px !important;
+    margin-bottom: 2px !important;
+    box-shadow: none !important;
+}
+section[data-testid="stSidebar"] button[kind="secondary"]:hover {
+    background: #EFF6FF !important;
+    color: #1D4ED8 !important;
+}
+/* ─── Botão de nav — ativo ───────────────────────────────────────────── */
+section[data-testid="stSidebar"] button[kind="primary"] {
+    background: #EFF6FF !important;
+    color: #1D4ED8 !important;
+    font-weight: 700 !important;
+    font-size: 13.5px !important;
+    border-radius: 8px !important;
+    border: none !important;
+    border-left: 3px solid #1D4ED8 !important;
+    padding: 7px 12px 7px 9px !important;
+    margin-bottom: 2px !important;
+    box-shadow: none !important;
+}
+/* ─── Rótulos de grupo ───────────────────────────────────────────────── */
+.sb-group-label {
+    display: block;
+    font-size: 10px;
+    font-weight: 800;
+    color: #9CA3AF;
+    letter-spacing: 1.3px;
+    text-transform: uppercase;
+    margin: 16px 0 4px 2px;
+}
+.sb-hr { border: none; border-top: 1px solid #F1F5F9; margin: 10px 0; }
+</style>
+""", unsafe_allow_html=True)
+
+# ── Sidebar: construção com grupos ────────────────────────────────────────────
+_pagina_ativa = st.session_state.get("menu_atual", "Principal")
+
+
+def _sb_btn(label: str, destino: str) -> None:
+    """Botão de navegação — primary quando ativo, secondary quando inativo."""
+    _ativo = _pagina_ativa == destino
+    if st.sidebar.button(
+        label,
+        key=f"_sb_{destino.replace(' ', '_').replace('&', 'e')}",
+        use_container_width=True,
+        type="primary" if _ativo else "secondary",
+    ):
+        _navegar(destino)
+
+
+with st.sidebar:
+    # ── Cabeçalho: logo do sistema ────────────────────────────────────────────
+    try:
+        from utils.identidade import get_config as _gc_sb, get_logo_data_url as _gld_sb
+        _cfg_sb   = _gc_sb()
+        _logo_sb  = _gld_sb(_cfg_sb.get("logo_principal", "logo-imbra.png"))
+        if _logo_sb:
+            st.markdown(
+                f"<div style='text-align:center;padding:14px 8px 6px;'>"
+                f"<img src='{_logo_sb}' style='height:40px;object-fit:contain;'>"
+                f"</div>",
+                unsafe_allow_html=True,
+            )
+        else:
+            st.markdown(
+                "<div style='text-align:center;font-size:26px;padding:12px 0 4px;'>"
+                "🏃</div>",
+                unsafe_allow_html=True,
+            )
+    except Exception:
+        st.markdown("<div style='height:10px;'></div>", unsafe_allow_html=True)
+
+    # ── Cartão do operador ────────────────────────────────────────────────────
+    _sb_nome = st.session_state.get("usuario_nome", "") or ""
+    _sb_perf = st.session_state.get("perfil", "")
+    _sb_ini  = (_sb_nome[0] if _sb_nome else "?").upper()
+    st.markdown(
+        f"<div style='display:flex;align-items:center;gap:8px;"
+        f"padding:6px 4px 8px;'>"
+        f"<div style='width:30px;height:30px;border-radius:50%;"
+        f"background:linear-gradient(135deg,#3B82F6,#06B6D4);"
+        f"display:flex;align-items:center;justify-content:center;"
+        f"color:#fff;font-weight:900;font-size:13px;flex-shrink:0;'>"
+        f"{_sb_ini}</div>"
+        f"<div><p style='margin:0;font-size:12px;font-weight:700;color:#0F172A;"
+        f"line-height:1.2;'>"
+        f"{_sb_nome.split()[0] if _sb_nome else 'Operador'}</p>"
+        f"<p style='margin:0;font-size:10px;color:#64748B;'>{_sb_perf}</p>"
+        f"</div></div>",
+        unsafe_allow_html=True,
+    )
+    st.markdown("<hr class='sb-hr'>", unsafe_allow_html=True)
+
+    # ── 🏠 GERAL ──────────────────────────────────────────────────────────────
+    st.markdown("<span class='sb-group-label'>🏠 Geral</span>",
+                unsafe_allow_html=True)
+    _sb_btn("🏠 Início", "Principal")
+
+    # ── 🏃 OPERACIONAL ────────────────────────────────────────────────────────
+    _op_cfg = [
+        ("✅ Frequência",      "Frequência",      "frequencia"),
+        ("🩺 Portal do Aluno", "Portal do Aluno",  "portal_aluno"),
+    ]
+    _op_disp = [(l, d) for l, d, c in _op_cfg if _menu_liberado(c)]
+    if _op_disp:
+        st.markdown("<span class='sb-group-label'>🏃 Operacional</span>",
+                    unsafe_allow_html=True)
+        for _lbl, _dst in _op_disp:
+            _sb_btn(_lbl, _dst)
+
+    # ── ⚙️ ADMINISTRATIVO — oculto se todas as chaves estiverem bloqueadas ───
+    _adm_cfg = [
+        ("📊 Relatórios & BI", "Relatórios & BI", "relatorios_bi"),
+        ("🎯 Gestor",          "Gestor",           "gestor"),
+    ]
+    _adm_disp = [(l, d) for l, d, c in _adm_cfg if _menu_liberado(c)]
+    if _adm_disp:
+        st.markdown("<span class='sb-group-label'>⚙️ Administrativo</span>",
+                    unsafe_allow_html=True)
+        for _lbl, _dst in _adm_disp:
+            _sb_btn(_lbl, _dst)
+
+    # ── Sair ──────────────────────────────────────────────────────────────────
+    st.markdown("<hr class='sb-hr'>", unsafe_allow_html=True)
+    if st.sidebar.button("🔓 Sair", key="_sb_sair", use_container_width=True,
+                         type="secondary"):
+        st.session_state.clear()
+        st.rerun()
 
 # --- DASHBOARD PRINCIPAL ---
 if st.session_state.menu_atual == "Principal":

@@ -1,0 +1,29 @@
+A base de dados e as permissões estão perfeitas! Agora vamos focar na Experiência do Utilizador (UX/UI) e na Acessibilidade.
+
+CONTEXTO:
+O sistema cresceu de forma orgânica e, atualmente, as funções operacionais e administrativas estão misturadas na navegação. Além disso, a tela 'Início' com o Super Grid precisa de um upgrade visual para ser mais legível e funcional para os operadores.
+
+A SUA MISSÃO (Focada apenas no Front-End):
+
+Passo 1: Repaginação da Sidebar (Menu Principal)
+Vá ao arquivo onde o menu lateral é construído (provavelmente main.py ou um arquivo de roteamento). Reorganize os itens de navegação criando agrupamentos visuais claros usando st.sidebar.header ou st.sidebar.markdown:
+
+🏠 GERAL: Contendo apenas a tela 'Início'.
+
+🏃‍♂️ OPERACIONAL (O Dia a Dia): Contendo 'Frequência', 'Portal do Aluno' (operações clínicas) e 'Agenda'.
+
+⚙️ ADMINISTRATIVO (Gestão): Contendo 'Relatórios & BI', 'Gestor', 'Gestão de Operadores' e 'Arquivo Morto' (caso decida extraí-lo como rota própria).
+
+REGRA DE SEGURANÇA: Se o usuário logado tiver todas as chaves do bloco 'Administrativo' bloqueadas pelas permissões (get_menu_permissoes_usuario), ocupe-se de esconder não apenas os botões, mas também o título '⚙️ ADMINISTRATIVO' da sidebar.
+
+Passo 2: Upgrade do Super Grid (Tela Início)
+Vá ao arquivo da tela principal (onde os cards de Risco, Agenda e Aniversariantes são renderizados). Aplique as seguintes melhorias:
+
+Acessibilidade: Melhore o contraste. Use fundos suaves com textos escuros e fontes maiores. Substitua formatações em HTML muito poluídas por componentes nativos do Streamlit como st.metric combinados com st.container(border=True) para criar cards mais limpos.
+
+Visibilidade: Organize o layout em colunas lógicas (st.columns). Coloque os indicadores de 'Risco Crítico' com destaque visual (bordas ou ícones de alerta).
+
+Funcionalidade: Adicione botões de atalho rápido (Call-to-Action) dentro dos cards. Por exemplo, no card de alunos em risco, adicione um botão 'Abrir Prontuário' ou 'Acessar Frequência' que faça o redirecionamento automático via st.session_state.
+
+Passo 3: Execução Segura
+Faça as alterações de forma iterativa. Comece por reescrever a lógica da Sidebar e mostre-me como ficou. Em seguida, avance para o Super Grid.
