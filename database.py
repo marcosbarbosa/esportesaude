@@ -4632,6 +4632,44 @@ def get_historico_status_aluno(aluno_id: str) -> list[dict]:
         return []
 
 
+# ==============================================================================
+# TELEMETRIA DE USO — inserção assíncrona, nunca bloqueia o Streamlit
+# ==============================================================================
+
+def registrar_telemetria(acao: str) -> None:
+    """Registra um evento de uso em background (threading daemon).
+
+    Nunca propaga exceção — telemetria jamais pode derrubar o fluxo principal.
+
+    Args:
+        acao: Identificador do evento, ex: 'abriu_freq_tablet',
+              'abriu_relatorio_bi', 'arquivou_aluno'.
+    """
+    import threading
+
+    try:
+        import streamlit as st
+        _uid  = st.session_state.get("usuario_id")  or \
+                st.session_state.get("usuario_email", "anon")
+        _perf = st.session_state.get("perfil", "desconhecido")
+    except Exception:
+        _uid, _perf = "anon", "desconhecido"
+
+    payload = {
+        "usuario_id":  str(_uid),
+        "perfil":      str(_perf),
+        "acao_modulo": str(acao),
+    }
+
+    def _insert(p: dict) -> None:
+        try:
+            supabase.table("telemetria_uso").insert(p).execute()
+        except Exception:
+            pass  # silencioso por design
+
+    threading.Thread(target=_insert, args=(payload,), daemon=True).start()
+
+
 # ── Limpeza única de chaves legadas ao carregar o módulo ─────────────────────
 _perm_version_cleanup_count = limpar_chaves_perm_version_obsoletas()
 _menu_perm_orphan_cleanup_count = limpar_chaves_menu_perm_orfas()
