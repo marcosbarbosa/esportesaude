@@ -4712,6 +4712,59 @@ def registrar_telemetria(acao: str) -> None:
     threading.Thread(target=_insert, args=(payload,), daemon=True).start()
 
 
+def get_telemetria_uso_df(dias: int = 30):
+    """Retorna DataFrame com os registros de telemetria_uso dos últimos *dias* dias.
+
+    Usa paginação range/offset para nunca truncar em 1 000 linhas.
+    Retorna pandas.DataFrame vazio se a tabela não existir ou não houver dados.
+
+    Colunas: id, ts (datetime UTC), usuario_id, perfil, acao_modulo.
+    """
+    try:
+        import pandas as pd
+        from datetime import datetime, timedelta, timezone
+
+        cutoff = (
+            datetime.now(timezone.utc) - timedelta(days=dias)
+        ).isoformat()
+
+        rows: list = []
+        _PAGE = 1000
+        _offset = 0
+        for _ in range(500):          # limite de segurança: 500 k linhas máx.
+            res = (
+                supabase.table("telemetria_uso")
+                .select("id, ts, usuario_id, perfil, acao_modulo")
+                .gte("ts", cutoff)
+                .order("id")
+                .range(_offset, _offset + _PAGE - 1)
+                .execute()
+            )
+            if res.data:
+                rows.extend(res.data)
+            if not res.data or len(res.data) < _PAGE:
+                break
+            _offset += _PAGE
+
+        if not rows:
+            return pd.DataFrame(
+                columns=["id", "ts", "usuario_id", "perfil", "acao_modulo"]
+            )
+
+        df = pd.DataFrame(rows)
+        df["ts"] = pd.to_datetime(df["ts"], utc=True, errors="coerce")
+        return df
+
+    except Exception:
+        try:
+            import pandas as pd
+            return pd.DataFrame(
+                columns=["id", "ts", "usuario_id", "perfil", "acao_modulo"]
+            )
+        except Exception:
+            return None
+
+
 # ── Limpeza única de chaves legadas ao carregar o módulo ─────────────────────
 _perm_version_cleanup_count = limpar_chaves_perm_version_obsoletas()
 _menu_perm_orphan_cleanup_count = limpar_chaves_menu_perm_orfas()

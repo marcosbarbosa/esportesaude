@@ -3828,7 +3828,7 @@ elif st.session_state.menu_atual in (
                 "🏫 Turmas", "💬 Mensagens", "🔔 Auto Niver", "🎨 Identidade Visual",
                 "🗄️ Bck Adm", "🔀 Mescla Cad", "📅 Calendário", "📧 Email BI",
                 "👥 Usuários", "🔒 LGPD", "🏷️ Tags Saúde", "🤝 Voluntariado",
-                "🎊 Datas Comemorativas",
+                "🎊 Datas Comemorativas", "📡 Telemetria",
             ])
             with _aba_cfg[0]:
                 from views.turmas_view import tela_gestao_turmas
@@ -3904,6 +3904,10 @@ elif st.session_state.menu_atual in (
             with _aba_cfg[12]:
                 from views.datas_comemorativas_view import tela_datas_comemorativas
                 tela_datas_comemorativas()
+
+            with _aba_cfg[13]:
+                from views.telemetria_dashboard_view import tela_dashboard_telemetria
+                tela_dashboard_telemetria()
 
 # ── Rodapé Fixo ─────────────────────────────────────────────────────────────
 from utils.identidade import get_config as _gcfg_rodape
