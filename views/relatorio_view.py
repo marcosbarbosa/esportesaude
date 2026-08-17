@@ -2878,6 +2878,15 @@ def tela_relatorio():
         perms = st.session_state.get('_menu_perms_cache') or {}
         return perms.get(chave, True)
 
+    # ── Telemetria: acesso ao módulo Relatórios (1× por sessão) ──────────────
+    if not st.session_state.get("_tel_vis_relatorios"):
+        try:
+            from database import registrar_telemetria as _rt
+            _rt("vis_relatorios")
+        except Exception:
+            pass
+        st.session_state["_tel_vis_relatorios"] = True
+
     _ABAS_REL_CAT = [
         ("rel_lista_freq",    "📋 Lista Frequência Oficial"),
         ("rel_plan_freq",     "📊 Plan. Frequência"),
@@ -3395,6 +3404,13 @@ def tela_relatorio():
                 st.dataframe(df_st, use_container_width=True, hide_index=True)
     if tab_f is not None:
         with tab_f:
+            if not st.session_state.get("_tel_aba_rel_plan_freq"):
+                try:
+                    from database import registrar_telemetria as _rt
+                    _rt("aba_rel_plan_freq")
+                except Exception:
+                    pass
+                st.session_state["_tel_aba_rel_plan_freq"] = True
             _render_tab_f()
     # ==============================================================================
     # --- ABA 2: AUDITORIA COM PDF NATIVO E GRID INTERATIVO ---
@@ -3636,6 +3652,13 @@ def tela_relatorio():
 
     if tab_a is not None:
         with tab_a:
+            if not st.session_state.get("_tel_aba_rel_auditoria"):
+                try:
+                    from database import registrar_telemetria as _rt
+                    _rt("aba_rel_auditoria")
+                except Exception:
+                    pass
+                st.session_state["_tel_aba_rel_auditoria"] = True
             _render_tab_a()
     # ==============================================================================
     # --- ABA 3: PRESTAÇÃO PEDAGÓGICA (MOTOR NATIVO .DOCX) ---
@@ -3791,12 +3814,26 @@ def tela_relatorio():
 
     if tab_w is not None:
         with tab_w:
+            if not st.session_state.get("_tel_aba_rel_prestacao_ped"):
+                try:
+                    from database import registrar_telemetria as _rt
+                    _rt("aba_rel_prestacao_ped")
+                except Exception:
+                    pass
+                st.session_state["_tel_aba_rel_prestacao_ped"] = True
             _render_tab_w()
     # ==============================================================================
     # --- ABA 5: PRESTAÇÃO DIÁRIA (Lista de Presença por Dia - PDF) ---
     # ==============================================================================
     if tab_diario is not None:
         with tab_diario:
+            if not st.session_state.get("_tel_aba_rel_lista_freq"):
+                try:
+                    from database import registrar_telemetria as _rt
+                    _rt("aba_rel_lista_freq")
+                except Exception:
+                    pass
+                st.session_state["_tel_aba_rel_lista_freq"] = True
             _renderizar_aba_prestacao_diaria()
 
     # ==============================================================================
@@ -3804,6 +3841,13 @@ def tela_relatorio():
     # ==============================================================================
     if tab_sem_av is not None:
         with tab_sem_av:
+            if not st.session_state.get("_tel_aba_rel_avaliacoes"):
+                try:
+                    from database import registrar_telemetria as _rt
+                    _rt("aba_rel_avaliacoes")
+                except Exception:
+                    pass
+                st.session_state["_tel_aba_rel_avaliacoes"] = True
             from views.sem_avaliacao_view import renderizar_aba_sem_avaliacao
             renderizar_aba_sem_avaliacao()
 
@@ -3812,11 +3856,25 @@ def tela_relatorio():
     # ==============================================================================
     if tab_clinico is not None:
         with tab_clinico:
+            if not st.session_state.get("_tel_aba_rel_patologias"):
+                try:
+                    from database import registrar_telemetria as _rt
+                    _rt("aba_rel_patologias")
+                except Exception:
+                    pass
+                st.session_state["_tel_aba_rel_patologias"] = True
             from views.patologias_clinicas_view import renderizar_aba_patologias
             renderizar_aba_patologias()
 
     if tab_pa_lote is not None:
         with tab_pa_lote:
+            if not st.session_state.get("_tel_aba_rel_pa_lote"):
+                try:
+                    from database import registrar_telemetria as _rt
+                    _rt("aba_rel_pa_lote")
+                except Exception:
+                    pass
+                st.session_state["_tel_aba_rel_pa_lote"] = True
             tela_relatorio_pa_lote()
 
     # ==============================================================================
@@ -4010,6 +4068,13 @@ def tela_relatorio():
 
     if tab_inativos_r is not None:
         with tab_inativos_r:
+            if not st.session_state.get("_tel_aba_rel_inativos"):
+                try:
+                    from database import registrar_telemetria as _rt
+                    _rt("aba_rel_inativos")
+                except Exception:
+                    pass
+                st.session_state["_tel_aba_rel_inativos"] = True
             _render_tab_inativos()
 
     st.markdown(

@@ -1187,6 +1187,15 @@ def tela_frequencia():
     def _aba(chave):
         return _aba_idx.get(chave)
 
+    # ── Telemetria: acesso ao módulo Frequência (1× por sessão) ──────────────
+    if not st.session_state.get("_tel_vis_freq"):
+        try:
+            from database import registrar_telemetria as _rt
+            _rt("vis_frequencia")
+        except Exception:
+            pass
+        st.session_state["_tel_vis_freq"] = True
+
     if _aba("freq_chamada_tablet") is not None:
         with abas[_aba("freq_chamada_tablet")]:
             if _ir_tablet:

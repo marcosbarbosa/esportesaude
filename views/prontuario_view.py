@@ -552,6 +552,16 @@ def renderizar_ficha():
         _p = st.session_state.get("_menu_perms_cache") or {}
         return _p.get(chave, True)
 
+    # ── Telemetria: abertura de prontuário (1× por aluno por sessão) ──────────
+    _aluno_id_tel = (st.session_state.get("aluno_prontuario") or {}).get("id", "")
+    if not st.session_state.get(f"_tel_pront_{_aluno_id_tel}"):
+        try:
+            from database import registrar_telemetria as _rt
+            _rt("vis_prontuario")
+        except Exception:
+            pass
+        st.session_state[f"_tel_pront_{_aluno_id_tel}"] = True
+
     # 🔒 Banner LGPD — Autorização de Imagem (com botão de alteração)
     _ti = aluno.get("termo_imagem")
     _nao_autoriza_img = (_ti is False) or (_ti == 0) or (str(_ti).lower() in ["false", "0", ""])
@@ -585,6 +595,11 @@ def renderizar_ficha():
                 _op = st.session_state.get("usuario_nome", "")
                 _ok, _msg = atualizar_termo_imagem(aluno["id"], True, _op, aluno.get("nome", ""))
                 if _ok:
+                    try:
+                        from database import registrar_telemetria as _rt
+                        _rt("acao_lgpd_autorizou")
+                    except Exception:
+                        pass
                     # Atualiza o campo diretamente para garantir que o rerun
                     # reflita o novo valor mesmo que o re-fetch falhe por cache/timeout
                     st.session_state.aluno_prontuario["termo_imagem"] = True
@@ -601,6 +616,11 @@ def renderizar_ficha():
                 _op = st.session_state.get("usuario_nome", "")
                 _ok, _msg = atualizar_termo_imagem(aluno["id"], False, _op, aluno.get("nome", ""))
                 if _ok:
+                    try:
+                        from database import registrar_telemetria as _rt
+                        _rt("acao_lgpd_revogou")
+                    except Exception:
+                        pass
                     # Idem: atualiza direto antes do re-fetch para UX imediata
                     st.session_state.aluno_prontuario["termo_imagem"] = False
                     _fresh = buscar_aluno_por_id(aluno["id"])
@@ -685,6 +705,7 @@ def renderizar_ficha():
                 mime="application/pdf",
                 type="primary",
                 use_container_width=True,
+                on_click=lambda: __import__("database").registrar_telemetria("acao_exportou_pdf"),
             )
 
         if aluno.get("status", "Ativo") != "Inativo":
@@ -703,6 +724,11 @@ def renderizar_ficha():
                 ok, msg = alterar_status_aluno_local(aluno["id"], "Ativo", operador=_operador_reat)
                 if ok:
                     st.toast("Aluno reativado no sistema!")
+                    try:
+                        from database import registrar_telemetria as _rt
+                        _rt("acao_reativou_aluno")
+                    except Exception:
+                        pass
                     aluno["status"] = "Ativo"
                     time.sleep(1)
                     st.rerun()
@@ -1134,6 +1160,11 @@ def renderizar_ficha():
                                         if tipo_val == "aptidao_fisica":
                                             st.session_state.aluno_prontuario["url_atestado_medico"] = url_arq
                                         st.success("✅ Atestado arquivado com sucesso!")
+                                        try:
+                                            from database import registrar_telemetria as _rt
+                                            _rt("acao_arquivou_atestado")
+                                        except Exception:
+                                            pass
                                         time.sleep(1)
                                         st.rerun()
                                     else:

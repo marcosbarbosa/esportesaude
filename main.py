@@ -1733,13 +1733,36 @@ def format_nav(opt):
     return mapa.get(opt, opt)
 
 
+# ── Telemetria de navegação principal ────────────────────────────────────────
+_NAV_SLUG = {
+    "Principal":        "nav_principal",
+    "Frequência":       "nav_frequencia",
+    "Portal do Aluno":  "nav_portal_do_aluno",
+    "Relatórios & BI":  "nav_relatorios_e_bi",
+    "Gestor":           "nav_gestor",
+}
+
+
+def _on_nav_change() -> None:
+    """Callback do st.radio de navegação — atualiza menu_atual e registra telemetria."""
+    _dest = st.session_state.get("nav", "")
+    st.session_state.update({"menu_atual": _dest})
+    _slug = _NAV_SLUG.get(_dest)
+    if _slug:
+        try:
+            from database import registrar_telemetria as _rt
+            _rt(_slug)
+        except Exception:
+            pass
+
+
 st.radio(
     "Nav",
     menu,
     format_func=format_nav,
     horizontal=True,
     key="nav",
-    on_change=lambda: st.session_state.update({"menu_atual": st.session_state.nav}),
+    on_change=_on_nav_change,
     label_visibility="collapsed",
 )
 if st.session_state.nav == "Sair":

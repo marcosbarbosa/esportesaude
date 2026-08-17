@@ -362,6 +362,15 @@ def renderizar_dashboard():
         _p = st.session_state.get("_menu_perms_cache") or {}
         return _p.get(chave, True)
 
+    # ── Telemetria: acesso ao Portal do Aluno (1× por sessão) ────────────────
+    if not st.session_state.get("_tel_vis_portal"):
+        try:
+            from database import registrar_telemetria as _rt
+            _rt("vis_portal")
+        except Exception:
+            pass
+        st.session_state["_tel_vis_portal"] = True
+
     _DASH_ABAS_CFG = [
         ("portal_tab_alunos",       "👥 Alunos"),
         ("portal_tab_patologias",   "🧬 Patologias"),
