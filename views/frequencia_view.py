@@ -270,7 +270,7 @@ def _gerar_baloes_css(num_baloes: int = 14) -> str:
     """
 
 
-def _renderizar_badge_aula(data_aula: datetime.date, num_aula: int) -> None:
+def _renderizar_badge_aula(data_aula: datetime.date, num_aula: int, total_alunos: int = 0) -> None:
     """
     Renderiza o badge de número da aula logo abaixo do date_input.
     Detecta marcos (50ª, 100ª…), datas fixas (_DATAS_FESTIVAS) e datas
@@ -330,7 +330,7 @@ def _renderizar_badge_aula(data_aula: datetime.date, num_aula: int) -> None:
 
     # ── 5. Montar HTML (style em linha única — evita interpretação Markdown) ─
     ano        = data_aula.year
-    aula_label = f"Aula #{num_aula}" if num_aula else "—"
+    aula_label = f"#{num_aula}ª aula concluída" if num_aula else "—"
 
     _pulse_css = (
         "@keyframes _pbadge{0%,100%{box-shadow:0 0 0 0 rgba(239,68,68,.4)}"
@@ -342,7 +342,7 @@ def _renderizar_badge_aula(data_aula: datetime.date, num_aula: int) -> None:
     _style = (
         f"display:inline-flex;align-items:center;gap:7px;"
         f"background:{bg};border:1.5px solid {borda};border-radius:20px;"
-        f"padding:4px 13px 4px 9px;margin-top:6px;"
+        f"padding:4px 13px 4px 9px;"
         f"font-size:13px;font-weight:700;color:{txt_c};"
         f"white-space:nowrap;{_anim}"
         f"box-shadow:0 1px 5px rgba(0,0,0,.08);"
@@ -354,12 +354,26 @@ def _renderizar_badge_aula(data_aula: datetime.date, num_aula: int) -> None:
         f"white-space:nowrap;'>{legenda}</span>"
     ) if legenda else ""
 
+    _pill_alunos = (
+        f"<span style='display:inline-flex;align-items:center;gap:6px;"
+        f"background:#EFF6FF;border:1.5px solid #BFDBFE;border-radius:24px;"
+        f"padding:4px 14px 4px 10px;font-size:13px;font-weight:600;color:#475569;"
+        f"box-shadow:0 1px 4px rgba(59,130,246,0.12);white-space:nowrap;letter-spacing:0.1px;'>"
+        f"<span style='font-size:17px;line-height:1;'>👥</span>"
+        f"<span style='color:#1E40AF;font-weight:900;font-size:15px;'>{total_alunos}</span>"
+        f"<span style='color:#64748B;'>alunos ativos</span>"
+        f"</span>"
+    ) if total_alunos else ""
+
     badge_html = (
         f"<style>{_pulse_css}</style>"
+        f"<div style='display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:6px;'>"
         f"<div style='{_style}' role='status' aria-label='{aula_label} de {ano}'>"
         f"<span aria-hidden='true' style='font-size:16px;line-height:1;'>{ico}</span>"
         f"<span style='font-size:13px;font-weight:900;'>{aula_label} · {ano}</span>"
         f"{_leg}"
+        f"</div>"
+        f"{_pill_alunos}"
         f"</div>"
     )
     st.markdown(badge_html, unsafe_allow_html=True)
@@ -805,21 +819,7 @@ def tela_frequencia():
         _total_geral = 0
 
     st.markdown(
-        f"""
-        <div style='display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-bottom:0;'>
-          <h2 style='color:#0A2540;font-weight:900;margin:0;'>📊 Gestão de Fluxo</h2>
-          <span style='display:inline-flex;align-items:center;gap:6px;
-                       background:#EFF6FF;border:1.5px solid #BFDBFE;
-                       border-radius:24px;padding:4px 14px 4px 10px;
-                       font-size:13px;font-weight:600;color:#475569;
-                       box-shadow:0 1px 4px rgba(59,130,246,0.12);
-                       white-space:nowrap;letter-spacing:0.1px;'>
-            <span style='font-size:17px;line-height:1;'>👥</span>
-            <span style='color:#1E40AF;font-weight:900;font-size:15px;'>{_total_geral}</span>
-            <span style='color:#64748B;'>alunos ativos</span>
-          </span>
-        </div>
-        """,
+        "<h2 style='color:#0A2540;font-weight:900;margin:0 0 2px;'>📋 Controle de Frequência</h2>",
         unsafe_allow_html=True,
     )
     st.markdown("<div style='height: 10px;'></div>", unsafe_allow_html=True)
@@ -835,7 +835,7 @@ def tela_frequencia():
             )
             # ── Badge: número da aula no ano ──────────────────────────────
             _num_aula = get_numero_aula_no_ano(data_aula)
-            _renderizar_badge_aula(data_aula, _num_aula)
+            _renderizar_badge_aula(data_aula, _num_aula, _total_geral)
             # ── Expander: progresso anual (aulas por mês) ─────────────────
             _renderizar_progresso_anual(data_aula, _num_aula)
 
