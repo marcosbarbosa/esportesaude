@@ -170,23 +170,50 @@ def get_template_seguro_db(chave, nome_aluno=""):
 
 
 def cadastrar_usuario_sistema(nome, email, senha):
-    """Função de registo solicitada pelo main.py — usa tabela 'usuarios'"""
+    """Cria um novo Operador com Princípio do Privilégio Mínimo.
+
+    Fluxo:
+      1. Verifica duplicata de e-mail.
+      2. Insere na tabela usuarios com perfil='Operador'.
+      3. Recupera o UUID gerado pelo banco.
+      4. Grava TEMPLATE_PERMISSOES_OPERADOR_PADRAO para o novo usuário.
+
+    O SuperAdmin deve conceder acessos adicionais em Gestão de Operadores.
+    """
     try:
+        email_limpo = email.strip().lower()
+
+        # 1. Verificar duplicata
         res = (
             supabase.table("usuarios")
             .select("id")
-            .eq("email", email.strip().lower())
+            .eq("email", email_limpo)
             .execute()
         )
         if res.data:
             return False, "E-mail já está registado."
+
+        # 2. Inserir como Operador (privilégio mínimo)
         novo_usuario = {
-            "nome": nome.strip(),
-            "email": email.strip().lower(),
-            "senha": senha,
-            "perfil": "Admin",
+            "nome":   nome.strip(),
+            "email":  email_limpo,
+            "senha":  senha,
+            "perfil": "Operador",
         }
         supabase.table("usuarios").insert(novo_usuario).execute()
+
+        # 3. Recuperar UUID recém-gerado
+        busca = (
+            supabase.table("usuarios")
+            .select("id")
+            .eq("email", email_limpo)
+            .execute()
+        )
+        if busca.data:
+            novo_id = busca.data[0]["id"]
+            # 4. Injetar template ultra-restrito silenciosamente
+            set_menu_permissoes_usuario(novo_id, TEMPLATE_PERMISSOES_OPERADOR_PADRAO)
+
         return True, "✅ Conta criada com sucesso!"
     except Exception as e:
         return False, str(e)
@@ -3403,6 +3430,21 @@ MENU_CATALOGO = [
     ("gestor_satisfacao",               "⭐ Gestor → Satisfação"),
     ("gestor_emergencia",               "🚨 Gestor → Emergência"),
 ]
+
+# ── Template de permissões mínimas para novos operadores ─────────────────────
+# Princípio do Privilégio Mínimo: todo usuário criado via cadastrar_usuario_sistema
+# nasce com apenas o painel inicial liberado. O SuperAdmin concede acesso explícito
+# em Gestão de Operadores.
+TEMPLATE_PERMISSOES_OPERADOR_PADRAO: dict = {
+    # ── Painel inicial ──────────────────────────────────────────────────────
+    "principal":                True,   # tela de boas-vindas visível
+    "principal_snapshot_lote":  False,  # processar em lote (operação pesada)
+    # ── Módulos principais — todos bloqueados ───────────────────────────────
+    "frequencia":               False,
+    "portal_aluno":             False,
+    "relatorios_bi":            False,
+    "gestor":                   False,
+}
 
 
 def get_objetivos_diario_periodo(data_ini: str, data_fim: str) -> list[str]:
