@@ -2109,6 +2109,44 @@ if st.session_state.menu_atual == "Principal":
             else:
                 st.error(f"Erro: {_msg_d}")
 
+    # ════════════════════════════════════════════════════════════════════════
+    # CARD HEROICO — Atalho Rápido para a Chamada do Dia
+    # ════════════════════════════════════════════════════════════════════════
+    if _menu_liberado("frequencia") and _menu_liberado("freq_chamada_tablet"):
+        with st.container(border=True):
+            _hc_icon, _hc_txt, _hc_btn = st.columns(
+                [0.6, 4, 2], vertical_alignment="center", gap="medium"
+            )
+            _hc_icon.markdown(
+                "<div style='font-size:2.8rem;text-align:center;line-height:1;"
+                "padding:4px 0;'>📋</div>",
+                unsafe_allow_html=True,
+            )
+            with _hc_txt:
+                st.markdown(
+                    "<p style='margin:0;font-size:1.05rem;font-weight:800;"
+                    "color:#0A2540;line-height:1.3;'>Iniciar Chamada do Dia</p>",
+                    unsafe_allow_html=True,
+                )
+                st.markdown(
+                    f"<p style='margin:2px 0 0;font-size:0.82rem;color:#64748B;"
+                    f"font-weight:600;'>📅 {_ds}, "
+                    f"{_hoje.day:02d} de {_meses_pt_full[_hoje.month-1]} "
+                    f"de {_hoje.year}</p>",
+                    unsafe_allow_html=True,
+                )
+            with _hc_btn:
+                if st.button(
+                    "🚀 Fazer Chamada",
+                    key="hg_hero_chamada",
+                    type="primary",
+                    use_container_width=True,
+                ):
+                    st.session_state["_freq_ir_tablet"] = True
+                    _navegar("Frequência")
+
+    st.markdown("<div style='height:6px;'></div>", unsafe_allow_html=True)
+
     # ── Layout principal: Grid (esq) + Avaliações (dir) ─────────────────────
     _col_grid, _col_agenda = st.columns([3, 1], gap="large")
 
@@ -2277,55 +2315,89 @@ if st.session_state.menu_atual == "Principal":
                 icon=None,
             )
 
-        # ── Card: Alunos em risco crítico (>60 dias sem presença) ───────────────
+        # ── Card: Alunos em risco crítico (>60 dias sem presença) ──────────────
         # Lê exclusivamente do snapshot — zero queries extras na abertura da home.
-        # Os nomes são incluídos em alunos_risco_critico_recs durante o Processar em Lote.
         _criticos_snap = _snap_home.get("alunos_risco_critico_recs", [])
         if _criticos_snap:
             import html as _html_mod
             _n_criticos = len(_criticos_snap)
             _TOP_N = 5
-            _linhas_html = ""
-            for _rc_r in _criticos_snap[:_TOP_N]:
-                _rc_nome = _html_mod.escape(str(_rc_r.get("nome") or "—"))
-                _rc_dias = _rc_r.get("dias")
-                _rc_dias_txt = f"{_rc_dias} dias" if _rc_dias is not None else "nunca registrou"
-                _linhas_html += (
-                    f"<div style='display:flex;justify-content:space-between;"
-                    f"padding:2px 0;border-bottom:1px solid #FECACA22;'>"
-                    f"<span style='font-weight:600;color:#7F1D1D;font-size:12px;"
-                    f"white-space:nowrap;overflow:hidden;text-overflow:ellipsis;"
-                    f"max-width:68%;'>{_rc_nome}</span>"
-                    f"<span style='font-size:11px;color:#B91C1C;font-weight:700;"
-                    f"white-space:nowrap;'>{_rc_dias_txt}</span>"
-                    f"</div>"
+            with st.container(border=True):
+                # Cabeçalho do card
+                _rc_hd_col, _rc_badge_col = st.columns([4, 3], vertical_alignment="center")
+                _rc_hd_col.markdown(
+                    "🔴 **Risco Crítico de Evasão**",
                 )
-            _mais_txt = (
-                f"<div style='font-size:11px;color:#B91C1C;margin-top:4px;'>…e mais "
-                f"<b>{_n_criticos - _TOP_N}</b> aluno(s)</div>"
-                if _n_criticos > _TOP_N else ""
-            )
+                _rc_badge_col.markdown(
+                    f"<div style='text-align:right;'>"
+                    f"<span style='background:#FEE2E2;color:#991B1B;font-size:11px;"
+                    f"font-weight:800;padding:3px 10px;border-radius:12px;display:inline-block;'>"
+                    f"{_n_criticos} ausente(s) há +60 dias</span></div>",
+                    unsafe_allow_html=True,
+                )
+                st.caption("Alunos com maior risco de abandono. Clique em 🩺 para abrir a ficha.")
+                st.markdown(
+                    "<hr style='margin:4px 0 8px;border-color:#FEE2E2;'/>",
+                    unsafe_allow_html=True,
+                )
 
-            _card_col, _btn_col = st.columns([4, 1], vertical_alignment="center", gap="small")
-            _card_col.markdown(
-                f"<div style='background:#FEF2F2;border:1.5px solid #FCA5A5;"
-                f"border-radius:10px;padding:10px 14px;'>"
-                f"<div style='font-weight:800;color:#991B1B;font-size:0.88rem;"
-                f"margin-bottom:6px;'>🔴 Alunos em risco crítico — {_n_criticos} ausente(s) há mais de 60 dias</div>"
-                f"{_linhas_html}"
-                f"{_mais_txt}"
-                f"</div>",
-                unsafe_allow_html=True,
-            )
-            if _btn_col.button(
-                "🔍 Ver no painel",
-                key="hg_ver_risco_critico",
-                use_container_width=True,
-                help="Abre o painel de alunos filtrado pela faixa 🔴 Ausência > 60 dias",
-            ):
-                st.session_state["hg_filtro_evasao"] = "vermelho"
-                st.session_state["hg_grid_ativo"] = True
-                st.rerun()
+                # Linhas por aluno com CTA
+                for _rc_r in _criticos_snap[:_TOP_N]:
+                    _rc_nome  = str(_rc_r.get("nome") or "—")
+                    _rc_turma = str(_rc_r.get("turma") or "")
+                    _rc_dias  = _rc_r.get("dias")
+                    _rc_id    = _rc_r.get("id")
+                    _rc_dias_txt = (
+                        f"{_rc_dias} dias" if _rc_dias is not None else "nunca registrou"
+                    )
+                    _rr_nm, _rr_dias, _rr_cta = st.columns(
+                        [4, 2, 2], vertical_alignment="center", gap="small"
+                    )
+                    _rr_nm.markdown(
+                        f"<p style='margin:0;font-size:13px;font-weight:700;"
+                        f"color:#0F172A;line-height:1.2;'>"
+                        f"{_html_mod.escape(_rc_nome)}</p>"
+                        f"<p style='margin:0;font-size:10px;color:#64748B;'>"
+                        f"{_html_mod.escape(_rc_turma)}</p>",
+                        unsafe_allow_html=True,
+                    )
+                    _rr_dias.markdown(
+                        f"<p style='margin:0;font-size:12px;font-weight:700;"
+                        f"color:#B91C1C;text-align:right;'>⏱ {_rc_dias_txt}</p>",
+                        unsafe_allow_html=True,
+                    )
+                    if _rc_id and _rr_cta.button(
+                        "🩺 Abrir Ficha",
+                        key=f"hg_rc_ficha_{_rc_id}",
+                        use_container_width=True,
+                        help=f"Abrir prontuário de {_rc_nome}",
+                    ):
+                        from database import buscar_aluno_por_id as _bapid
+                        _al_rc = _bapid(_rc_id) or {
+                            "id": _rc_id, "nome": _rc_nome, "turma": _rc_turma
+                        }
+                        st.session_state.aluno_prontuario  = _al_rc
+                        st.session_state.origem_prontuario = "Principal"
+                        st.session_state.menu_atual        = "Portal do Aluno"
+                        st.rerun()
+
+                if _n_criticos > _TOP_N:
+                    st.caption(
+                        f"…e mais **{_n_criticos - _TOP_N}** aluno(s) em situação crítica."
+                    )
+                st.markdown(
+                    "<hr style='margin:8px 0 4px;border-color:#FEE2E2;'/>",
+                    unsafe_allow_html=True,
+                )
+                if st.button(
+                    "📊 Ver todos no painel de alunos",
+                    key="hg_ver_risco_critico",
+                    use_container_width=True,
+                    help="Abre o painel de alunos filtrado pela faixa 🔴 Ausência > 60 dias",
+                ):
+                    st.session_state["hg_filtro_evasao"] = "vermelho"
+                    st.session_state["hg_grid_ativo"] = True
+                    st.rerun()
 
         # ── Checkbox: grid desabilitado por padrão para evitar crash na abertura ──
         _grid_habilitado = st.checkbox(
