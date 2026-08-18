@@ -2855,7 +2855,7 @@ if st.session_state.menu_atual == "Principal":
                     (True,             "Nome",           48),
                     (_vp("turma"),     "Turma",          20),
                     (_vp("aniv"),      "Aniversario",    13),
-                    (_vp("freq"),      "Freq.60d",       12),
+                    (_vp("freq"),      "Freq.Ano",       12),
                     (_vp("freq"),      "Ultima Pres.",   20),
                     (_vp("atestado"),  "Venc. Atestado", 20),
                     (_vp("pa"),        "Ult. PA",        28),
@@ -3003,7 +3003,7 @@ if st.session_state.menu_atual == "Principal":
                     (None,       "Nome",            36,  None,    True,  False),
                     ("turma",    "Turma",           14,  None,    False, False),
                     ("aniv",     "Aniversário",     13,  None,    False, False),
-                    ("freq",     "Freq. 60d",        9,  None,    False, True),
+                    ("freq",     "Freq. Ano",        9,  None,    False, True),
                     ("freq",     "Total Presenças", 14,  None,    False, True),
                     ("freq",     "Última Presença", 14,  None,    False, False),
                     ("atestado", "Venc. Atestado",  14,  "atest", False, False),
@@ -3042,7 +3042,7 @@ if st.session_state.menu_atual == "Principal":
                     ("Nome",           36),
                     ("Turma",          14),
                     ("Aniversário",    13),
-                    ("Freq. 60d",       9),
+                    ("Freq. Ano",        9),
                     ("Total Presenças", 14),
                     ("Última Presença", 14),
                     ("Venc. Atestado",  14),
@@ -3079,7 +3079,7 @@ if st.session_state.menu_atual == "Principal":
                     except Exception:
                         _aniv = ""
 
-                    _freq60  = int(a.get("freq_60d", 0) or 0)
+                    _freq60  = int(a.get("total_presencas_hist", 0) or 0)
                     _tot_pr  = int(a.get("total_presencas_hist", 0) or 0)
 
                     _up = a.get("ultima_presenca")
@@ -3405,7 +3405,7 @@ if st.session_state.menu_atual == "Principal":
             if "_hh_aniv"     in _hcm: _sort_btn(_hcm["_hh_aniv"],     "🎂 Aniversário",     "aniversario")
             if "_hh_freq"     in _hcm:
                 _hf1, _hf2 = _hcm["_hh_freq"].columns(2, gap="small")
-                _sort_btn(_hf1, "⏱ Freq.60d", "freq_60d")
+                _sort_btn(_hf1, "⏱ Freq.Ano", "total_presencas_hist")
                 _sort_btn(_hf2, "📅 Últ. Pres.", "ultima_presenca")
             if "_hh_atestado" in _hcm: _sort_btn(_hcm["_hh_atestado"], "🏥 Venc. Atestado",  "data_vencimento_atestado")
             if "_hh_pa"       in _hcm: _sort_btn(_hcm["_hh_pa"],       "🩸 Últ. PA",         "_pa_sis")
@@ -3635,7 +3635,7 @@ if st.session_state.menu_atual == "Principal":
 
                     # Freq.60d + Última Presença (coluna combinada)
                     _tp_hist  = int(_r.get("total_presencas_hist", 0))
-                    _tp_cor   = "#10B981" if _tp_hist >= 8 else ("#F59E0B" if _tp_hist >= 3 else "#EF4444")
+                    _tp_cor   = "#10B981" if _tp_hist >= 60 else ("#F59E0B" if _tp_hist >= 20 else "#EF4444")
                     _up = _r.get("ultima_presenca")
                     _dias_sem = ["seg","ter","qua","qui","sex","sáb","dom"]
                     if pd.notna(_up):
@@ -3694,7 +3694,7 @@ if st.session_state.menu_atual == "Principal":
                     _ce.markdown(
                         f"<div style='line-height:1.35;'>"
                         f"<span style='font-size:15px;font-weight:900;color:{_tp_cor};'>{_tp_hist}</span>"
-                        f"<span style='font-size:9px;color:#94A3B8;margin-left:2px;'>aulas/60d</span>"
+                        f"<span style='font-size:9px;color:#94A3B8;margin-left:2px;'>aulas/ano</span>"
                         f"<br>{_up_html}"
                         f"</div>",
                         unsafe_allow_html=True,

@@ -1910,13 +1910,14 @@ def load_frequencia_ultima_presenca():
 
 @st.cache_data(ttl=300, show_spinner=False)
 def load_total_presencas_todos():
-    """Retorna DataFrame [id, total_presencas_hist] — total de presenças por aluno nos últimos 60 dias.
+    """Retorna DataFrame [id, total_presencas_hist] — total de presenças por aluno no ano letivo corrente (1º jan).
 
     Usa paginação correta (.order + .range) para não truncar em 1000 linhas.
     """
     import datetime as _dt
     try:
-        _corte = (_dt.date.today() - _dt.timedelta(days=60)).isoformat()
+        _hoje = _dt.date.today()
+        _corte = _dt.date(_hoje.year, 1, 1).isoformat()
         todos = []
         inicio = 0
         for _ in range(500):
