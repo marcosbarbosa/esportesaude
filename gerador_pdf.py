@@ -501,7 +501,7 @@ def criar_documento_pdf(data_aula, turma):
 # ==============================================================================
 # 2. RELATÓRIO: DOSSIÊ CLÍNICO INDIVIDUAL DO ALUNO (v3 — Decisão Administrativa)
 # ==============================================================================
-def criar_documento_aluno_pdf(aluno_data, avaliacoes, historico, estatisticas):
+def criar_documento_aluno_pdf(aluno_data, avaliacoes, historico, estatisticas, incluir_cadastro=False):
     """
     Dossie Clinico v3 — 9 secoes para tomada de decisao administrativa:
       1. Perfil + Painel de Indicadores (grid: freq total, freq 60d, PA, atestado)
@@ -781,6 +781,36 @@ def criar_documento_aluno_pdf(aluno_data, avaliacoes, historico, estatisticas):
         pdf.set_y(y_foto + 40)
 
     pdf.ln(3)
+
+    # ── DADOS CADASTRAIS (incluído apenas quando solicitado) ─────────────────
+    if incluir_cadastro:
+        pdf.set_font("Arial", "B", 10)
+        pdf.set_fill_color(235, 245, 255)
+        pdf.cell(0, 6, limpar_texto("  Dados Cadastrais"), ln=1, fill=True)
+        pdf.ln(1)
+        _kv(pdf, "Sexo",     _safe_str(aluno_data.get("sexo"),     "Nao informado"))
+        _kv(pdf, "CPF",      _safe_str(aluno_data.get("cpf"),      "Nao informado"))
+        _kv(pdf, "RG",       _safe_str(aluno_data.get("rg"),       "Nao informado"))
+        _kv(pdf, "Email",    _safe_str(aluno_data.get("email"),    "Nao informado"))
+        _kv(pdf, "Telefone", _safe_str(aluno_data.get("telefone"), "Nao informado"))
+        _kv(pdf, "WhatsApp", _safe_str(aluno_data.get("whatsapp"), "Nao informado"))
+        _end  = _safe_str(aluno_data.get("endereco"), "")
+        _bai  = _safe_str(aluno_data.get("bairro"),   "")
+        _cep  = _safe_str(aluno_data.get("cep"),      "")
+        _end_full = ", ".join(
+            v for v in [_end, _bai, _cep]
+            if v and v not in ("Nao informado", "nan", "none", "")
+        )
+        _kv(pdf, "Endereco", _end_full or "Nao informado")
+        _dt_mat = _safe_str(aluno_data.get("created_at"), "")
+        if _dt_mat and _dt_mat not in ("Nao informado", "nan", "none", ""):
+            try:
+                import datetime as _dtm2
+                _dt_mat = _dtm2.datetime.fromisoformat(_dt_mat[:10]).strftime("%d/%m/%Y")
+            except Exception:
+                pass
+        _kv(pdf, "Matricula em", _dt_mat or "Nao informado")
+        pdf.ln(3)
 
     # Observações Clínicas (Livre) — campo problemas_saude do cadastro
     _obs_livre = _safe_str(aluno_data.get("problemas_saude"), "")

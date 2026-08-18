@@ -694,19 +694,42 @@ def renderizar_ficha():
 
     with cp_pdf:
         if _pront_lib("portal_exportar_pdf"):
-            estatisticas_pdf = get_estatisticas_frequencia_aluno(aluno.get("id", ""))
-            avaliacoes_pdf = get_avaliacoes_aluno(aluno.get("id", ""))
-            historico_pdf = get_historico_aulas_aluno(aluno.get("id", ""))
-            pdf_bytes = criar_documento_aluno_pdf(aluno, avaliacoes_pdf, historico_pdf, estatisticas_pdf)
-            st.download_button(
-                label="🖨️ Exportar Dossiê",
-                data=pdf_bytes,
-                file_name=f"Dossie_Clinico_{aluno.get('nome', '')[:15].replace(' ', '_')}.pdf",
-                mime="application/pdf",
-                type="primary",
-                use_container_width=True,
-                on_click=lambda: __import__("database").registrar_telemetria("acao_exportou_pdf"),
-            )
+            _pdf_nome = aluno.get("nome", "Aluno")[:15].replace(" ", "_")
+            _pdf_id   = aluno.get("id", "")
+            with st.popover("🖨️ Exportar Dossiê", use_container_width=True):
+                st.caption("**Escolha o formato do dossiê:**")
+                _av_pdf  = get_avaliacoes_aluno(_pdf_id)
+                _hi_pdf  = get_historico_aulas_aluno(_pdf_id)
+                _es_pdf  = get_estatisticas_frequencia_aluno(_pdf_id)
+                # Opção 1 — Dossiê clínico (padrão)
+                _bytes_clin = criar_documento_aluno_pdf(
+                    aluno, _av_pdf, _hi_pdf, _es_pdf,
+                    incluir_cadastro=False,
+                )
+                st.download_button(
+                    label="📋 Dossiê Clínico",
+                    data=_bytes_clin,
+                    file_name=f"Dossie_Clinico_{_pdf_nome}.pdf",
+                    mime="application/pdf",
+                    use_container_width=True,
+                    help="Perfil clínico, avaliações, frequência e recomendações",
+                    on_click=lambda: __import__("database").registrar_telemetria("acao_exportou_pdf"),
+                )
+                st.divider()
+                # Opção 2 — Dossiê completo com dados cadastrais
+                _bytes_comp = criar_documento_aluno_pdf(
+                    aluno, _av_pdf, _hi_pdf, _es_pdf,
+                    incluir_cadastro=True,
+                )
+                st.download_button(
+                    label="📋 Dossiê Completo (+ cadastro)",
+                    data=_bytes_comp,
+                    file_name=f"Dossie_Completo_{_pdf_nome}.pdf",
+                    mime="application/pdf",
+                    use_container_width=True,
+                    help="Inclui endereço, CPF/RG, email, telefone e data de matrícula",
+                    on_click=lambda: __import__("database").registrar_telemetria("acao_exportou_pdf"),
+                )
 
         if aluno.get("status", "Ativo") != "Inativo":
             if _pront_lib("portal_arquivar_aluno") and st.button("🗄️ Arquivar Aluno", use_container_width=True):

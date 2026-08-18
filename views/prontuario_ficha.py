@@ -1062,20 +1062,36 @@ def render_cabecalho_aluno(aluno):
         st.caption(f"Turma: {aluno.get('turma', '')}")
 
     with cp_pdf:
-        pdf_bytes = criar_documento_aluno_pdf(
-            aluno,
-            get_avaliacoes_aluno(aluno.get("id")),
-            get_historico_aulas_aluno(aluno.get("id")),
-            get_estatisticas_frequencia_aluno(aluno.get("id")),
-        )
-        st.download_button(
-            "🖨️ PDF Dossiê",
-            data=pdf_bytes,
-            file_name=f"Dossie_{aluno.get('nome', '')[:15].replace(' ', '_')}.pdf",
-            mime="application/pdf",
-            type="primary",
-            use_container_width=True,
-        )
+        _fid   = aluno.get("id")
+        _fnome = aluno.get("nome", "Aluno")[:15].replace(" ", "_")
+        with st.popover("🖨️ PDF Dossiê", use_container_width=True):
+            st.caption("**Escolha o formato do dossiê:**")
+            _fav = get_avaliacoes_aluno(_fid)
+            _fhi = get_historico_aulas_aluno(_fid)
+            _fes = get_estatisticas_frequencia_aluno(_fid)
+            _fb_clin = criar_documento_aluno_pdf(
+                aluno, _fav, _fhi, _fes, incluir_cadastro=False
+            )
+            st.download_button(
+                "📋 Dossiê Clínico",
+                data=_fb_clin,
+                file_name=f"Dossie_Clinico_{_fnome}.pdf",
+                mime="application/pdf",
+                use_container_width=True,
+                help="Perfil clínico, avaliações, frequência e recomendações",
+            )
+            st.divider()
+            _fb_comp = criar_documento_aluno_pdf(
+                aluno, _fav, _fhi, _fes, incluir_cadastro=True
+            )
+            st.download_button(
+                "📋 Dossiê Completo (+ cadastro)",
+                data=_fb_comp,
+                file_name=f"Dossie_Completo_{_fnome}.pdf",
+                mime="application/pdf",
+                use_container_width=True,
+                help="Inclui endereço, CPF/RG, email, telefone e data de matrícula",
+            )
 
     with cp_word:
         _wkey = f"word_ficha_{aluno.get('id')}"
