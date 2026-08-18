@@ -2255,6 +2255,7 @@ if st.session_state.menu_atual == "Principal":
             ("turma",    "Turma",        0.9),
             ("aniv",     "Aniversário",  0.8),
             ("freq",     "Freq.+Pres.",  1.6),
+            ("ausencia", "⚠️ Ausência",   1.0),
             ("atestado", "Atestado",     1.0),
             ("pa",       "Última PA",    1.0),
             ("anam",     "Anamnese",     1.0),
@@ -2320,90 +2321,6 @@ if st.session_state.menu_atual == "Principal":
                 "para gerar os dados e acelerar a abertura do sistema.",
                 icon=None,
             )
-
-        # ── Card: Alunos em risco crítico (>60 dias sem presença) ──────────────
-        # Lê exclusivamente do snapshot — zero queries extras na abertura da home.
-        _criticos_snap = _snap_home.get("alunos_risco_critico_recs", [])
-        if _criticos_snap:
-            import html as _html_mod
-            _n_criticos = len(_criticos_snap)
-            _TOP_N = 5
-            with st.container(border=True):
-                # Cabeçalho do card
-                _rc_hd_col, _rc_badge_col = st.columns([4, 3], vertical_alignment="center")
-                _rc_hd_col.markdown(
-                    "🔴 **Risco Crítico de Evasão**",
-                )
-                _rc_badge_col.markdown(
-                    f"<div style='text-align:right;'>"
-                    f"<span style='background:#FEE2E2;color:#991B1B;font-size:11px;"
-                    f"font-weight:800;padding:3px 10px;border-radius:12px;display:inline-block;'>"
-                    f"{_n_criticos} ausente(s) há +60 dias</span></div>",
-                    unsafe_allow_html=True,
-                )
-                st.caption("Alunos com maior risco de abandono. Clique em 🩺 para abrir a ficha.")
-                st.markdown(
-                    "<hr style='margin:4px 0 8px;border-color:#FEE2E2;'/>",
-                    unsafe_allow_html=True,
-                )
-
-                # Linhas por aluno com CTA
-                for _rc_r in _criticos_snap[:_TOP_N]:
-                    _rc_nome  = str(_rc_r.get("nome") or "—")
-                    _rc_turma = str(_rc_r.get("turma") or "")
-                    _rc_dias  = _rc_r.get("dias")
-                    _rc_id    = _rc_r.get("id")
-                    _rc_dias_txt = (
-                        f"{_rc_dias} dias" if _rc_dias is not None else "nunca registrou"
-                    )
-                    _rr_nm, _rr_dias, _rr_cta = st.columns(
-                        [4, 2, 2], vertical_alignment="center", gap="small"
-                    )
-                    _rr_nm.markdown(
-                        f"<p style='margin:0;font-size:13px;font-weight:700;"
-                        f"color:#0F172A;line-height:1.2;'>"
-                        f"{_html_mod.escape(_rc_nome)}</p>"
-                        f"<p style='margin:0;font-size:10px;color:#64748B;'>"
-                        f"{_html_mod.escape(_rc_turma)}</p>",
-                        unsafe_allow_html=True,
-                    )
-                    _rr_dias.markdown(
-                        f"<p style='margin:0;font-size:12px;font-weight:700;"
-                        f"color:#B91C1C;text-align:right;'>⏱ {_rc_dias_txt}</p>",
-                        unsafe_allow_html=True,
-                    )
-                    if _rc_id and _rr_cta.button(
-                        "🩺 Abrir Ficha",
-                        key=f"hg_rc_ficha_{_rc_id}",
-                        use_container_width=True,
-                        help=f"Abrir prontuário de {_rc_nome}",
-                    ):
-                        from database import buscar_aluno_por_id as _bapid
-                        _al_rc = _bapid(_rc_id) or {
-                            "id": _rc_id, "nome": _rc_nome, "turma": _rc_turma
-                        }
-                        st.session_state.aluno_prontuario  = _al_rc
-                        st.session_state.origem_prontuario = "Principal"
-                        st.session_state.menu_atual        = "Portal do Aluno"
-                        st.rerun()
-
-                if _n_criticos > _TOP_N:
-                    st.caption(
-                        f"…e mais **{_n_criticos - _TOP_N}** aluno(s) em situação crítica."
-                    )
-                st.markdown(
-                    "<hr style='margin:8px 0 4px;border-color:#FEE2E2;'/>",
-                    unsafe_allow_html=True,
-                )
-                if st.button(
-                    "📊 Ver todos no painel de alunos",
-                    key="hg_ver_risco_critico",
-                    use_container_width=True,
-                    help="Abre o painel de alunos filtrado pela faixa 🔴 Ausência > 60 dias",
-                ):
-                    st.session_state["hg_filtro_evasao"] = "vermelho"
-                    st.session_state["hg_grid_ativo"] = True
-                    st.rerun()
 
         # ── Checkbox: grid desabilitado por padrão para evitar crash na abertura ──
         _grid_habilitado = st.checkbox(
@@ -3489,6 +3406,7 @@ if st.session_state.menu_atual == "Principal":
                     _cpa   = _rcm.get("pa",       _HGNOOP)
                     _canam = _rcm.get("anam",     _HGNOOP)
                     _cwap  = _rcm.get("wap",      _HGNOOP)
+                    _caus  = _rcm.get("ausencia", _HGNOOP)
 
                     # Foto
                     _foto = str(_r.get("foto_url") or "").strip()
@@ -3711,6 +3629,81 @@ if st.session_state.menu_atual == "Principal":
                         f"<span style='font-size:9px;color:#94A3B8;margin-left:2px;'>aulas/ano</span>"
                         f"<br>{_up_html}"
                         f"</div>",
+                        unsafe_allow_html=True,
+                    )
+
+                    # ⚠️ Ausência — badge de risco com link de acolhimento
+                    _up_aus = _r.get("ultima_presenca")
+                    if pd.notna(_up_aus):
+                        _up_aus_dt   = pd.Timestamp(_up_aus).date()
+                        _up_aus_dias = (_hoje_hg - _up_aus_dt).days
+                        _aus_ic = (
+                            "🟢" if _up_aus_dias <= 7 else
+                            "🟡" if _up_aus_dias <= 29 else
+                            "🟠" if _up_aus_dias <= 59 else "🔴"
+                        )
+                        _aus_bg = (
+                            "#D1FAE5" if _up_aus_dias <= 7 else
+                            "#FEF3C7" if _up_aus_dias <= 29 else
+                            "#FFEDD5" if _up_aus_dias <= 59 else "#FEE2E2"
+                        )
+                        _aus_fg = (
+                            "#065F46" if _up_aus_dias <= 7 else
+                            "#92400E" if _up_aus_dias <= 29 else
+                            "#9A3412" if _up_aus_dias <= 59 else "#991B1B"
+                        )
+                        _aus_html = (
+                            f"<span style='font-size:11px;font-weight:700;"
+                            f"background:{_aus_bg};color:{_aus_fg};"
+                            f"border-radius:999px;padding:2px 8px;"
+                            f"white-space:nowrap;'>{_aus_ic} {_up_aus_dias}d</span>"
+                        )
+                        if _wapp_ok and _up_aus_dias > 14:
+                            _wap_aus = str(_r.get("whatsapp") or "").strip()
+                            if _wap_aus:
+                                _ev_key_aus = "evasao_60" if _up_aus_dias <= 30 else "evasao_80"
+                                _tpl_aus = _tpl_map.get(
+                                    _ev_key_aus, "Olá {nome}, sentimos sua falta!"
+                                )
+                                _msg_aus = personalizar_mensagem(
+                                    _tpl_aus, str(_r.get("nome", ""))
+                                )
+                                _link_aus = montar_link_whatsapp(_wap_aus, _msg_aus)
+                                if _link_aus:
+                                    _cor_aus = "#F59E0B" if _up_aus_dias <= 30 else "#EF4444"
+                                    _aus_html += (
+                                        f"<br><a href='{_link_aus}' target='_blank' "
+                                        f"style='font-size:10px;color:{_cor_aus};"
+                                        f"text-decoration:none;font-weight:600;'>"
+                                        f"📱 Acolher</a>"
+                                    )
+                    else:
+                        _aus_html = (
+                            "<span style='font-size:11px;font-weight:700;"
+                            "background:#F1F5F9;color:#475569;"
+                            "border-radius:999px;padding:2px 8px;white-space:nowrap;'>"
+                            "⚫ nunca</span>"
+                        )
+                        if _wapp_ok:
+                            _wap_aus = str(_r.get("whatsapp") or "").strip()
+                            if _wap_aus:
+                                _tpl_aus = _tpl_map.get(
+                                    "evasao_nunca",
+                                    "Olá {nome}, ainda não te vimos por aqui!"
+                                )
+                                _msg_aus = personalizar_mensagem(
+                                    _tpl_aus, str(_r.get("nome", ""))
+                                )
+                                _link_aus = montar_link_whatsapp(_wap_aus, _msg_aus)
+                                if _link_aus:
+                                    _aus_html += (
+                                        f"<br><a href='{_link_aus}' target='_blank' "
+                                        f"style='font-size:10px;color:#EF4444;"
+                                        f"text-decoration:none;font-weight:600;'>"
+                                        f"📱 Acolher</a>"
+                                    )
+                    _caus.markdown(
+                        f"<div style='line-height:1.5;'>{_aus_html}</div>",
                         unsafe_allow_html=True,
                     )
 
