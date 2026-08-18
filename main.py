@@ -13,7 +13,7 @@ st.set_page_config(
     page_title="Esporte e Saúde - Gestão",
     layout="wide",
     page_icon="🏃‍♂️",
-    initial_sidebar_state="collapsed",
+    initial_sidebar_state="expanded",
 )
 
 # ── Esconde "Running..." e toolbar antes de qualquer render (incl. tela de login) ──
