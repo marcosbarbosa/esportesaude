@@ -1288,18 +1288,32 @@ def computar_snapshot_home_grid() -> dict:
         # ultima_presenca_ok permanece False
 
     # ── 2. Total presenças no ano letivo corrente (1º jan) ──────────────────
+    # Paginação obrigatória: Supabase trunca em 1000 linhas por chamada.
+    # Deduplicação por (aluno_id, data_aula): evita dupla-contagem de
+    # registros duplicados na tabela, garantindo integridade para premiações.
     try:
         _corte = _dt.date(_dt.date.today().year, 1, 1).isoformat()
-        res = (
-            supabase.from_("frequencia")
-            .select("aluno_id")
-            .eq("status", "PRESENTE")
-            .gte("data_aula", _corte)
-            .limit(200000)
-            .execute()
-        )
-        if res.data:
-            df_tp = pd.DataFrame(res.data)
+        _tp_rows = []
+        _tp_ini  = 0
+        for _ in range(500):
+            _tp_res = (
+                supabase.from_("frequencia")
+                .select("aluno_id, data_aula")
+                .eq("status", "PRESENTE")
+                .gte("data_aula", _corte)
+                .order("id")
+                .range(_tp_ini, _tp_ini + 999)
+                .execute()
+            )
+            if _tp_res.data:
+                _tp_rows.extend(_tp_res.data)
+            if not _tp_res.data or len(_tp_res.data) < 1000:
+                break
+            _tp_ini += 1000
+        if _tp_rows:
+            df_tp = pd.DataFrame(_tp_rows)
+            # Uma presença = um par único (aluno, data) — ignora duplicatas
+            df_tp = df_tp.drop_duplicates(subset=["aluno_id", "data_aula"])
             total = df_tp.groupby("aluno_id").size().reset_index(name="total_presencas_hist")
             total.rename(columns={"aluno_id": "id"}, inplace=True)
             snap["total_presencas_recs"] = total.to_dict("records")
@@ -1910,9 +1924,12 @@ def load_frequencia_ultima_presenca():
 
 @st.cache_data(ttl=300, show_spinner=False)
 def load_total_presencas_todos():
-    """Retorna DataFrame [id, total_presencas_hist] — total de presenças por aluno no ano letivo corrente (1º jan).
+    """Retorna DataFrame [id, total_presencas_hist] — total de presenças únicas por aluno
+    no ano letivo corrente (a partir de 1º jan).
 
-    Usa paginação correta (.order + .range) para não truncar em 1000 linhas.
+    Paginação obrigatória: Supabase trunca em 1000 linhas por chamada.
+    Deduplicação por (aluno_id, data_aula): cada presença conta uma única vez,
+    mesmo que existam registros duplicados na tabela — essencial para premiações.
     """
     import datetime as _dt
     try:
@@ -1923,7 +1940,7 @@ def load_total_presencas_todos():
         for _ in range(500):
             res = (
                 supabase.from_("frequencia")
-                .select("aluno_id")
+                .select("aluno_id, data_aula")
                 .eq("status", "PRESENTE")
                 .gte("data_aula", _corte)
                 .order("id")
@@ -1938,6 +1955,8 @@ def load_total_presencas_todos():
         if not todos:
             return pd.DataFrame(columns=["id", "total_presencas_hist"])
         df_f = pd.DataFrame(todos)
+        # Uma presença = um par único (aluno, data) — ignora registros duplicados
+        df_f = df_f.drop_duplicates(subset=["aluno_id", "data_aula"])
         total = df_f.groupby("aluno_id").size().reset_index(name="total_presencas_hist")
         total.rename(columns={"aluno_id": "id"}, inplace=True)
         return total

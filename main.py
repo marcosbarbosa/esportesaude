@@ -583,11 +583,39 @@ div[class*="AppRunning"]               { display: none !important; }
 div[class*="appRunning"]               { display: none !important; }
 div[class*="runningIndicator"]         { display: none !important; }
 div[class*="RunningIndicator"]         { display: none !important; }
-/* collapsedControl — botão de reabrir sidebar — sempre visível e clicável */
+/* collapsedControl — botão de reabrir sidebar — azul, fixo no canto, impossível de perder */
 [data-testid="collapsedControl"] {
     display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
     pointer-events: all !important;
-    z-index: 999 !important;
+    z-index: 99999 !important;
+    position: fixed !important;
+    top: 10px !important;
+    left: 10px !important;
+    width: 38px !important;
+    height: 38px !important;
+    background: #3B82F6 !important;
+    border-radius: 10px !important;
+    box-shadow: 0 3px 10px rgba(59,130,246,0.45) !important;
+    cursor: pointer !important;
+}
+[data-testid="collapsedControl"] button {
+    width: 100% !important;
+    height: 100% !important;
+    pointer-events: all !important;
+    cursor: pointer !important;
+    background: transparent !important;
+    border: none !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+}
+[data-testid="collapsedControl"] svg {
+    fill: #FFFFFF !important;
+    color: #FFFFFF !important;
+    width: 18px !important;
+    height: 18px !important;
 }
 .block-container {
     padding-top: 0 !important;
