@@ -559,7 +559,8 @@ st.markdown(
 /* ── BASE ──────────────────────────────────────────────────────────────────── */
 #MainMenu, footer { visibility: hidden; }
 [data-testid="stStatusWidget"]         { display: none !important; }
-[data-testid="stHeader"]               { display: none !important; }
+/* stHeader: transparente (não escondido) para preservar o botão de reabrir sidebar */
+[data-testid="stHeader"]               { background: transparent !important; height: 0 !important; overflow: visible !important; }
 [data-testid="stToolbar"]              { display: none !important; }
 [data-testid="stAppToolbar"]           { display: none !important; }
 [data-testid="stDecoration"]           { display: none !important; }
@@ -567,7 +568,8 @@ st.markdown(
 [data-testid="stConnectionStatus"]     { display: none !important; }
 [data-testid="stAppRunningIndicator"]  { display: none !important; }
 [data-testid="stMainMenuPopover"]      { display: none !important; }
-[data-testid="stAppViewBlockContainer"] > div:first-child [data-testid*="Running"] { display: none !important; }
+[data-testid="stMainMenu"]             { display: none !important; }
+[data-testid="appViewBlockContainer"] > div:first-child [data-testid*="Running"] { display: none !important; }
 .stAppToolbar                          { display: none !important; }
 .stToolbar                             { display: none !important; }
 #stDecoration                          { display: none !important; }
@@ -576,6 +578,8 @@ div[class*="AppRunning"]               { display: none !important; }
 div[class*="appRunning"]               { display: none !important; }
 div[class*="runningIndicator"]         { display: none !important; }
 div[class*="RunningIndicator"]         { display: none !important; }
+/* Garante que o botão de recolher/expandir sidebar sempre fique visível */
+[data-testid="collapsedControl"]       { display: flex !important; }
 .block-container {
     padding-top: 1rem !important;
     padding-left: 1.5rem !important;
