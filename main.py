@@ -559,8 +559,13 @@ st.markdown(
 /* ── BASE ──────────────────────────────────────────────────────────────────── */
 #MainMenu, footer { visibility: hidden; }
 [data-testid="stStatusWidget"]         { display: none !important; }
-/* stHeader: transparente (não escondido) para preservar o botão de reabrir sidebar */
-[data-testid="stHeader"]               { background: transparent !important; height: 0 !important; overflow: visible !important; }
+/* stHeader: transparente com altura natural — o collapsedControl precisa de área clicável */
+[data-testid="stHeader"] {
+    background: transparent !important;
+    border-bottom: none !important;
+    box-shadow: none !important;
+}
+/* Esconde apenas o conteúdo indesejado dentro do header */
 [data-testid="stToolbar"]              { display: none !important; }
 [data-testid="stAppToolbar"]           { display: none !important; }
 [data-testid="stDecoration"]           { display: none !important; }
@@ -569,7 +574,7 @@ st.markdown(
 [data-testid="stAppRunningIndicator"]  { display: none !important; }
 [data-testid="stMainMenuPopover"]      { display: none !important; }
 [data-testid="stMainMenu"]             { display: none !important; }
-[data-testid="appViewBlockContainer"] > div:first-child [data-testid*="Running"] { display: none !important; }
+[data-testid="stStatusWidget"]         { display: none !important; }
 .stAppToolbar                          { display: none !important; }
 .stToolbar                             { display: none !important; }
 #stDecoration                          { display: none !important; }
@@ -578,10 +583,14 @@ div[class*="AppRunning"]               { display: none !important; }
 div[class*="appRunning"]               { display: none !important; }
 div[class*="runningIndicator"]         { display: none !important; }
 div[class*="RunningIndicator"]         { display: none !important; }
-/* Garante que o botão de recolher/expandir sidebar sempre fique visível */
-[data-testid="collapsedControl"]       { display: flex !important; }
+/* collapsedControl — botão de reabrir sidebar — sempre visível e clicável */
+[data-testid="collapsedControl"] {
+    display: flex !important;
+    pointer-events: all !important;
+    z-index: 999 !important;
+}
 .block-container {
-    padding-top: 1rem !important;
+    padding-top: 0 !important;
     padding-left: 1.5rem !important;
     padding-right: 1.5rem !important;
     max-width: 100% !important;
@@ -1850,8 +1859,9 @@ with st.sidebar:
 
     # ── 🏃 OPERACIONAL ────────────────────────────────────────────────────────
     _op_cfg = [
-        ("✅ Frequência",      "Frequência",      "frequencia"),
-        ("🩺 Portal do Aluno", "Portal do Aluno",  "portal_aluno"),
+        ("✅ Frequência",           "Frequência",         "frequencia"),
+        ("🩺 Portal do Aluno",      "Portal do Aluno",    "portal_aluno"),
+        ("💙 Radar de Inativos",    "Radar de Inativos",  "gestor_radar"),
     ]
     _op_disp = [(l, d) for l, d, c in _op_cfg if _menu_liberado(c)]
     if _op_disp:
@@ -3962,6 +3972,10 @@ elif st.session_state.menu_atual == "Ficha de Matrícula":
 elif st.session_state.menu_atual == "Conferência Facial":
     from views.conferencia_facial_view import tela_conferencia_facial
     tela_conferencia_facial()
+
+elif st.session_state.menu_atual == "Radar de Inativos":
+    from views.radar_acolhimento_view import tela_radar_acolhimento
+    tela_radar_acolhimento()
 
 elif st.session_state.menu_atual in (
     "Gestor",
