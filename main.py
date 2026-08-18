@@ -2423,7 +2423,11 @@ if st.session_state.menu_atual == "Principal":
                 _df_atestad = pd.DataFrame(_recs_at) if _recs_at else pd.DataFrame(columns=["id", "data_vencimento_atestado"])
 
                 _recs_tp = _snap_home.get("total_presencas_recs", [])
-                _df_total_pres = pd.DataFrame(_recs_tp) if _recs_tp else pd.DataFrame(columns=["id", "total_presencas_hist"])
+                if _recs_tp:
+                    _df_total_pres = pd.DataFrame(_recs_tp)
+                else:
+                    # Snapshot não tem presencas — busca ao vivo (evita zerar a coluna)
+                    _df_total_pres = load_total_presencas_todos()
             else:
                 _df_ultima     = load_frequencia_ultima_presenca()
                 _df_atestad    = load_atestados_vencimento()

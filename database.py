@@ -1287,9 +1287,9 @@ def computar_snapshot_home_grid() -> dict:
         snap["ultima_presenca_recs"] = []
         # ultima_presenca_ok permanece False
 
-    # ── 2. Total presenças 60 dias ───────────────────────────────────────────
+    # ── 2. Total presenças no ano letivo corrente (1º jan) ──────────────────
     try:
-        _corte = (_dt.date.today() - _dt.timedelta(days=60)).isoformat()
+        _corte = _dt.date(_dt.date.today().year, 1, 1).isoformat()
         res = (
             supabase.from_("frequencia")
             .select("aluno_id")
