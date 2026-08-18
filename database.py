@@ -1261,20 +1261,30 @@ def computar_snapshot_home_grid() -> dict:
     snap: dict = {}
 
     # ── 1. Última presença (status=PRESENTE) por aluno ──────────────────────
-    # ultima_presenca_ok=True indica que a query foi concluída sem exceção;
-    # step 6 só classifica alunos como "nunca registrou" quando esse flag é True.
+    # Paginação obrigatória: Supabase trunca em 1000 linhas por chamada.
+    # .limit(200000) numa única chamada silenciosamente truncava em 1000,
+    # fazendo alunos com presenças reais aparecerem como "nunca vieram".
+    # ultima_presenca_ok=True indica que a query foi concluída sem exceção.
     snap["ultima_presenca_ok"] = False
     try:
-        res = (
-            supabase.from_("frequencia")
-            .select("aluno_id, data_aula")
-            .eq("status", "PRESENTE")
-            .order("data_aula", desc=True)
-            .limit(200000)
-            .execute()
-        )
-        if res.data:
-            df_up = pd.DataFrame(res.data)
+        _up_rows = []
+        _up_ini  = 0
+        for _ in range(500):
+            _up_res = (
+                supabase.from_("frequencia")
+                .select("aluno_id, data_aula")
+                .eq("status", "PRESENTE")
+                .order("id")
+                .range(_up_ini, _up_ini + 999)
+                .execute()
+            )
+            if _up_res.data:
+                _up_rows.extend(_up_res.data)
+            if not _up_res.data or len(_up_res.data) < 1000:
+                break
+            _up_ini += 1000
+        if _up_rows:
+            df_up = pd.DataFrame(_up_rows)
             df_up["data_aula"] = pd.to_datetime(df_up["data_aula"], errors="coerce")
             ult = df_up.groupby("aluno_id")["data_aula"].max().reset_index()
             ult.columns = ["id", "ultima_presenca"]
