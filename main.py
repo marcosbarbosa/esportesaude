@@ -1917,6 +1917,53 @@ with st.sidebar:
         st.session_state.clear()
         st.rerun()
 
+# ── Menu alternativo no corpo da aplicação ───────────────────────────────────
+# Não depende da visibilidade da sidebar nem do comportamento do navegador.
+# Fica disponível em qualquer módulo para garantir acesso à navegação.
+st.markdown(
+    "<div style='height:4px;'></div>",
+    unsafe_allow_html=True,
+)
+_menu_alternativo = st.checkbox(
+    "☰ Exibir menu de módulos",
+    value=False,
+    key="_menu_alternativo_aberto",
+    help="Exibe os módulos do sistema nesta página, mesmo quando a barra lateral estiver oculta.",
+)
+if _menu_alternativo:
+    _nav_alt_cfg = [
+        ("🏠 Início", "Principal", "principal"),
+        ("✅ Frequência", "Frequência", "frequencia"),
+        ("🩺 Portal do Aluno", "Portal do Aluno", "portal_aluno"),
+        ("💙 Radar de Inativos", "Radar de Inativos", "gestor_radar"),
+        ("📊 Relatórios & BI", "Relatórios & BI", "relatorios_bi"),
+        ("🎯 Gestor", "Gestor", "gestor"),
+    ]
+    _nav_alt_disp = [
+        (_lbl, _dst) for _lbl, _dst, _chave in _nav_alt_cfg
+        if _menu_liberado(_chave)
+    ]
+    if _nav_alt_disp:
+        with st.container(border=True):
+            st.caption("🧭 **Navegação do sistema**")
+            _nav_alt_cols = st.columns(
+                min(len(_nav_alt_disp), 4),
+                gap="small",
+            )
+            for _nav_alt_idx, (_nav_alt_lbl, _nav_alt_dst) in enumerate(_nav_alt_disp):
+                with _nav_alt_cols[_nav_alt_idx % len(_nav_alt_cols)]:
+                    if st.button(
+                        _nav_alt_lbl,
+                        key=f"_nav_alt_{_nav_alt_dst.replace(' ', '_').replace('&', 'e')}",
+                        type=(
+                            "primary"
+                            if st.session_state.get("menu_atual") == _nav_alt_dst
+                            else "secondary"
+                        ),
+                        use_container_width=True,
+                    ):
+                        _navegar(_nav_alt_dst)
+
 # --- DASHBOARD PRINCIPAL ---
 if st.session_state.menu_atual == "Principal":
     # ── CSS Global do Dashboard ─────────────────────────────────────────────
