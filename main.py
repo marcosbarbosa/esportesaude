@@ -2328,6 +2328,7 @@ if st.session_state.menu_atual == "Principal":
         # ── Catálogo de colunas toggleáveis (chave, rótulo UI, largura tela) ──
         _HG_COL_DEFS = [
             ("turma",    "Turma",        0.9),
+            ("volunt",   "🤝 Voluntário", 1.1),
             ("aniv",     "Aniversário",  0.8),
             ("freq",     "Freq.+Pres.",  1.6),
             ("ausencia", "⚠️ Ausência",   1.0),
@@ -2882,7 +2883,7 @@ if st.session_state.menu_atual == "Principal":
                     (_vp("pa"),        "Ult. PA",        28),
                     (_vp("anam"),      "Anamnese",       32),
                     (_vp("wap"),       "WhatsApp",       22),
-                    (True,             "Voluntariado",   32),
+                    (_vp("volunt"),    "Voluntário",     32),
                 ]
                 _hdrs   = [h for show, h, w in _pdf_col_spec if show]
                 _widths = [w for show, h, w in _pdf_col_spec if show]
@@ -2977,7 +2978,7 @@ if st.session_state.menu_atual == "Principal":
                         (_vp("pa"),        str(a.get("_pa_txt", "") or "-")[:11]),
                         (_vp("anam"),      f"{_anam_pdf_str} ({_anam_lbl_pdf})"[:18]),
                         (_vp("wap"),       str(a.get("whatsapp") or "-")[:18]),
-                        (True,             _vol_pdf_val),
+                        (_vp("volunt"),    _vol_pdf_val),
                     ]
                     _txt_vals = [v for show, v in _txt_all if show]
                     for _pw, _pv in zip(_widths[1:], _txt_vals):
@@ -3032,7 +3033,7 @@ if st.session_state.menu_atual == "Principal":
                     ("pa",       "Última PA",       12,  None,    False, False),
                     ("anam",     "Anamnese Data",   13,  "anam",  False, False),
                     ("anam",     "Status Anam.",    12,  "anam",  False, False),
-                    (None,       "Voluntariado",    28,  None,    True,  False),
+                    ("volunt",   "Voluntário",      28,  None,    True,  False),
                     ("wap",      "WhatsApp",        16,  None,    True,  False),
                     (None,       "Tags de Saúde",   40,  None,    True,  False),
                 ]
@@ -3058,23 +3059,9 @@ if st.session_state.menu_atual == "Principal":
                 ws.row_dimensions[2].height = 16
 
                 # ── Cabeçalhos ────────────────────────────────────────────
-                _cols = [
-                    ("#",              6),
-                    ("Nome",           36),
-                    ("Turma",          14),
-                    ("Aniversário",    13),
-                    ("Freq. Ano",        9),
-                    ("Total Presenças", 14),
-                    ("Última Presença", 14),
-                    ("Venc. Atestado",  14),
-                    ("Status Atest.",   12),
-                    ("Última PA",       12),
-                    ("Anamnese Data",   13),
-                    ("Status Anam.",    12),
-                    ("Voluntariado",    28),
-                    ("WhatsApp",        16),
-                    ("Tags de Saúde",   40),
-                ]
+                # _cols já foi calculado a partir de _act_spec acima. Reutilizá-lo
+                # garante que os cabeçalhos acompanhem exatamente as colunas
+                # escolhidas pelo operador, sem deslocar os dados no Excel.
                 for ci, (lbl, w) in enumerate(_cols, start=1):
                     cell = ws.cell(row=3, column=ci, value=lbl)
                     cell.font      = Font(bold=True, color=_HDR_FG, size=9)
@@ -3175,7 +3162,7 @@ if st.session_state.menu_atual == "Principal":
                         ("pa",       _pa_txt),
                         ("anam",     _anam_str),
                         ("anam",     _anam_lbl),
-                        (None,       _vol_str),
+                        ("volunt",   _vol_str),
                         ("wap",      str(a.get("whatsapp") or "")),
                         (None,       _tags_str),
                     ]
@@ -3428,6 +3415,11 @@ if st.session_state.menu_atual == "Principal":
                 _hf1, _hf2 = _hcm["_hh_freq"].columns(2, gap="small")
                 _sort_btn(_hf1, "⏱ Freq.Ano", "total_presencas_hist")
                 _sort_btn(_hf2, "📅 Últ. Pres.", "ultima_presenca")
+            if "_hh_volunt"   in _hcm:
+                _hcm["_hh_volunt"].markdown(
+                    "<span style='font-size:12px;font-weight:600;color:#166534;'>🤝 Voluntário</span>",
+                    unsafe_allow_html=True,
+                )
             if "_hh_atestado" in _hcm: _sort_btn(_hcm["_hh_atestado"], "🏥 Venc. Atestado",  "data_vencimento_atestado")
             if "_hh_pa"       in _hcm: _sort_btn(_hcm["_hh_pa"],       "🩸 Últ. PA",         "_pa_sis")
             if "_hh_anam"     in _hcm: _sort_btn(_hcm["_hh_anam"],     "📋 Anamnese",        "_anam_data")
@@ -3490,6 +3482,7 @@ if st.session_state.menu_atual == "Principal":
                     _rcm = dict(zip(_row_k, _row_cols_list))
                     _ca    = _rcm["_ca"]; _cb = _rcm["_cb"]; _cf = _rcm["_cf"]
                     _cc    = _rcm.get("turma",    _HGNOOP)
+                    _cvol  = _rcm.get("volunt",   _HGNOOP)
                     _cd    = _rcm.get("aniv",     _HGNOOP)
                     _ce    = _rcm.get("freq",     _HGNOOP)
                     _cg    = _rcm.get("atestado", _HGNOOP)
@@ -3571,7 +3564,30 @@ if st.session_state.menu_atual == "Principal":
                         "border-radius:3px;padding:1px 5px;"
                         "font-size:10px;font-weight:800;"
                         "margin-right:5px;white-space:nowrap;'>🤝 Vol.</abbr>"
-                    ) if _vol_int_r == "sim" else ""
+                    ) if _vol_int_r == "sim" and _hg_vis.get("volunt", True) else ""
+
+                    # Coluna dedicada de voluntariado: vínculo estruturado tem
+                    # prioridade, depois o interesse/área declarada no cadastro.
+                    if _vol_int_r == "sim":
+                        _vol_resumo = (
+                            ", ".join(_vol_acoes_r)
+                            if _vol_acoes_r
+                            else str(_r.get("trabalho_voluntario_areas") or "").strip()
+                        )
+                        _vol_resumo = _vol_resumo or "Disponível"
+                        _vol_html = (
+                            "<span style='display:inline-block;font-size:10px;font-weight:800;"
+                            "color:#166534;background:#F0FDF4;border:1px solid #86EFAC;"
+                            "border-radius:999px;padding:2px 6px;white-space:nowrap;'>🤝 Sim</span>"
+                            f"<br><span title='{_vol_resumo}' style='display:inline-block;"
+                            "max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"
+                            "font-size:10px;color:#166534;margin-top:2px;'>"
+                            f"{_vol_resumo}</span>"
+                        )
+                    else:
+                        _vol_html = "<span style='color:#CBD5E1;font-size:12px;'>—</span>"
+                    _cvol.markdown(_vol_html, unsafe_allow_html=True)
+
                     # Linha de ações (visível quando filtro de voluntários ativo)
                     if _vol_int_r == "sim" and _hg_vol_filter:
                         if _vol_acoes_r:
