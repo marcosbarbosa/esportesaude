@@ -510,7 +510,39 @@ def aprovar_inscricao_aluno(pre_cadastro_id, turma_selecionada, forcar=False):
                     "Inscrição marcada como **Duplicata** — revise na triagem e force a matrícula se for pessoa diferente."
                 )
 
-        supabase.from_("alunos").insert(_com_fonetica(novo_aluno)).execute()
+        res_novo = (
+            supabase.from_("alunos")
+            .insert(_com_fonetica(novo_aluno))
+            .execute()
+        )
+        novo_id = (
+            str(res_novo.data[0].get("id"))
+            if getattr(res_novo, "data", None) and res_novo.data[0].get("id")
+            else ""
+        )
+        if not novo_id:
+            return False, "Não foi possível confirmar o identificador do aluno matriculado."
+
+        # Documento enviado na inscrição entra no histórico oficial. A inscrição
+        # não conhece a validade real, portanto NUNCA estima 365 dias: o status
+        # ficará SEM_VALIDIDADE até a equipe conferir e registrar a data correta.
+        _url_ate_pre = str(pre.get("url_atestado_medico") or "").strip()
+        if _url_ate_pre:
+            _data_ate_pre = pre.get("data_atestado") or datetime.date.today().isoformat()
+            _ok_ate, _msg_ate = salvar_atestado_temporario(
+                novo_id,
+                _data_ate_pre,
+                "Documento de aptidão enviado na inscrição — validade a conferir.",
+                _url_ate_pre,
+                data_vencimento=pre.get("data_vencimento_atestado"),
+                tipo_atestado="aptidao_fisica",
+            )
+            if not _ok_ate:
+                # Compensação explícita: não aprova uma inscrição parcialmente
+                # migrada se o documento oficial não pôde ser arquivado.
+                supabase.from_("alunos").delete().eq("id", novo_id).execute()
+                return False, f"Não foi possível arquivar o atestado da inscrição: {_msg_ate}"
+
         supabase.from_("pre_cadastros").update({"status": "Aprovado"}).eq(
             "id", pre_cadastro_id
         ).execute()
@@ -712,6 +744,7 @@ def _inv_alunos():
         _carregar_base_alunos, buscar_alunos_geral, _coluna_fonetica_pronta,
         buscar_aluno_por_id, get_alunos_por_turma,
         get_avaliacoes_aluno, get_atestados_temporarios,
+        load_atestados_vencimento,
         get_estatisticas_frequencia_aluno, get_historico_aulas_aluno,
         bi_resumo_studio, bi_distribuicao_risco, bi_alunos_risco_abandono,
         bi_evolucao_cadastros, bi_dados_individuais, get_pre_cadastros_pendentes,
@@ -1114,7 +1147,30 @@ def get_alunos_por_turma(turma_nome):
             .neq("status", "Inativo")
             .execute()
         )
-        return pd.DataFrame(res.data)
+        df = pd.DataFrame(res.data)
+        if df.empty:
+            return df
+
+        # Contrato único de atestado para a chamada diária: esta mesma estrutura
+        # alimenta a tela inicial e o prontuário, sem recálculos locais de datas.
+        df_status = load_atestados_vencimento()
+        if not df_status.empty:
+            df = df.merge(df_status, on="id", how="left")
+        for col, padrao in (
+            ("status_atestado", "SEM_REGISTRO"),
+            ("rotulo_atestado", "Sem atestado de aptidão registrado"),
+            ("data_vencimento_atestado", None),
+            ("data_vencimento_formatada", "—"),
+            ("atestado_dias_restantes", None),
+            ("atestado_icone", "📋"),
+            ("atestado_cor", "#64748B"),
+            ("atestado_fundo", "#F1F5F9"),
+        ):
+            if col not in df.columns:
+                df[col] = padrao
+            else:
+                df[col] = df[col].fillna(padrao)
+        return df
     except Exception:
         return pd.DataFrame()
 
@@ -1332,24 +1388,15 @@ def computar_snapshot_home_grid() -> dict:
     except Exception:
         snap["total_presencas_recs"] = []
 
-    # ── 3. Vencimento de atestado de aptidão ────────────────────────────────
+    # ── 3. Status do atestado de aptidão ─────────────────────────────────────
+    # Fonte única: status_atestado() em utils/atestado_ui.py.
+    # O snapshot preserva as mesmas colunas consumidas pela tela inicial e
+    # pela chamada diária, sem regras locais concorrentes de data.
     try:
-        res = (
-            supabase.from_("atestados_temporarios")
-            .select("aluno_id, data_vencimento")
-            .eq("tipo_atestado", "aptidao_fisica")
-            .not_.is_("data_vencimento", "null")
-            .execute()
+        df_at = load_atestados_vencimento()
+        snap["atestados_recs"] = (
+            df_at.to_dict("records") if not df_at.empty else []
         )
-        if res.data:
-            df_at = pd.DataFrame(res.data)
-            df_at["data_vencimento"] = pd.to_datetime(df_at["data_vencimento"], errors="coerce")
-            mais_rec = df_at.groupby("aluno_id")["data_vencimento"].max().reset_index()
-            mais_rec.columns = ["id", "data_vencimento_atestado"]
-            mais_rec["data_vencimento_atestado"] = mais_rec["data_vencimento_atestado"].astype(str).str[:10]
-            snap["atestados_recs"] = mais_rec.to_dict("records")
-        else:
-            snap["atestados_recs"] = []
     except Exception:
         snap["atestados_recs"] = []
 
@@ -1869,30 +1916,57 @@ def excluir_midia_diario(midia_id):
 # ==============================================================================
 @st.cache_data(ttl=300, show_spinner=False)
 def load_atestados_vencimento():
-    """Retorna DataFrame com colunas [id, data_vencimento_atestado].
+    """Retorna o DataFrame canônico de status de atestado por aluno.
 
-    Busca o atestado de aptidao_fisica mais recente (maior data_vencimento)
-    por aluno em atestados_temporarios. Usado para exibir semáforo de
-    vencimento no grid principal."""
+    Colunas: id, status_atestado, data_vencimento_atestado,
+    data_vencimento_formatada, atestado_dias_restantes e metadados visuais.
+    O registro vigente é sempre o último atestado de aptidão pela
+    ``data_registro``; a interpretação da data é delegada a status_atestado().
+    """
     try:
-        res = (
-            supabase.from_("atestados_temporarios")
-            .select("aluno_id, data_vencimento")
-            .eq("tipo_atestado", "aptidao_fisica")
-            .not_.is_("data_vencimento", "null")
-            .execute()
-        )
-        if not res.data:
-            return pd.DataFrame(columns=["id", "data_vencimento_atestado"])
-        df_at = pd.DataFrame(res.data)
-        df_at["data_vencimento"] = pd.to_datetime(df_at["data_vencimento"], errors="coerce")
-        mais_recente = (
-            df_at.groupby("aluno_id")["data_vencimento"].max().reset_index()
-        )
-        mais_recente.columns = ["id", "data_vencimento_atestado"]
-        return mais_recente
+        from utils.atestado_ui import status_atestado
+
+        todos = []
+        inicio = 0
+        for _ in range(500):
+            res = (
+                supabase.from_("atestados_temporarios")
+                .select("id, aluno_id, data_registro, data_vencimento, tipo_atestado")
+                .eq("tipo_atestado", "aptidao_fisica")
+                .order("id")
+                .range(inicio, inicio + 999)
+                .execute()
+            )
+            if res.data:
+                todos.extend(res.data)
+            if not res.data or len(res.data) < 1000:
+                break
+            inicio += 1000
+
+        colunas = [
+            "id", "status_atestado", "rotulo_atestado",
+            "data_vencimento_atestado", "data_vencimento_formatada",
+            "atestado_dias_restantes", "atestado_icone", "atestado_cor",
+            "atestado_fundo",
+        ]
+        if not todos:
+            return pd.DataFrame(columns=colunas)
+
+        por_aluno = {}
+        for registro in todos:
+            por_aluno.setdefault(str(registro.get("aluno_id")), []).append(registro)
+
+        resultado = []
+        for aluno_id, registros in por_aluno.items():
+            resultado.append({"id": aluno_id, **status_atestado(registros)})
+        return pd.DataFrame(resultado)
     except Exception:
-        return pd.DataFrame(columns=["id", "data_vencimento_atestado"])
+        return pd.DataFrame(columns=[
+            "id", "status_atestado", "rotulo_atestado",
+            "data_vencimento_atestado", "data_vencimento_formatada",
+            "atestado_dias_restantes", "atestado_icone", "atestado_cor",
+            "atestado_fundo",
+        ])
 
 
 @st.cache_data(ttl=300, show_spinner=False)
@@ -3223,6 +3297,9 @@ def salvar_atestado_temporario(aluno_id, data_registro, motivo, url_documento,
         except Exception:
             pass
 
+    # A próxima abertura de prontuário, chamada ou grid deve refletir a nova
+    # data imediatamente; o snapshot persistido é atualizado pelo Processar em Lote.
+    _inv_alunos()
     return True, "Sucesso"
 
 

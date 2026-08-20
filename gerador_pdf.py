@@ -730,6 +730,11 @@ def criar_documento_aluno_pdf(aluno_data, avaliacoes, historico, estatisticas, i
         else:
             _apt = atestados_df
         atestado_apt = _apt.iloc[0].to_dict()
+    from utils.atestado_ui import status_atestado
+    _status_atestado_pdf = status_atestado(
+        atestados_df,
+        bloqueado_manual=bool(aluno_data.get("atestado_bloqueado")),
+    )
 
     # ── Construção do PDF ─────────────────────────────────────────────────────
     pdf = PDF()
@@ -1154,6 +1159,21 @@ def criar_documento_aluno_pdf(aluno_data, avaliacoes, historico, estatisticas, i
     _atestados_list = []
     if isinstance(atestados_df, pd.DataFrame) and not atestados_df.empty:
         _atestados_list = atestados_df.to_dict("records")
+
+    # Resumo canônico do atestado de aptidão. O histórico abaixo mantém todos
+    # os documentos, mas esta linha é a referência única de validade do aluno.
+    _pdf_status_txt = (
+        f"Atestado de Aptidao — validade: "
+        f"{_status_atestado_pdf['data_vencimento_formatada']} — "
+        f"{_status_atestado_pdf['rotulo_atestado']}"
+    )
+    if _status_atestado_pdf["atestado_bloqueado_manual"]:
+        _pdf_status_txt += " — PARTICIPACAO BLOQUEADA MANUALMENTE"
+    pdf.set_fill_color(245, 248, 252)
+    pdf.set_text_color(0, 0, 0)
+    pdf.set_font("Arial", "B", 9)
+    pdf.multi_cell(0, 6, limpar_texto(_pdf_status_txt), border=1, fill=True)
+    pdf.ln(2)
 
     if _atestados_list:
         pdf.set_fill_color(30, 136, 229)

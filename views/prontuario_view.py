@@ -14,7 +14,10 @@ import math
 import requests
 from PIL import Image, ImageOps
 from views.utils_docs import url_eh_imagem, renderizar_documento_com_rotacao
-from utils.atestado_ui import TIPOS_ATESTADO, TIPOS_LABEL, tipo_badge_html, validade_badge_html
+from utils.atestado_ui import (
+    TIPOS_ATESTADO, TIPOS_LABEL, tipo_badge_html, validade_badge_html,
+    status_atestado,
+)
 
 from database import (
     salvar_avaliacao_prontuario,
@@ -535,15 +538,14 @@ def renderizar_ficha():
             )
             st.code(SQL_MIGRAR_SAIDA_ALUNO, language="sql")
 
-    # ── Última data de vencimento do atestado de aptidão (calculada aqui para
-    #    reutilizar no banner e na aba de Documentação sem dobrar a query) ──────
+    # ── Status canônico do atestado de aptidão ────────────────────────────────
+    # Reutilizado no banner e em Documentação. Não recalcular datas localmente.
     _ats_prontuario = get_atestados_temporarios(aluno["id"])
-    _dv_aptidao = None
-    if _ats_prontuario is not None and not _ats_prontuario.empty:
-        if "tipo_atestado" in _ats_prontuario.columns:
-            _apt_rows = _ats_prontuario[_ats_prontuario["tipo_atestado"] == "aptidao_fisica"]
-            if not _apt_rows.empty and "data_vencimento" in _apt_rows.columns:
-                _dv_aptidao = _apt_rows.iloc[0].get("data_vencimento")
+    _status_ate_pront = status_atestado(
+        _ats_prontuario,
+        bloqueado_manual=bool(aluno.get("atestado_bloqueado")),
+    )
+    _dv_aptidao = _status_ate_pront["data_vencimento_atestado"]
 
     # ── Helper de permissões (segue o padrão _menu_liberado de main.py) ─────────
     def _pront_lib(chave: str) -> bool:
@@ -630,28 +632,16 @@ def renderizar_ficha():
                 else:
                     st.error(_msg)
     # ── Badge de validade do atestado de aptidão — sempre visível ────────────
-    import datetime as _dt_pv
-    _hoje_pv = _dt_pv.date.today()
-    if _dv_aptidao:
-        try:
-            _dv_parsed = _dt_pv.date.fromisoformat(str(_dv_aptidao)[:10])
-            _dias_pv = (_dv_parsed - _hoje_pv).days
-            _dv_fmt  = _dv_parsed.strftime("%d/%m/%Y")
-            if _dias_pv < 0:
-                _apt_bg, _apt_fg, _apt_ico = "#FEF2F2", "#991B1B", "⛔"
-                _apt_txt = f"Atestado de aptidão <b>VENCIDO</b> em {_dv_fmt}"
-            elif _dias_pv <= 30:
-                _apt_bg, _apt_fg, _apt_ico = "#FFFBEB", "#92400E", "⚠️"
-                _apt_txt = f"Atestado de aptidão vence em <b>{_dias_pv} dia(s)</b> — {_dv_fmt}"
-            else:
-                _apt_bg, _apt_fg, _apt_ico = "#F0FDF4", "#166534", "✅"
-                _apt_txt = f"Atestado de aptidão válido até <b>{_dv_fmt}</b>"
-        except Exception:
-            _apt_bg, _apt_fg, _apt_ico = "#F1F5F9", "#475569", "📋"
-            _apt_txt = f"Atestado de aptidão: {_dv_aptidao}"
-    else:
-        _apt_bg, _apt_fg, _apt_ico = "#FEF2F2", "#991B1B", "🚨"
-        _apt_txt = "Atestado de aptidão <b>não cadastrado</b> — necessário para aulas"
+    _apt_bg  = _status_ate_pront["atestado_fundo"]
+    _apt_fg  = _status_ate_pront["atestado_cor"]
+    _apt_ico = _status_ate_pront["atestado_icone"]
+    _apt_dt  = _status_ate_pront["data_vencimento_formatada"]
+    _apt_txt = (
+        f"Atestado de aptidão: <b>{_status_ate_pront['rotulo_atestado']}</b>"
+        f" — validade: <b>{_apt_dt}</b>"
+    )
+    if _status_ate_pront["atestado_bloqueado_manual"]:
+        _apt_txt += " — <b>participação bloqueada manualmente</b>"
 
     st.markdown(
         f"<div style='background:{_apt_bg};border-left:4px solid {_apt_fg};"

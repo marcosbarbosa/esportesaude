@@ -455,12 +455,25 @@ def renderizar_aba_terminal(
                     else ""
                 )
 
-                # 🏥 ATESTADO — badge inferior esquerdo + bloqueia chamada
+                # 🏥 ATESTADO — mesmas colunas canônicas da tela inicial.
+                # A data fica visível no cartão; não há cálculo local de validade.
                 _atestado_bloq = bool(row.get("atestado_bloqueado"))
+                _at_status = str(row.get("status_atestado") or "SEM_REGISTRO")
+                _at_data = str(row.get("data_vencimento_formatada") or "—")
+                _at_rotulo = str(row.get("rotulo_atestado") or "Sem atestado de aptidão registrado")
+                _at_icone = str(row.get("atestado_icone") or "📋")
+                _at_cor = str(row.get("atestado_cor") or "#64748B")
+                _at_fundo = str(row.get("atestado_fundo") or "#F1F5F9")
                 atestado_html = (
-                    "<div class='atestado-alerta' title='Atestado médico pendente — Participação bloqueada'>🏥</div>"
+                    "<div class='atestado-alerta' title='Participação bloqueada manualmente'>🏥</div>"
                     if _atestado_bloq
                     else ""
+                )
+                atestado_resumo_html = (
+                    f"<div title='{_at_rotulo}' style='margin-top:2px;font-size:8px;font-weight:700;"
+                    f"color:{_at_cor};background:{_at_fundo};border-radius:5px;padding:1px 4px;"
+                    f"white-space:nowrap;overflow:hidden;text-overflow:ellipsis;'>"
+                    f"{_at_icone} {_at_data}</div>"
                 )
 
                 # 🧪 AVALIAÇÃO PENDENTE — badge inferior direito + bloqueia chamada
@@ -579,6 +592,7 @@ def renderizar_aba_terminal(
                     f"</div>"
                     f'<div class="badge-status">{indicador}</div>'
                     f'<div class="nome-aluno">{nome_formatado}</div>'
+                    f"{atestado_resumo_html}"
                     f"</div>"
                 )
 

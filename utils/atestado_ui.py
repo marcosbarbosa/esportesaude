@@ -23,6 +23,133 @@ _TIPO_BADGE_STYLE = {
 }
 
 
+def _converter_para_data(valor):
+    """Converte valores comuns do Supabase/Pandas para date, sem lançar exceção."""
+    if valor is None:
+        return None
+    if isinstance(valor, datetime.datetime):
+        return valor.date()
+    if isinstance(valor, datetime.date):
+        return valor
+    texto = str(valor).strip()
+    if not texto or texto.lower() in ("none", "nan", "nat", "null"):
+        return None
+    try:
+        return datetime.date.fromisoformat(texto[:10])
+    except (TypeError, ValueError):
+        return None
+
+
+def _registros_para_lista(registros):
+    """Aceita DataFrame, lista de dicts ou um dict e devolve lista de dicts."""
+    if registros is None:
+        return []
+    if hasattr(registros, "to_dict"):
+        try:
+            return registros.to_dict("records")
+        except (TypeError, ValueError):
+            return []
+    if isinstance(registros, dict):
+        return [registros]
+    try:
+        return [registro for registro in registros if isinstance(registro, dict)]
+    except TypeError:
+        return []
+
+
+def status_atestado(registros=None, bloqueado_manual=False, hoje=None):
+    """Calcula a situação canônica do atestado de aptidão de um aluno.
+
+    A fonte é sempre o último registro de ``aptidao_fisica`` pela data do
+    atestado (``data_registro``), nunca uma data calculada ou outro tipo de
+    documento. O retorno é estável para ser usado em DataFrames, prontuário,
+    dossiê, tela inicial e chamada diária.
+
+    ``bloqueado_manual`` é uma trava administrativa independente da validade:
+    ela bloqueia a participação, mas não muda nem apaga a data do atestado.
+    """
+    hoje = hoje or datetime.date.today()
+    todos = _registros_para_lista(registros)
+    aptidoes = [
+        registro for registro in todos
+        if str(registro.get("tipo_atestado") or "").strip() == "aptidao_fisica"
+    ]
+
+    if not aptidoes:
+        return {
+            "status_atestado": "SEM_REGISTRO",
+            "rotulo_atestado": "Sem atestado de aptidão registrado",
+            "data_vencimento_atestado": None,
+            "data_vencimento_formatada": "—",
+            "atestado_dias_restantes": None,
+            "atestado_icone": "📋",
+            "atestado_cor": "#64748B",
+            "atestado_fundo": "#F1F5F9",
+            "atestado_bloqueado_manual": bool(bloqueado_manual),
+        }
+
+    # "data_registro" é a data informada no cadastro do documento. Em empate,
+    # a maior validade vence somente para manter o resultado determinístico.
+    def _chave_ordenacao(registro):
+        return (
+            _converter_para_data(registro.get("data_registro")) or datetime.date.min,
+            _converter_para_data(registro.get("data_vencimento")) or datetime.date.min,
+            str(registro.get("id") or ""),
+        )
+
+    atual = max(aptidoes, key=_chave_ordenacao)
+    vencimento = _converter_para_data(atual.get("data_vencimento"))
+    base = {
+        "data_vencimento_atestado": vencimento.isoformat() if vencimento else None,
+        "data_vencimento_formatada": vencimento.strftime("%d/%m/%Y") if vencimento else "—",
+        "atestado_bloqueado_manual": bool(bloqueado_manual),
+    }
+
+    if not vencimento:
+        return {
+            **base,
+            "status_atestado": "SEM_VALIDIDADE",
+            "rotulo_atestado": "Atestado sem data de validade",
+            "atestado_dias_restantes": None,
+            "atestado_icone": "⚠️",
+            "atestado_cor": "#92400E",
+            "atestado_fundo": "#FEF3C7",
+        }
+
+    dias = (vencimento - hoje).days
+    if dias < 0:
+        return {
+            **base,
+            "status_atestado": "VENCIDO",
+            "rotulo_atestado": f"Vencido há {abs(dias)} dia(s)",
+            "atestado_dias_restantes": dias,
+            "atestado_icone": "⛔",
+            "atestado_cor": "#991B1B",
+            "atestado_fundo": "#FEE2E2",
+        }
+    if dias <= 30:
+        return {
+            **base,
+            "status_atestado": "A_VENCER",
+            "rotulo_atestado": (
+                "Vence hoje" if dias == 0 else f"Vence em {dias} dia(s)"
+            ),
+            "atestado_dias_restantes": dias,
+            "atestado_icone": "⚠️",
+            "atestado_cor": "#92400E",
+            "atestado_fundo": "#FEF3C7",
+        }
+    return {
+        **base,
+        "status_atestado": "VALIDO",
+        "rotulo_atestado": f"Válido por mais {dias} dia(s)",
+        "atestado_dias_restantes": dias,
+        "atestado_icone": "✅",
+        "atestado_cor": "#166534",
+        "atestado_fundo": "#D1FAE5",
+    }
+
+
 def tipo_badge_html(tipo: str) -> str:
     label = TIPOS_LABEL.get(tipo, TIPOS_LABEL.get("outro", "📋 Outro / Geral"))
     bg, fg = _TIPO_BADGE_STYLE.get(tipo, _TIPO_BADGE_STYLE["outro"])

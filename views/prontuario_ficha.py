@@ -170,6 +170,9 @@ def excluir_atestado_temporario_local(atestado_id):
         supabase.table("atestados_temporarios").delete().eq(
             "id", str(atestado_id)
         ).execute()
+        # Reflete a remoção imediatamente no prontuário, chamada e tela inicial.
+        from database import _inv_alunos
+        _inv_alunos()
         return True, "Atestado removido."
     except Exception as e:
         return False, str(e)
@@ -267,7 +270,10 @@ def rotacionar_imagem_supabase(aluno_id, url_atual, angulo):
 
 
 from views.utils_docs import url_eh_imagem, renderizar_documento_com_rotacao
-from utils.atestado_ui import TIPOS_ATESTADO, TIPOS_LABEL, tipo_badge_html, validade_badge_html
+from utils.atestado_ui import (
+    TIPOS_ATESTADO, TIPOS_LABEL, tipo_badge_html, validade_badge_html,
+    status_atestado,
+)
 
 
 def processar_documento_prontuario(file_bytes, file_name, file_type):
@@ -864,65 +870,28 @@ def render_cabecalho_aluno(aluno):
 
     st.markdown("<div style='margin-bottom:4px;'></div>", unsafe_allow_html=True)
 
-    # 📅 Banner Vencimento do Atestado de Aptidão Física ─────────────────────
-    try:
-        _atest_resp = supabase.table("atestados_temporarios") \
-            .select("data_vencimento, data_registro") \
-            .eq("aluno_id", str(aluno["id"])) \
-            .eq("tipo_atestado", "aptidao_fisica") \
-            .order("data_registro", desc=True) \
-            .limit(1).execute()
-        _atest_rows = _atest_resp.data if _atest_resp and _atest_resp.data else []
-        _atest_venc_str = _atest_rows[0].get("data_vencimento") if _atest_rows else None
-    except Exception:
-        _atest_venc_str = None
-
-    _hoje_at = datetime.date.today()
+    # 📅 Banner de validade — fonte única: status_atestado()
+    _status_ate_ficha = status_atestado(
+        get_atestados_temporarios(aluno["id"]),
+        bloqueado_manual=_bloqueado_atestado,
+    )
     _vb_col, _vb_btn = st.columns([5, 1], vertical_alignment="center")
     with _vb_col:
-        if _atest_venc_str:
-            try:
-                _venc_d = datetime.date.fromisoformat(str(_atest_venc_str)[:10])
-                _dias_r = (_venc_d - _hoje_at).days
-                if _dias_r > 60:
-                    _vb_bg="#F0FDF4"; _vb_bdr="#22C55E"; _vb_cor="#166534"; _vb_ico="✅"
-                    _vb_status=f"válido por mais {_dias_r} dias"
-                elif _dias_r > 30:
-                    _vb_bg="#FFF7ED"; _vb_bdr="#F59E0B"; _vb_cor="#92400E"; _vb_ico="⚠️"
-                    _vb_status=f"vence em {_dias_r} dias — atualize em breve"
-                elif _dias_r > 0:
-                    _vb_bg="#FFF1F2"; _vb_bdr="#EF4444"; _vb_cor="#7F1D1D"; _vb_ico="🔴"
-                    _vb_status=f"vence em {_dias_r} dias — URGENTE renovar"
-                else:
-                    _vb_bg="#7C2D12"; _vb_bdr="#F97316"; _vb_cor="#FEF3C7"; _vb_ico="🚫"
-                    _vb_status=f"VENCIDO há {abs(_dias_r)} dias — renovar imediatamente"
-                st.markdown(
-                    f"<div style='background:{_vb_bg};border-left:5px solid {_vb_bdr};"
-                    f"padding:10px 16px;border-radius:6px;display:flex;align-items:center;gap:10px;'>"
-                    f"<span style='font-size:18px;'>{_vb_ico}</span>"
-                    f"<span style='color:{_vb_cor};font-weight:700;font-size:13px;'>"
-                    f"Atestado de Aptidão: válido até "
-                    f"<u>{_venc_d.strftime('%d/%m/%Y')}</u> — {_vb_status}</span></div>",
-                    unsafe_allow_html=True,
-                )
-            except Exception:
-                st.markdown(
-                    "<div style='background:#FEF3C7;border-left:5px solid #F59E0B;"
-                    "padding:8px 14px;border-radius:6px;'>"
-                    "<span style='color:#92400E;font-weight:600;font-size:13px;'>"
-                    "📋 Atestado de Aptidão: data de vencimento inválida — verifique no histórico</span></div>",
-                    unsafe_allow_html=True,
-                )
-        else:
-            st.markdown(
-                "<div style='background:#7C2D12;border-left:5px solid #F97316;"
-                "padding:10px 16px;border-radius:6px;display:flex;align-items:center;gap:10px;'>"
-                "<span style='font-size:18px;'>📋🚫</span>"
-                "<span style='color:#FEF3C7;font-weight:700;font-size:13px;'>"
-                "Atestado de Aptidão: SEM DATA DE VENCIMENTO — registre no histórico de atestados abaixo"
-                "</span></div>",
-                unsafe_allow_html=True,
-            )
+        _f_bg = _status_ate_ficha["atestado_fundo"]
+        _f_cor = _status_ate_ficha["atestado_cor"]
+        _f_ico = _status_ate_ficha["atestado_icone"]
+        _f_data = _status_ate_ficha["data_vencimento_formatada"]
+        _f_txt = _status_ate_ficha["rotulo_atestado"]
+        if _status_ate_ficha["atestado_bloqueado_manual"]:
+            _f_txt += " — participação bloqueada manualmente"
+        st.markdown(
+            f"<div style='background:{_f_bg};border-left:5px solid {_f_cor};"
+            f"padding:10px 16px;border-radius:6px;display:flex;align-items:center;gap:10px;'>"
+            f"<span style='font-size:18px;'>{_f_ico}</span>"
+            f"<span style='color:{_f_cor};font-weight:700;font-size:13px;'>"
+            f"Atestado de Aptidão — validade: <u>{_f_data}</u> — {_f_txt}</span></div>",
+            unsafe_allow_html=True,
+        )
     with _vb_btn:
         if st.button("🔄 Atualizar", key="btn_goto_atestado_venc",
                      use_container_width=True,

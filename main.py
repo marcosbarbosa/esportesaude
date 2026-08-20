@@ -2421,8 +2421,10 @@ if st.session_state.menu_atual == "Principal":
                 _recs_up = _snap_home.get("ultima_presenca_recs", [])
                 _df_ultima = pd.DataFrame(_recs_up) if _recs_up else pd.DataFrame(columns=["id", "ultima_presenca"])
 
-                _recs_at = _snap_home.get("atestados_recs", [])
-                _df_atestad = pd.DataFrame(_recs_at) if _recs_at else pd.DataFrame(columns=["id", "data_vencimento_atestado"])
+                # Atestado é leitura canônica ao vivo (com cache e invalidação
+                # após o cadastro), para a data não ficar antiga até o próximo
+                # Processar em Lote. O mesmo DataFrame também é salvo no snapshot.
+                _df_atestad = load_atestados_vencimento()
 
                 _recs_tp = _snap_home.get("total_presencas_recs", [])
                 if _recs_tp:
@@ -2471,6 +2473,19 @@ if st.session_state.menu_atual == "Principal":
                 _df_hg = _df_hg.merge(_df_atestad, on="id", how="left")
             else:
                 _df_hg["data_vencimento_atestado"] = pd.NaT
+            for _at_col, _at_padrao in (
+                ("status_atestado", "SEM_REGISTRO"),
+                ("rotulo_atestado", "Sem atestado de aptidão registrado"),
+                ("data_vencimento_formatada", "—"),
+                ("atestado_dias_restantes", None),
+                ("atestado_icone", "📋"),
+                ("atestado_cor", "#64748B"),
+                ("atestado_fundo", "#F1F5F9"),
+            ):
+                if _at_col not in _df_hg.columns:
+                    _df_hg[_at_col] = _at_padrao
+                elif _at_padrao is not None:
+                    _df_hg[_at_col] = _df_hg[_at_col].fillna(_at_padrao)
 
             _df_hg["ultima_presenca"] = pd.to_datetime(_df_hg["ultima_presenca"], errors="coerce")
 
@@ -3782,42 +3797,42 @@ if st.session_state.menu_atual == "Principal":
                         unsafe_allow_html=True,
                     )
 
-                    # Vencimento Atestado
-                    _dv = _r.get("data_vencimento_atestado")
-                    if pd.notna(_dv):
-                        _dv_dt   = pd.Timestamp(_dv).date()
-                        _dv_dias = (_dv_dt - _hoje_hg).days
-                        if _dv_dias < 0:
-                            _dv_cor   = "#DC2626"
-                            _dv_bg    = "#FEE2E2"
-                            _dv_icon  = "🔴"
-                            _dv_label = f"Vencido {abs(_dv_dias)}d"
-                        elif _dv_dias <= 30:
-                            _dv_cor   = "#D97706"
-                            _dv_bg    = "#FEF3C7"
-                            _dv_icon  = "🟡"
-                            _dv_label = f"{_dv_dias}d"
-                        else:
-                            _dv_cor   = "#059669"
-                            _dv_bg    = "#D1FAE5"
-                            _dv_icon  = "🟢"
-                            _dv_label = f"{_dv_dias}d"
-                        _dv_html = (
-                            f"<span style='font-size:11px;font-weight:700;color:{_dv_cor};"
-                            f"background:{_dv_bg};border-radius:4px;padding:2px 5px;"
-                            f"display:inline-block;'>"
-                            f"{_dv_icon} {_dv_dt.strftime('%d/%m/%y')}</span>"
-                            f"<br><span style='font-size:10px;color:#94A3B8;'>{_dv_label}</span>"
+                    # Atestado: renderiza exclusivamente as colunas produzidas
+                    # por status_atestado() — sem recálculo local de datas.
+                    _at_codigo = str(_r.get("status_atestado") or "SEM_REGISTRO")
+                    _at_data   = str(_r.get("data_vencimento_formatada") or "—")
+                    _at_label  = str(_r.get("rotulo_atestado") or "")
+                    _at_icone  = str(_r.get("atestado_icone") or "📋")
+                    _at_cor    = str(_r.get("atestado_cor") or "#64748B")
+                    _at_bg     = str(_r.get("atestado_fundo") or "#F1F5F9")
+                    _at_bloq   = bool(_r.get("atestado_bloqueado"))
+                    _dv_html = (
+                        f"<span style='font-size:11px;font-weight:700;color:{_at_cor};"
+                        f"background:{_at_bg};border-radius:4px;padding:2px 5px;"
+                        f"display:inline-block;' title='{_at_label}'>"
+                        f"{_at_icone} {_at_data}</span>"
+                        f"<br><span style='font-size:10px;color:{_at_cor};'>{_at_label}</span>"
+                    )
+                    if _at_bloq:
+                        _dv_html += (
+                            "<br><span style='font-size:10px;font-weight:700;color:#991B1B;'>"
+                            "🚫 Bloqueio manual</span>"
                         )
-                        if _wapp_ok and (_dv_dias < 0 or _dv_dias <= 30):
+                    if _wapp_ok and _at_codigo in ("VENCIDO", "A_VENCER"):
+                        _dv_dias = _r.get("atestado_dias_restantes")
+                        try:
+                            _dv_dias = int(_dv_dias)
+                        except (TypeError, ValueError):
+                            _dv_dias = None
+                        if _dv_dias is not None:
                             _wap_at = str(_r.get("whatsapp") or "").strip()
                             if _wap_at:
-                                _at_key = "Atestado_Vencido" if _dv_dias < 0 else "Atestado_A_Vencer"
+                                _at_key = "Atestado_Vencido" if _at_codigo == "VENCIDO" else "Atestado_A_Vencer"
                                 _at_default = (
                                     "Olá, {nome}! Seu atestado médico está vencido. Para continuar "
                                     "participando das atividades com segurança, pedimos que envie um "
                                     "atestado atualizado o quanto antes."
-                                    if _dv_dias < 0 else
+                                    if _at_codigo == "VENCIDO" else
                                     "Olá, {nome}! Seu atestado médico vence em breve ({data_vencimento}). "
                                     "Para não haver interrupção nas suas atividades, pedimos que providencie "
                                     "a renovação."
@@ -3825,7 +3840,7 @@ if st.session_state.menu_atual == "Principal":
                                 _tpl_at = _tpl_map.get(_at_key, _at_default)
                                 _msg_at = personalizar_mensagem(
                                     _tpl_at, str(_r.get("nome", "")),
-                                    data_vencimento=_dv_dt.strftime("%d/%m/%Y"),
+                                    data_vencimento=_at_data,
                                 )
                                 _link_at = montar_link_whatsapp(_wap_at, _msg_at)
                                 if _link_at:
@@ -3834,8 +3849,6 @@ if st.session_state.menu_atual == "Principal":
                                         f"style='font-size:10px;color:#25D366;text-decoration:none;"
                                         f"font-weight:600;'>📱 Avisar</a>"
                                     )
-                    else:
-                        _dv_html = "<span style='font-size:11px;color:#CBD5E1;'>— sem atestado</span>"
                     _cg.markdown(_dv_html, unsafe_allow_html=True)
 
                     # Última PA compacta
