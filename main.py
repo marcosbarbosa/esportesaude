@@ -2508,6 +2508,17 @@ if st.session_state.menu_atual == "Principal":
                 _df_hg["total_presencas_hist"] = 0
             _df_hg["total_presencas_hist"] = _df_hg["total_presencas_hist"].fillna(0).astype(int)
 
+            # Mensagem de assiduidade: o destaque é calculado uma vez usando
+            # todos os alunos ativos e comparando apenas colegas da mesma turma.
+            # A ação visual será oferecida somente na coluna de frequência.
+            from utils.mensagens_frequencia import (
+                ids_assiduidade_destaque,
+                recomendar_mensagem_frequencia,
+            )
+            _ids_assiduidade_destaque = ids_assiduidade_destaque(
+                _df_hg[["id", "turma", "total_presencas_hist", "ultima_presenca"]].to_dict("records")
+            )
+
             # Merge com última PA
             try:
                 from database import get_ultima_pa_todos
@@ -3708,38 +3719,45 @@ if st.session_state.menu_atual == "Principal":
                             f"{_up_txt}</span>"
                             f"<span style='font-size:10px;color:#94A3B8;margin-left:2px;'>{_up_dsem}</span>"
                         )
-                        if _wapp_ok and _up_dias > 14:
-                            _wap_e = str(_r.get("whatsapp") or "").strip()
-                            if _wap_e:
-                                _ev_key = "evasao_60" if _up_dias <= 30 else "evasao_80"
-                                _tpl_e = _tpl_map.get(_ev_key, "Olá {nome}, sentimos sua falta!")
-                                _msg_e = personalizar_mensagem(_tpl_e, str(_r.get("nome", "")))
-                                _link_e = montar_link_whatsapp(_wap_e, _msg_e)
-                                if _link_e:
-                                    _cor_icone = "#F59E0B" if _up_dias <= 30 else "#EF4444"
-                                    _up_html += (
-                                        f"<br><a href='{_link_e}' target='_blank' "
-                                        f"style='font-size:10px;color:{_cor_icone};text-decoration:none;"
-                                        f"font-weight:600;'>📱 Contato</a>"
-                                    )
                     else:
                         _up_html = (
                             "<span style='font-size:10px;font-weight:700;background:#FEE2E2;"
                             "color:#991B1B;border-radius:999px;padding:1px 6px;white-space:nowrap;'>"
                             "🔴 nunca</span>"
                         )
-                        if _wapp_ok:
-                            _wap_e = str(_r.get("whatsapp") or "").strip()
-                            if _wap_e:
-                                _tpl_e = _tpl_map.get("evasao_nunca", "Olá {nome}, ainda não te vimos por aqui!")
-                                _msg_e = personalizar_mensagem(_tpl_e, str(_r.get("nome", "")))
-                                _link_e = montar_link_whatsapp(_wap_e, _msg_e)
-                                if _link_e:
-                                    _up_html += (
-                                        f"<br><a href='{_link_e}' target='_blank' "
-                                        f"style='font-size:10px;color:#EF4444;text-decoration:none;"
-                                        f"font-weight:600;'>📱 Contato</a>"
-                                    )
+
+                    # A mensagem contextual pertence à frequência (motivo do
+                    # contato), não à coluna de telefone. O operador decide
+                    # enviar ao abrir o WhatsApp — o sistema não dispara nada.
+                    _recom_msg = recomendar_mensagem_frequencia(
+                        _r.get("id"),
+                        _up,
+                        _ids_assiduidade_destaque,
+                        _hoje_hg,
+                    )
+                    _wap_msg = str(_r.get("whatsapp") or "").strip()
+                    if _wapp_ok and _recom_msg and _wap_msg:
+                        _tpl_msg = str(_tpl_map.get(_recom_msg.gatilho, "") or "").strip()
+                        if _tpl_msg:
+                            _msg_personalizada = personalizar_mensagem(
+                                _tpl_msg, str(_r.get("nome", ""))
+                            )
+                            _link_msg = montar_link_whatsapp(_wap_msg, _msg_personalizada)
+                            if _link_msg:
+                                _up_html += (
+                                    f"<br><a href='{_link_msg}' target='_blank' "
+                                    f"title='Mensagem recomendada: {_recom_msg.rotulo}. Abrir no WhatsApp.' "
+                                    f"aria-label='Abrir WhatsApp: {_recom_msg.rotulo}' "
+                                    f"style='font-size:10px;color:{_recom_msg.cor};text-decoration:none;"
+                                    "font-weight:700;white-space:nowrap;'>"
+                                    f"💬 {_recom_msg.rotulo}</a>"
+                                )
+                        else:
+                            _up_html += (
+                                "<br><span title='Peça a um administrador para configurar este texto em "
+                                "Gestão de Mensagens.' style='font-size:10px;color:#64748B;"
+                                "font-weight:600;white-space:nowrap;'>⚙️ Texto não configurado</span>"
+                            )
                     _ce.markdown(
                         f"<div style='line-height:1.35;'>"
                         f"<span style='font-size:15px;font-weight:900;color:{_tp_cor};'>{_tp_hist}</span>"
@@ -3749,7 +3767,9 @@ if st.session_state.menu_atual == "Principal":
                         unsafe_allow_html=True,
                     )
 
-                    # ⚠️ Ausência — badge de risco com link de acolhimento
+                    # ⚠️ Ausência — indicador visual. A única ação de mensagem
+                    # fica em Freq. Ano / Últ. Pres., para não duplicar links
+                    # de WhatsApp nem aplicar modelos diferentes ao mesmo aluno.
                     _up_aus = _r.get("ultima_presenca")
                     if pd.notna(_up_aus):
                         _up_aus_dt   = pd.Timestamp(_up_aus).date()
@@ -3775,25 +3795,6 @@ if st.session_state.menu_atual == "Principal":
                             f"border-radius:999px;padding:2px 8px;"
                             f"white-space:nowrap;'>{_aus_ic} {_up_aus_dias}d</span>"
                         )
-                        if _wapp_ok and _up_aus_dias > 14:
-                            _wap_aus = str(_r.get("whatsapp") or "").strip()
-                            if _wap_aus:
-                                _ev_key_aus = "evasao_60" if _up_aus_dias <= 30 else "evasao_80"
-                                _tpl_aus = _tpl_map.get(
-                                    _ev_key_aus, "Olá {nome}, sentimos sua falta!"
-                                )
-                                _msg_aus = personalizar_mensagem(
-                                    _tpl_aus, str(_r.get("nome", ""))
-                                )
-                                _link_aus = montar_link_whatsapp(_wap_aus, _msg_aus)
-                                if _link_aus:
-                                    _cor_aus = "#F59E0B" if _up_aus_dias <= 30 else "#EF4444"
-                                    _aus_html += (
-                                        f"<br><a href='{_link_aus}' target='_blank' "
-                                        f"style='font-size:10px;color:{_cor_aus};"
-                                        f"text-decoration:none;font-weight:600;'>"
-                                        f"📱 Acolher</a>"
-                                    )
                     else:
                         _aus_html = (
                             "<span style='font-size:11px;font-weight:700;"
@@ -3801,24 +3802,6 @@ if st.session_state.menu_atual == "Principal":
                             "border-radius:999px;padding:2px 8px;white-space:nowrap;'>"
                             "⚫ nunca</span>"
                         )
-                        if _wapp_ok:
-                            _wap_aus = str(_r.get("whatsapp") or "").strip()
-                            if _wap_aus:
-                                _tpl_aus = _tpl_map.get(
-                                    "evasao_nunca",
-                                    "Olá {nome}, ainda não te vimos por aqui!"
-                                )
-                                _msg_aus = personalizar_mensagem(
-                                    _tpl_aus, str(_r.get("nome", ""))
-                                )
-                                _link_aus = montar_link_whatsapp(_wap_aus, _msg_aus)
-                                if _link_aus:
-                                    _aus_html += (
-                                        f"<br><a href='{_link_aus}' target='_blank' "
-                                        f"style='font-size:10px;color:#EF4444;"
-                                        f"text-decoration:none;font-weight:600;'>"
-                                        f"📱 Acolher</a>"
-                                    )
                     _caus.markdown(
                         f"<div style='line-height:1.5;'>{_aus_html}</div>",
                         unsafe_allow_html=True,

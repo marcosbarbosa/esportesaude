@@ -2102,11 +2102,11 @@ def load_atestados_vencimento():
 def load_frequencia_ultima_presenca():
     """Retorna DataFrame com colunas [id, ultima_presenca] — máx data_aula PRESENTE por aluno.
 
-    Usa janela de 180 dias + paginação correta para não truncar em 1000 linhas.
+    Consulta todo o histórico com paginação correta para não truncar em 1000
+    linhas. A data histórica é necessária para diferenciar corretamente quem
+    nunca frequentou de quem está ausente há mais de seis meses.
     """
-    import datetime as _dt
     try:
-        _corte = (_dt.date.today() - _dt.timedelta(days=180)).isoformat()
         todos = []
         inicio = 0
         for _ in range(500):
@@ -2114,7 +2114,6 @@ def load_frequencia_ultima_presenca():
                 supabase.from_("frequencia")
                 .select("aluno_id, data_aula")
                 .eq("status", "PRESENTE")
-                .gte("data_aula", _corte)
                 .order("id")
                 .range(inicio, inicio + 999)
                 .execute()
@@ -3374,6 +3373,7 @@ def atualizar_crm_template(gatilho, nova_mensagem):
         supabase.from_("crm_templates").update(
             {"mensagem": nova_mensagem.strip(), "atualizado_em": datetime.datetime.now().isoformat()}
         ).eq("gatilho", gatilho).execute()
+        get_crm_templates.clear()
         return True, "Sucesso"
     except Exception as e:
         return False, str(e)
