@@ -41,6 +41,7 @@ import urllib.parse
 import math
 
 from database import (
+    get_agenda_turmas_do_dia,
     get_agendamentos_pendentes,
     autenticar_usuario,
     cadastrar_usuario_sistema,
@@ -2121,6 +2122,7 @@ if st.session_state.menu_atual == "Principal":
             _ok_u, _msg_u = _uag(ag_id, str(_nova_data), str(_nova_hora)[:5])
             if _ok_u:
                 get_agendamentos_pendentes.clear()
+                get_agenda_turmas_do_dia.clear()
                 st.rerun()
             else:
                 st.error(f"Erro: {_msg_u}")
@@ -2141,6 +2143,7 @@ if st.session_state.menu_atual == "Principal":
                 if _ok_x:
                     st.session_state.pop(_key_conf, None)
                     get_agendamentos_pendentes.clear()
+                    get_agenda_turmas_do_dia.clear()
                     st.rerun()
                 else:
                     st.error(f"Erro: {_msg_x}")
@@ -2186,6 +2189,7 @@ if st.session_state.menu_atual == "Principal":
             )
             if _ok_d:
                 get_agendamentos_pendentes.clear()
+                get_agenda_turmas_do_dia.clear()
                 st.rerun()
             else:
                 st.error(f"Erro: {_msg_d}")
@@ -2235,84 +2239,91 @@ if st.session_state.menu_atual == "Principal":
     # COLUNA DIREITA — Próximas Avaliações (sempre visível)
     # ════════════════════════════════════════════════
     with _col_agenda:
-        # CSS: reduz fonte do nome nos cards de agendamento em 35%
-        st.markdown("""<style>
-        div[data-testid="column"] + div[data-testid="column"] button p,
-        div[data-testid="column"] + div[data-testid="column"] button span {
-            font-size: 9px !important;
-            line-height: 1.3 !important;
-        }
-        div[data-testid="column"] + div[data-testid="column"]
-          div[data-testid="stVerticalBlockBorderWrapper"] button {
-            padding: 3px 6px !important;
-            min-height: unset !important;
-        }
-        </style>""", unsafe_allow_html=True)
+        _agenda_turmas = get_agenda_turmas_do_dia(_hoje)
+        with st.container(border=True):
+            _ag_hd_col, _ag_count_col, _ag_add_col = st.columns(
+                [2.5, 1.5, 0.7],
+                vertical_alignment="center",
+            )
+            _ag_hd_col.markdown(
+                "**🗓️ Agenda do dia**\n\n"
+                "<span style='font-size:0.75rem;color:#64748B;'>Avaliações de hoje</span>",
+                unsafe_allow_html=True,
+            )
+            _ag_count_col.metric("Turmas hoje", len(_agenda_turmas))
+            with _ag_add_col:
+                if st.button(
+                    "➕",
+                    key="hg_nova_aval",
+                    help="Agendar Nova Avaliação",
+                    use_container_width=True,
+                ):
+                    _dialog_nova_aval()
 
-        _ag_hd_col, _ag_add_col = st.columns([3, 1], vertical_alignment="center")
-        _ag_hd_col.markdown(
-            "<p style='font-weight:800;color:#0A2540;font-size:0.95rem;margin:0 0 6px;'>"
-            "🗓️ Próximas Avaliações</p>",
-            unsafe_allow_html=True,
-        )
-        with _ag_add_col:
-            if st.button("➕", key="hg_nova_aval", help="Agendar Nova Avaliação",
-                         use_container_width=True):
-                _dialog_nova_aval()
+            st.divider()
+            if _agenda_turmas:
+                for _agenda_turma in _agenda_turmas:
+                    _turma = _agenda_turma["turma"]
+                    _horarios = " · ".join(_agenda_turma["horarios"])
+                    _esperados = _agenda_turma["alunos_esperados"]
+                    _avaliacoes = _agenda_turma["agendamentos"]
 
-        _agendamentos = get_agendamentos_pendentes(limite=8)
-        if _agendamentos:
-            for _ag in _agendamentos:
-                _aluno_data = _ag.get("alunos") or {}
-                _nm  = (_aluno_data.get("nome") or _ag.get("nome_aluno") or "—")
-                _aid = _aluno_data.get("id") or _ag.get("aluno_id")
-                _hr  = (_ag.get("horario") or "—")
-                _dt  = str(_ag.get("data_agendamento") or _ag.get("data") or "")
-                _dt_fmt = ""
-                if _dt and len(_dt) >= 10:
-                    try:
-                        _dp = datetime.date.fromisoformat(_dt[:10])
-                        _dias_sem = ["seg","ter","qua","qui","sex","sáb","dom"]
-                        _dia_sem = _dias_sem[_dp.weekday()]
-                        _dt_fmt = f"{_dia_sem} {_dp.day:02d}/{_dp.month:02d}"
-                    except Exception:
-                        _dt_fmt = _dt[:5]
-                _nm_curto = (_nm[:16] + "…") if len(_nm) > 16 else _nm
-                with st.container(border=True):
-                    st.markdown(
-                        f"<div style='font-size:11px;color:#64748B;margin-bottom:2px;'>"
-                        f"🕒 <b>{_hr}</b>{(' · ' + _dt_fmt) if _dt_fmt else ''}</div>",
-                        unsafe_allow_html=True,
-                    )
-                    _ag_id_str = _ag.get("id", "")
-                    _c_nm, _c_del = st.columns([4, 1], vertical_alignment="center")
-                    if _aid:
-                        if _c_nm.button(
-                            _nm_curto,
-                            key=f"hg_ag_{_ag_id_str}",
-                            use_container_width=True,
-                            help=f"Abrir prontuário: {_nm} → Nova Medição",
-                        ):
-                            from database import buscar_aluno_por_id
-                            _al = buscar_aluno_por_id(_aid) or _aluno_data
-                            st.session_state.aluno_prontuario = _al
-                            st.session_state.origem_prontuario = "Principal"
-                            st.session_state.prontuario_aba = "Nova Medição"
-                            st.session_state.menu_atual = "Portal do Aluno"
-                            st.rerun()
-                    else:
-                        _c_nm.markdown(
-                            f"<div style='font-size:8px;font-weight:600;"
-                            f"color:#0F172A;'>{_nm_curto}</div>",
-                            unsafe_allow_html=True,
+                    with st.container(border=True):
+                        _c_hora, _c_turma, _c_metric = st.columns(
+                            [1.25, 2.7, 1.8],
+                            vertical_alignment="center",
                         )
-                    if _ag_id_str and _c_del.button(
-                        "✏️", key=f"hg_ag_del_{_ag_id_str}",
-                        help="Editar ou excluir este agendamento",
-                    ):
-                        _dialog_gerenciar_ag(_ag_id_str, _nm, _dt, _hr)
-        else:
-            st.info("Agenda livre ✅", icon=None)
+                        _c_hora.markdown(
+                            f"**🕒 {_horarios}**\n\nHoje",
+                        )
+                        _c_turma.markdown(f"**{_turma}**")
+                        _c_turma.caption(
+                            f"{len(_avaliacoes)} avaliação(ões) agendada(s)"
+                        )
+                        _c_metric.metric("Alunos esperados", _esperados)
+
+                        for _ag in _avaliacoes:
+                            _aluno_data = _ag.get("alunos") or {}
+                            _nm = (
+                                _aluno_data.get("nome")
+                                or _ag.get("nome_aluno")
+                                or "—"
+                            )
+                            _aid = _aluno_data.get("id") or _ag.get("aluno_id")
+                            _ag_id_str = _ag.get("id", "")
+                            _c_nm, _c_del = st.columns(
+                                [4, 0.65],
+                                vertical_alignment="center",
+                            )
+                            if _aid:
+                                if _c_nm.button(
+                                    _nm,
+                                    key=f"hg_ag_{_ag_id_str}",
+                                    use_container_width=True,
+                                    help=f"Abrir prontuário: {_nm} → Nova Medição",
+                                ):
+                                    from database import buscar_aluno_por_id
+                                    _al = buscar_aluno_por_id(_aid) or _aluno_data
+                                    st.session_state.aluno_prontuario = _al
+                                    st.session_state.origem_prontuario = "Principal"
+                                    st.session_state.prontuario_aba = "Nova Medição"
+                                    st.session_state.menu_atual = "Portal do Aluno"
+                                    st.rerun()
+                            else:
+                                _c_nm.markdown(f"**{_nm}**")
+                            if _ag_id_str and _c_del.button(
+                                "✏️",
+                                key=f"hg_ag_del_{_ag_id_str}",
+                                help="Editar ou excluir este agendamento",
+                            ):
+                                _dialog_gerenciar_ag(
+                                    _ag_id_str,
+                                    _nm,
+                                    _ag.get("data_agendamento") or str(_hoje),
+                                    _ag.get("horario") or _horarios,
+                                )
+            else:
+                st.info("Nenhuma turma agendada para hoje", icon="📅")
 
     # ════════════════════════════════════════════════
     # COLUNA ESQUERDA — Grid de Alunos

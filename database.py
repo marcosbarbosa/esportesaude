@@ -252,6 +252,108 @@ def get_agendamentos_pendentes(limite=8):
             return []
 
 
+@st.cache_data(ttl=180, show_spinner=False)
+def get_agenda_turmas_do_dia(data_referencia=None):
+    """
+    Retorna a agenda de hoje agrupada por turma.
+
+    Cada grupo contém a quantidade real de alunos ativos daquela turma, usada
+    pela tela inicial como total esperado para a chamada/atendimentos do dia.
+    """
+    data_agenda = str(data_referencia or datetime.date.today())[:10]
+    try:
+        try:
+            res = (
+                supabase.from_("agendamentos")
+                .select("id, aluno_id, data_agendamento, horario, motivo, alunos(id, nome, turma, turma_id)")
+                .eq("status", "Pendente")
+                .eq("data_agendamento", data_agenda)
+                .order("horario", desc=False)
+                .execute()
+            )
+            agendamentos = res.data or []
+        except Exception:
+            res = (
+                supabase.from_("agendamentos")
+                .select("id, aluno_id, data_agendamento, horario, motivo")
+                .eq("status", "Pendente")
+                .eq("data_agendamento", data_agenda)
+                .order("horario", desc=False)
+                .execute()
+            )
+            agendamentos = res.data or []
+            aluno_ids = [str(item.get("aluno_id")) for item in agendamentos if item.get("aluno_id")]
+            alunos_por_id = {}
+            if aluno_ids:
+                res_alunos = (
+                    supabase.from_("alunos")
+                    .select("id, nome, turma, turma_id")
+                    .in_("id", aluno_ids)
+                    .execute()
+                )
+                alunos_por_id = {
+                    str(aluno["id"]): aluno for aluno in (res_alunos.data or [])
+                }
+            for agendamento in agendamentos:
+                agendamento["alunos"] = alunos_por_id.get(
+                    str(agendamento.get("aluno_id")), {}
+                )
+
+        res_ativos = (
+            supabase.from_("alunos")
+            .select("turma, turma_id")
+            .neq("status", "Inativo")
+            .execute()
+        )
+        total_por_turma_id = {}
+        total_por_nome = {}
+        for aluno in res_ativos.data or []:
+            turma_id = aluno.get("turma_id")
+            turma_nome = (aluno.get("turma") or "").strip()
+            if turma_id:
+                chave_id = str(turma_id)
+                total_por_turma_id[chave_id] = total_por_turma_id.get(chave_id, 0) + 1
+            if turma_nome:
+                chave_nome = turma_nome.casefold()
+                total_por_nome[chave_nome] = total_por_nome.get(chave_nome, 0) + 1
+
+        agenda_por_turma = {}
+        for agendamento in agendamentos:
+            aluno = agendamento.get("alunos") or {}
+            turma_id = aluno.get("turma_id")
+            turma_nome = (aluno.get("turma") or "Sem turma").strip()
+            horario = agendamento.get("horario") or "—"
+            chave_turma = str(turma_id) if turma_id else turma_nome.casefold()
+            if chave_turma not in agenda_por_turma:
+                esperados = (
+                    total_por_turma_id.get(str(turma_id), 0)
+                    if turma_id
+                    else total_por_nome.get(turma_nome.casefold(), 0)
+                )
+                agenda_por_turma[chave_turma] = {
+                    "turma": turma_nome,
+                    "horarios": [],
+                    "alunos_esperados": esperados,
+                    "agendamentos": [],
+                }
+            if horario not in agenda_por_turma[chave_turma]["horarios"]:
+                agenda_por_turma[chave_turma]["horarios"].append(horario)
+            agenda_por_turma[chave_turma]["agendamentos"].append(agendamento)
+
+        agenda = list(agenda_por_turma.values())
+        for turma_agenda in agenda:
+            turma_agenda["horarios"].sort()
+        return sorted(
+            agenda,
+            key=lambda turma_agenda: (
+                turma_agenda["horarios"][0] if turma_agenda["horarios"] else "—",
+                turma_agenda["turma"].casefold(),
+            ),
+        )
+    except Exception:
+        return []
+
+
 # ==============================================================================
 # 🏛️ GESTÃO DE TURMAS
 # ==============================================================================
