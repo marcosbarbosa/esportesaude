@@ -1150,29 +1150,56 @@ def get_alunos_por_turma(turma_nome):
         df = pd.DataFrame(res.data)
         if df.empty:
             return df
+    except Exception as e:
+        print(f"[FREQUÊNCIA] Erro ao carregar alunos da turma '{turma_nome}': {e}")
+        return pd.DataFrame()
 
+    # O cartão de atestado é um enriquecimento visual. Ele jamais pode impedir
+    # a chamada de exibir os alunos caso a tabela de atestados esteja
+    # indisponível ou contenha algum dado legado inconsistente.
+    _campos_atestado = (
+        ("status_atestado", "SEM_REGISTRO"),
+        ("rotulo_atestado", "Sem atestado de aptidão registrado"),
+        ("data_vencimento_atestado", None),
+        ("data_vencimento_formatada", "—"),
+        ("atestado_dias_restantes", None),
+        ("atestado_icone", "📋"),
+        ("atestado_cor", "#64748B"),
+        ("atestado_fundo", "#F1F5F9"),
+    )
+    try:
         # Contrato único de atestado para a chamada diária: esta mesma estrutura
         # alimenta a tela inicial e o prontuário, sem recálculos locais de datas.
         df_status = load_atestados_vencimento()
         if not df_status.empty:
-            df = df.merge(df_status, on="id", how="left")
-        for col, padrao in (
-            ("status_atestado", "SEM_REGISTRO"),
-            ("rotulo_atestado", "Sem atestado de aptidão registrado"),
-            ("data_vencimento_atestado", None),
-            ("data_vencimento_formatada", "—"),
-            ("atestado_dias_restantes", None),
-            ("atestado_icone", "📋"),
-            ("atestado_cor", "#64748B"),
-            ("atestado_fundo", "#F1F5F9"),
-        ):
-            if col not in df.columns:
-                df[col] = padrao
-            else:
-                df[col] = df[col].fillna(padrao)
-        return df
-    except Exception:
-        return pd.DataFrame()
+            # IDs podem vir do Supabase em representações diferentes; normalizar
+            # evita que um UUID válido deixe de encontrar seu status.
+            df = df.assign(_id_atestado=df["id"].astype(str))
+            df_status = df_status.assign(_id_atestado=df_status["id"].astype(str))
+            df = (
+                df.merge(
+                    df_status.drop(columns=["id"]),
+                    on="_id_atestado",
+                    how="left",
+                )
+                .drop(columns=["_id_atestado"])
+            )
+    except Exception as e:
+        print(
+            f"[FREQUÊNCIA] Status de atestado indisponível para '{turma_nome}'; "
+            f"exibindo alunos normalmente: {e}"
+        )
+
+    for col, padrao in _campos_atestado:
+        if col not in df.columns:
+            df[col] = padrao
+        elif padrao is None:
+            # pandas não aceita fillna(None); preserva a ausência como None
+            # para que as telas exibam "—" sem quebrar a grade.
+            df[col] = df[col].astype(object).where(df[col].notna(), None)
+        else:
+            df[col] = df[col].fillna(padrao)
+    return df
 
 
 @st.cache_data(ttl=120, show_spinner=False)
