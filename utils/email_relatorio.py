@@ -138,8 +138,17 @@ def _bloco_presencas_mes() -> str:
         total   = d.get("total_ano", 0)
         por_mes = d.get("por_mes", [])
         ano     = d.get("ano", "")
+        inicio  = str(d.get("inicio_ano_letivo", ""))[:10]
+        try:
+            inicio_fmt = datetime.date.fromisoformat(inicio).strftime("%d/%m/%Y")
+        except (TypeError, ValueError):
+            inicio_fmt = "01/01/%s" % ano
 
-        kpi = _kpi(f"Total no ano {ano}", f"{total:,}".replace(",", "."), _COR_VERDE)
+        kpi = _kpi(
+            f"Total desde {inicio_fmt}",
+            f"{total:,}".replace(",", "."),
+            _COR_VERDE,
+        )
 
         if por_mes:
             total_seguro = total if total > 0 else 1
@@ -155,11 +164,15 @@ def _bloco_presencas_mes() -> str:
             tabela = _tabela(["Mês", "Total de presenças", "% do ano"], linhas)
         else:
             tabela = ("<p style='color:#94A3B8;font-size:12px;'>"
-                      "Sem presenças registradas neste ano.</p>")
+                       "Sem presenças registradas neste ano letivo.</p>")
 
         conteudo = (f"<div style='text-align:center;margin-bottom:14px;'>{kpi}</div>"
                     + tabela)
-        return _section(f"📈 Presenças no Ano ({ano})", _COR_VERDE, conteudo)
+        return _section(
+            f"📈 Presenças no Ano Letivo — desde {inicio_fmt}",
+            _COR_VERDE,
+            conteudo,
+        )
     except Exception as e:
         return _section("📈 Presenças no Ano", _COR_VERDE,
                         f"<p style='color:#94A3B8;font-size:12px;'>Dados indisponíveis: {e}</p>")

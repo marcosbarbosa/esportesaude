@@ -1402,13 +1402,26 @@ def set_config_valor(chave: str, valor) -> tuple:
         return False, str(e)
 
 
-# ==============================================================================
-# 📦 SNAPSHOT DO PAINEL INICIAL (view materializada em configuracoes_sistema)
-# Evita reprocessamento pesado em cada carregamento — operador aciona via botão.
-# ==============================================================================
+CHAVE_INICIO_ANO_LETIVO = "inicio_ano_letivo"
 _CHAVE_SNAP_HOME = "snapshot_home_grid_v1"
 
 
+def get_inicio_ano_letivo(data_referencia: datetime.date | None = None) -> datetime.date:
+    """Retorna o início configurado do ano letivo da referência informada.
+
+    A configuração é válida somente dentro do ano civil em curso. Isso evita que
+    uma data registrada em um ano anterior seja usada como corte para o próximo
+    ano letivo; nesse caso, o comportamento seguro é voltar a 1º de janeiro até
+    que a gestão defina a nova data.
+    """
+    referencia = data_referencia or datetime.date.today()
+    padrao = datetime.date(referencia.year, 1, 1)
+    valor = get_config_valor(CHAVE_INICIO_ANO_LETIVO, padrao.isoformat())
+    try:
+        inicio = datetime.date.fromisoformat(str(valor).strip()[:10])
+        return inicio if inicio.year == referencia.year else padrao
+    except (TypeError, ValueError):
+        return padrao
 def get_snapshot_home_grid() -> dict:
     """Lê o snapshot pré-computado do grid inicial.
 
@@ -1483,12 +1496,14 @@ def computar_snapshot_home_grid() -> dict:
         snap["ultima_presenca_recs"] = []
         # ultima_presenca_ok permanece False
 
-    # ── 2. Total presenças no ano letivo corrente (1º jan) ──────────────────
+    # ── 2. Total presenças no ano letivo corrente ───────────────────────────
     # Paginação obrigatória: Supabase trunca em 1000 linhas por chamada.
     # Deduplicação por (aluno_id, data_aula): evita dupla-contagem de
     # registros duplicados na tabela, garantindo integridade para premiações.
     try:
-        _corte = _dt.date(_dt.date.today().year, 1, 1).isoformat()
+        _inicio_ano_letivo = get_inicio_ano_letivo(_dt.date.today())
+        _corte = _inicio_ano_letivo.isoformat()
+        snap["inicio_ano_letivo"] = _corte
         _tp_rows = []
         _tp_ini  = 0
         for _ in range(500):
@@ -2138,7 +2153,7 @@ def load_frequencia_ultima_presenca():
 @st.cache_data(ttl=300, show_spinner=False)
 def load_total_presencas_todos():
     """Retorna DataFrame [id, total_presencas_hist] — total de presenças únicas por aluno
-    no ano letivo corrente (a partir de 1º jan).
+    no ano letivo corrente, a partir da data configurada.
 
     Paginação obrigatória: Supabase trunca em 1000 linhas por chamada.
     Deduplicação por (aluno_id, data_aula): cada presença conta uma única vez,
@@ -2147,7 +2162,7 @@ def load_total_presencas_todos():
     import datetime as _dt
     try:
         _hoje = _dt.date.today()
-        _corte = _dt.date(_hoje.year, 1, 1).isoformat()
+        _corte = get_inicio_ano_letivo(_hoje).isoformat()
         todos = []
         inicio = 0
         for _ in range(500):
@@ -3060,20 +3075,27 @@ def bi_media_alunos_dia():
 
 @st.cache_data(ttl=300, show_spinner=False)
 def bi_presencas_por_mes():
-    """Total de presenças (registros PRESENTE) no ANO corrente, detalhado por mês.
+    """Total de presenças (registros PRESENTE) no ano letivo, por mês.
 
     Retorna dict com:
-      - total_ano : total de presenças desde 01/jan do ano atual até hoje
-      - por_mes   : lista [(rótulo_mes, total), ...] de Janeiro até o mês atual
+      - total_ano : total de presenças desde o início configurado até hoje
+      - por_mes   : lista [(rótulo_mes, total), ...] do mês inicial até o atual
                     (inclui meses com 0 presenças)
       - ano       : ano de referência (int)
+      - inicio_ano_letivo : data de corte usada (YYYY-MM-DD)
     """
     hoje = datetime.date.today()
     ano = hoje.year
-    inicio_ano = datetime.date(ano, 1, 1).isoformat()
+    inicio_letivo = get_inicio_ano_letivo(hoje)
+    inicio_ano = inicio_letivo.isoformat()
     meses_pt = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun",
                 "Jul", "Ago", "Set", "Out", "Nov", "Dez"]
-    vazio = {"total_ano": 0, "por_mes": [], "ano": ano}
+    vazio = {
+        "total_ano": 0,
+        "por_mes": [],
+        "ano": ano,
+        "inicio_ano_letivo": inicio_ano,
+    }
 
     try:
         PAGE = 1000
@@ -3107,9 +3129,14 @@ def bi_presencas_por_mes():
 
     por_mes = [
         (f"{meses_pt[m - 1]}/{str(ano)[2:]}", int(cont.get(f"{m:02d}", 0)))
-        for m in range(1, hoje.month + 1)
+        for m in range(inicio_letivo.month, hoje.month + 1)
     ]
-    return {"total_ano": total, "por_mes": por_mes, "ano": ano}
+    return {
+        "total_ano": total,
+        "por_mes": por_mes,
+        "ano": ano,
+        "inicio_ano_letivo": inicio_ano,
+    }
 
 
 @st.cache_data(ttl=120, show_spinner=False)
@@ -4754,9 +4781,12 @@ def get_datas_letivas_detalhadas_no_ano(ano: int) -> dict:
     try:
         from utils.calendario_aulas import sequenciar_datas_aulas
 
+        inicio_ano = get_inicio_ano_letivo(
+            datetime.date(ano, 12, 31)
+        ).isoformat()
         datas_ordenadas = sequenciar_datas_aulas(
             get_datas_aulas_validas(
-                datetime.date(ano, 1, 1).isoformat(),
+                inicio_ano,
                 datetime.date(ano, 12, 31).isoformat(),
             )
         )
@@ -4782,9 +4812,12 @@ def get_aulas_por_mes_no_ano(ano: int) -> dict:
     try:
         from utils.calendario_aulas import contar_aulas_por_mes
 
+        inicio_ano = get_inicio_ano_letivo(
+            datetime.date(ano, 12, 31)
+        ).isoformat()
         return contar_aulas_por_mes(
             get_datas_aulas_validas(
-                datetime.date(ano, 1, 1).isoformat(),
+                inicio_ano,
                 datetime.date(ano, 12, 31).isoformat(),
             )
         )
@@ -4795,8 +4828,8 @@ def get_aulas_por_mes_no_ano(ano: int) -> dict:
 @st.cache_data(ttl=600, show_spinner=False)
 def get_numero_aula_no_ano(data_referencia) -> int:
     """
-    Conta quantos dias letivos distintos foram registrados na tabela 'frequencia'
-    desde 01/Jan do mesmo ano até data_referencia (inclusive).
+    Conta os dias letivos válidos desde o início configurado do ano letivo até
+    data_referencia (inclusive).
     Retorna 0 em caso de erro ou se nenhum registro for encontrado.
     Usado para exibir o número sequencial da aula na tela de Gestão de Fluxo.
     """
@@ -4805,7 +4838,7 @@ def get_numero_aula_no_ano(data_referencia) -> int:
             data_referencia = datetime.date.fromisoformat(data_referencia[:10])
         return len(
             get_datas_aulas_validas(
-                datetime.date(data_referencia.year, 1, 1).isoformat(),
+                get_inicio_ano_letivo(data_referencia).isoformat(),
                 data_referencia.isoformat(),
             )
         )

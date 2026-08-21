@@ -2331,6 +2331,7 @@ if st.session_state.menu_atual == "Principal":
     with _col_grid:
         from database import (
             buscar_alunos_geral,
+            get_inicio_ano_letivo as _get_inicio_ano_letivo,
             get_snapshot_home_grid as _get_snap_home,
             salvar_snapshot_home_grid as _save_snap_home,
             computar_snapshot_home_grid as _computar_snap_home,
@@ -2367,6 +2368,9 @@ if st.session_state.menu_atual == "Principal":
         # ── Snapshot: leitura + botão Processar em Lote ──────────────────────
         _snap_home = _get_snap_home()
         _snap_ts   = _snap_home.get("gerado_em", "")
+        _inicio_ano_letivo = _get_inicio_ano_letivo()
+        _inicio_ano_letivo_iso = _inicio_ano_letivo.isoformat()
+        _inicio_ano_letivo_label = _inicio_ano_letivo.strftime("%d/%m/%Y")
 
         with _hg_c_lote:
             if st.button(
@@ -2375,7 +2379,8 @@ if st.session_state.menu_atual == "Principal":
                 use_container_width=True,
                 help=(
                     "Recalcula presenças, atestados, PA e anamnese de todos os alunos "
-                    "e salva o resultado para carregamento instantâneo."
+                    f"e salva o resultado para carregamento instantâneo. "
+                    f"Freq. Ano: desde {_inicio_ano_letivo_label}."
                 ),
             ):
                 with st.spinner("⏳ Calculando painel… aguarde."):
@@ -2408,6 +2413,7 @@ if st.session_state.menu_atual == "Principal":
                 "para gerar os dados e acelerar a abertura do sistema.",
                 icon=None,
             )
+        st.caption(f"⏱ **Freq. Ano — desde {_inicio_ano_letivo_label}**")
 
         # ── Checkbox: grid desabilitado por padrão para evitar crash na abertura ──
         _grid_habilitado = st.checkbox(
@@ -2439,10 +2445,12 @@ if st.session_state.menu_atual == "Principal":
                 _df_atestad = load_atestados_vencimento()
 
                 _recs_tp = _snap_home.get("total_presencas_recs", [])
-                if _recs_tp:
+                _snap_inicio = _snap_home.get("inicio_ano_letivo")
+                if _recs_tp and _snap_inicio == _inicio_ano_letivo_iso:
                     _df_total_pres = pd.DataFrame(_recs_tp)
                 else:
-                    # Snapshot não tem presencas — busca ao vivo (evita zerar a coluna)
+                    # Snapshot sem presenças ou gerado com outra data de corte:
+                    # busca ao vivo para não exibir uma Freq. Ano desatualizada.
                     _df_total_pres = load_total_presencas_todos()
             else:
                 _df_ultima     = load_frequencia_ultima_presenca()
@@ -3435,7 +3443,11 @@ if st.session_state.menu_atual == "Principal":
             if "_hh_aniv"     in _hcm: _sort_btn(_hcm["_hh_aniv"],     "🎂 Aniversário",     "aniversario")
             if "_hh_freq"     in _hcm:
                 _hf1, _hf2 = _hcm["_hh_freq"].columns(2, gap="small")
-                _sort_btn(_hf1, "⏱ Freq.Ano", "total_presencas_hist")
+                _sort_btn(
+                    _hf1,
+                    f"⏱ Freq.Ano ({_inicio_ano_letivo_label})",
+                    "total_presencas_hist",
+                )
                 _sort_btn(_hf2, "📅 Últ. Pres.", "ultima_presenca")
             if "_hh_volunt"   in _hcm:
                 _hcm["_hh_volunt"].markdown(
@@ -3761,7 +3773,9 @@ if st.session_state.menu_atual == "Principal":
                     _ce.markdown(
                         f"<div style='line-height:1.35;'>"
                         f"<span style='font-size:15px;font-weight:900;color:{_tp_cor};'>{_tp_hist}</span>"
-                        f"<span style='font-size:9px;color:#94A3B8;margin-left:2px;'>aulas/ano</span>"
+                        f"<span title='Freq. Ano — desde {_inicio_ano_letivo_label}' "
+                        f"style='font-size:9px;color:#94A3B8;margin-left:2px;'>"
+                        f"aulas/ano · desde {_inicio_ano_letivo_label}</span>"
                         f"<br>{_up_html}"
                         f"</div>",
                         unsafe_allow_html=True,

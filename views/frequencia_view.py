@@ -26,6 +26,7 @@ from database import (
     get_numero_aula_no_ano,
     get_aulas_por_mes_no_ano,
     get_datas_letivas_detalhadas_no_ano,
+    get_inicio_ano_letivo,
     get_datas_comemorativas_bd,
     get_datas_comemorativas_custom,
 )
@@ -491,6 +492,10 @@ def _renderizar_progresso_anual(data_aula: datetime.date, num_aula_ate_hoje: int
                      "Jul", "Ago", "Set", "Out", "Nov", "Dez"]
 
         total_ano = sum(aulas_mes.values())
+        inicio_ano_grafico = get_inicio_ano_letivo(
+            datetime.date(ano_grafico, 12, 31)
+        )
+        inicio_ano_grafico_label = inicio_ano_grafico.strftime("%d/%m/%Y")
 
         # Projeção: apenas para o ano atual e somente se há meses completos (modo simples)
         projecao = None
@@ -740,7 +745,7 @@ def _renderizar_progresso_anual(data_aula: datetime.date, num_aula_ate_hoje: int
             st.markdown(
                 f"<div style='padding-top:6px;border-top:1px solid #E2E8F0;'>"
                 f"<span style='color:#1E40AF;font-size:13px;font-weight:700;'>"
-                f"✅ {total_ano} aulas em {ano_grafico}</span>"
+                f"✅ {total_ano} aulas — desde {inicio_ano_grafico_label}</span>"
                 f"<span style='color:#64748B;font-size:12px;margin-left:10px;'>{proj_txt}</span>"
                 f"</div>",
                 unsafe_allow_html=True,

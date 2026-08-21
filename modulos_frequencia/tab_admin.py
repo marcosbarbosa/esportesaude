@@ -18,7 +18,12 @@ from database import (
     _coluna_fonetica_disponivel,
     _coluna_fonetica_pronta,
     ADMIN_MASTER,
+    CHAVE_INICIO_ANO_LETIVO,
+    bi_presencas_por_mes,
     get_config_valor,
+    get_inicio_ano_letivo,
+    limpar_cache_contagem_aulas,
+    load_total_presencas_todos,
     set_config_valor,
 )
 
@@ -154,6 +159,44 @@ def _renderizar_bloco_validade_anamnese():
             if ok:
                 st.success(f"✅ Validade da anamnese atualizada para {int(novo)} dias.")
                 st.rerun()
+            else:
+                st.error(f"❌ Erro ao salvar: {msg}")
+
+
+def _renderizar_bloco_inicio_ano_letivo():
+    with st.expander("📅 Data de Início do Ano Letivo (Freq. Ano)", expanded=False):
+        hoje = datetime.date.today()
+        inicio_atual = get_inicio_ano_letivo(hoje)
+        st.caption(
+            "A coluna **Freq. Ano** e o botão **Processar em Lote** contam "
+            "presenças a partir desta data."
+        )
+        novo_inicio = st.date_input(
+            "Data de Início do Ano Letivo",
+            value=inicio_atual,
+            min_value=datetime.date(hoje.year, 1, 1),
+            max_value=datetime.date(hoje.year, 12, 31),
+            format="DD/MM/YYYY",
+            key="admin_inicio_ano_letivo",
+            help="Defina a primeira data que deve entrar na contagem anual de presenças.",
+        )
+        if st.button(
+            "💾 Salvar início do ano letivo",
+            key="admin_btn_salvar_inicio_ano_letivo",
+        ):
+            ok, msg = set_config_valor(CHAVE_INICIO_ANO_LETIVO, novo_inicio.isoformat())
+            if ok:
+                for funcao_cacheada in (load_total_presencas_todos, bi_presencas_por_mes):
+                    funcao_cacheada.clear()
+                limpar_cache_contagem_aulas()
+                st.success(
+                    "✅ Início do ano letivo atualizado para "
+                    f"{novo_inicio.strftime('%d/%m/%Y')}."
+                )
+                st.info(
+                    "A Freq. Ano foi atualizada. Use **Processar em Lote** no painel "
+                    "inicial para renovar também o snapshot de todos os alunos."
+                )
             else:
                 st.error(f"❌ Erro ao salvar: {msg}")
 
@@ -449,6 +492,7 @@ def renderizar_aba_admin():
     # ── 3. Ferramentas de configuração (expanders) ────────────────────────────
     _renderizar_bloco_fonetica()
     _renderizar_bloco_validade_anamnese()
+    _renderizar_bloco_inicio_ano_letivo()
 
     st.markdown("---")
 
