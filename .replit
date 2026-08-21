@@ -45,8 +45,8 @@ outputType = "webview"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
-args = "PYTHONDONTWRITEBYTECODE=1 python cleanup.py && STREAMLIT_SERVER_PORT=8000 PYTHONDONTWRITEBYTECODE=1 streamlit run main.py"
-waitForPort = 8000
+args = "PYTHONDONTWRITEBYTECODE=1 python cleanup.py && PYTHONDONTWRITEBYTECODE=1 streamlit run main.py --server.address=0.0.0.0 --server.port=5000"
+waitForPort = 5000
 
 [agent]
 stack = "PNPM_WORKSPACE"
