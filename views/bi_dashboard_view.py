@@ -17,6 +17,7 @@ from database import (
     bi_dores_studio,
     buscar_alunos_geral,
     bi_presencas_periodo,
+    get_datas_aulas_validas,
     get_presencas_dia,
 )
 from utils.identidade import (
@@ -84,11 +85,11 @@ def _gauge_presenca(taxa):
     return fig
 
 
-def _calcular_media_semana(df_pres, data_ini, data_fim):
-    """Calcula média de presenças por dia da semana no período."""
-    todos_dias = pd.date_range(data_ini, data_fim)
+def _calcular_media_semana(df_pres, datas_aulas_validas):
+    """Calcula média por dia da semana usando somente aulas válidas."""
+    todos_dias = pd.to_datetime(list(datas_aulas_validas))
     contagem_dias = (
-        pd.Series(todos_dias.day_name())
+        pd.Series(todos_dias.day_name() if len(todos_dias) else [], dtype="object")
         .map(_DIAS_PT)
         .value_counts()
     )
@@ -316,6 +317,7 @@ def _gerar_pdf_frequencia(data_ini, data_fim, total, dias_aula, media_dia,
 def _flush_bi_frequencia():
     """Limpa apenas os caches relacionados a frequência/presenças."""
     for fn in (bi_presencas_periodo, bi_frequencia_turmas,
+               get_datas_aulas_validas,
                bi_resumo_studio, get_presencas_dia):
         try:
             fn.clear()
@@ -391,23 +393,26 @@ def render_bi_dashboard():
     # Usa o período que foi submetido, não o valor atual dos date_inputs
     _ini, _fim = st.session_state.get("bi_freq_periodo", (str(data_ini), str(data_fim)))
     df_pres = bi_presencas_periodo(_ini, _fim)
+    datas_aulas_validas = set(get_datas_aulas_validas(_ini, _fim))
+
+    if not df_pres.empty:
+        # Não deixa presenças históricas de um dia bloqueado pelo Calendário
+        # Institucional contaminarem totais, gráficos ou o PDF do BI.
+        df_pres["data_aula"] = df_pres["data_aula"].astype(str).str[:10]
+        df_pres = df_pres[df_pres["data_aula"].isin(datas_aulas_validas)].copy()
 
     if df_pres.empty:
         st.info("Nenhuma presença registada no período selecionado.")
     else:
-        # Normaliza para "YYYY-MM-DD" string pura antes de qualquer parsing.
-        # Supabase retorna date como "2026-05-21" e timestamp como "2026-05-21T00:00:00+00:00".
-        # pd.to_datetime em série mista converte tz-aware para NaT — usar str[:10] é seguro.
-        df_pres["data_aula"] = df_pres["data_aula"].astype(str).str[:10]
         df_diario = df_pres.groupby("data_aula").size().reset_index(name="presencas")
 
         total_pres  = int(df_diario["presencas"].sum())
-        dias_aula   = len(df_diario)
+        dias_aula   = len(datas_aulas_validas)
         media_dia   = total_pres / dias_aula if dias_aula > 0 else 0
         pico_row    = df_diario.loc[df_diario["presencas"].idxmax()]
         pico_val    = int(pico_row["presencas"])
         pico_data   = pd.to_datetime(pico_row["data_aula"]).strftime("%d/%m/%Y")
-        df_semana   = _calcular_media_semana(df_pres.copy(), data_ini, data_fim)
+        df_semana   = _calcular_media_semana(df_pres.copy(), datas_aulas_validas)
 
         # KPI cards
         st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)

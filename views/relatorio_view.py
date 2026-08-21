@@ -31,6 +31,7 @@ from database import (
     get_ultima_presenca_batch,
     get_presentes_dia_todos,
     get_presentes_periodo_todos,
+    get_datas_aulas_validas,
     get_dias_sem_aula,
     get_dias_sem_aula_periodo_df,
     get_primeira_data_frequencia,
@@ -2302,15 +2303,17 @@ CREATE POLICY "allow_all" ON dias_sem_aula
                     f"a {data_fim.strftime('%d/%m/%Y')}…"):
         por_dia_raw = get_presentes_periodo_todos(str(data_ini), str(data_fim))
 
-    # Filtra: só dias letivos (remove fins de semana, feriados e dias sem aula)
+    # Fonte única de datas de aula: lançamentos válidos, menos os dias que o
+    # Calendário Institucional marcou como sem aula. Mantém a contagem alinhada
+    # ao badge anual da tela de Frequência.
+    datas_aulas_validas = get_datas_aulas_validas(str(data_ini), str(data_fim))
     por_dia = {
-        iso: nomes
-        for iso, nomes in por_dia_raw.items()
-        if eh_dia_letivo(datetime.date.fromisoformat(iso))
+        iso: por_dia_raw.get(iso, [])
+        for iso in datas_aulas_validas
     }
 
     # ── Classifica os dias úteis sem frequência ───────────────────────────────
-    datas_com_frequencia = {datetime.date.fromisoformat(iso) for iso in por_dia}
+    datas_com_frequencia = {datetime.date.fromisoformat(iso) for iso in datas_aulas_validas}
 
     # Dias sem aula registrados no Calendário Institucional (no período).
     # Lista TODOS os dias registrados pelo usuário no período — inclusive os que

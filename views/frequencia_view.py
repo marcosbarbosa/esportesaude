@@ -330,7 +330,7 @@ def _renderizar_badge_aula(data_aula: datetime.date, num_aula: int, total_alunos
 
     # ── 5. Montar HTML (style em linha única — evita interpretação Markdown) ─
     ano        = data_aula.year
-    aula_label = f"#{num_aula}ª aula concluída" if num_aula else "—"
+    aula_label = f"#{num_aula}ª aula lançada" if num_aula else "—"
 
     _pulse_css = (
         "@keyframes _pbadge{0%,100%{box-shadow:0 0 0 0 rgba(239,68,68,.4)}"

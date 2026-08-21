@@ -876,6 +876,7 @@ def _inv_frequencia():
             fn.clear()
         except Exception:
             pass
+    limpar_cache_contagem_aulas()
 
 
 def _inv_dores():
@@ -2525,6 +2526,55 @@ def get_dias_sem_aula(data_ini: str = None, data_fim: str = None) -> set:
         return set()
 
 
+@st.cache_data(ttl=600, show_spinner=False)
+def get_datas_aulas_validas(data_ini: str, data_fim: str) -> tuple[str, ...]:
+    """Lista datas de aula com lançamento, excluindo o calendário bloqueado.
+
+    Esta é a fonte canônica para contadores de aulas do sistema. Uma data só
+    conta quando possui um status de frequência reconhecido e não foi marcada
+    como ``sem aula`` no Calendário Institucional.
+    """
+    try:
+        from utils.calendario_aulas import filtrar_datas_aulas_validas
+
+        registros: list[dict] = []
+        page = 1000
+        for inicio in range(0, 500_000, page):
+            resposta = (
+                supabase.from_("frequencia")
+                .select("data_aula, status")
+                .gte("data_aula", data_ini)
+                .lte("data_aula", data_fim)
+                .order("data_aula")
+                .range(inicio, inicio + page - 1)
+                .execute()
+            )
+            lote = resposta.data or []
+            registros.extend(lote)
+            if len(lote) < page:
+                break
+        return filtrar_datas_aulas_validas(
+            registros,
+            get_dias_sem_aula(data_ini, data_fim),
+        )
+    except Exception:
+        return ()
+
+
+def limpar_cache_contagem_aulas() -> None:
+    """Invalida todas as visões dependentes das datas válidas de aula."""
+    for funcao in (
+        get_datas_aulas_validas,
+        get_datas_letivas_detalhadas_no_ano,
+        get_aulas_por_mes_no_ano,
+        get_numero_aula_no_ano,
+    ):
+        try:
+            funcao.clear()
+        except Exception:
+            pass
+
+
 def get_primeira_data_frequencia():
     """
     Retorna a data (datetime.date) do PRIMEIRO dia com frequência registrada no
@@ -2571,6 +2621,7 @@ def registrar_dia_sem_aula(
     }
     try:
         supabase.from_("dias_sem_aula").insert(payload).execute()
+        limpar_cache_contagem_aulas()
         return True
     except Exception:
         pass
@@ -2578,6 +2629,7 @@ def registrar_dia_sem_aula(
         supabase.from_("dias_sem_aula").update(
             {k: v for k, v in payload.items() if k != "data"}
         ).eq("data", data_iso).execute()
+        limpar_cache_contagem_aulas()
         return True
     except Exception:
         return False
@@ -2587,6 +2639,7 @@ def remover_dia_sem_aula(data_iso: str) -> bool:
     """Remove um dia do calendário institucional. Retorna True se sucesso."""
     try:
         supabase.from_("dias_sem_aula").delete().eq("data", data_iso).execute()
+        limpar_cache_contagem_aulas()
         return True
     except Exception:
         return False
@@ -4699,31 +4752,16 @@ def get_datas_letivas_detalhadas_no_ano(ano: int) -> dict:
     Usado pelo gráfico de progresso para listar os dias letivos de um mês.
     """
     try:
-        import datetime as _dt
-        inicio_ano = _dt.date(ano, 1, 1).isoformat()
-        fim_ano = _dt.date(ano, 12, 31).isoformat()
-        PAGE = 1000
-        datas_unicas: set = set()
-        for start in range(0, 500_000, PAGE):
-            r = (
-                supabase.from_("frequencia")
-                .select("data_aula")
-                .gte("data_aula", inicio_ano)
-                .lte("data_aula", fim_ano)
-                .order("data_aula")
-                .range(start, start + PAGE - 1)
-                .execute()
+        from utils.calendario_aulas import sequenciar_datas_aulas
+
+        datas_ordenadas = sequenciar_datas_aulas(
+            get_datas_aulas_validas(
+                datetime.date(ano, 1, 1).isoformat(),
+                datetime.date(ano, 12, 31).isoformat(),
             )
-            batch = r.data or []
-            for row in batch:
-                d = str(row.get("data_aula", ""))[:10]
-                if d:
-                    datas_unicas.add(d)
-            if len(batch) < PAGE:
-                break
-        datas_ordenadas = sorted(datas_unicas)
+        )
         resultado: dict = {}
-        for num_seq, d in enumerate(datas_ordenadas, start=1):
+        for d, num_seq in datas_ordenadas:
             try:
                 mes = int(d[5:7])
             except Exception:
@@ -4742,37 +4780,14 @@ def get_aulas_por_mes_no_ano(ano: int) -> dict:
     Usado para o gráfico de progresso anual no badge de número de aula.
     """
     try:
-        import datetime as _dt
-        from collections import defaultdict
-        inicio_ano = _dt.date(ano, 1, 1).isoformat()
-        fim_ano = _dt.date(ano, 12, 31).isoformat()
-        PAGE = 1000
-        datas_unicas: set = set()
-        for start in range(0, 500_000, PAGE):
-            r = (
-                supabase.from_("frequencia")
-                .select("data_aula")
-                .gte("data_aula", inicio_ano)
-                .lte("data_aula", fim_ano)
-                .order("data_aula")
-                .range(start, start + PAGE - 1)
-                .execute()
+        from utils.calendario_aulas import contar_aulas_por_mes
+
+        return contar_aulas_por_mes(
+            get_datas_aulas_validas(
+                datetime.date(ano, 1, 1).isoformat(),
+                datetime.date(ano, 12, 31).isoformat(),
             )
-            batch = r.data or []
-            for row in batch:
-                d = str(row.get("data_aula", ""))[:10]
-                if d:
-                    datas_unicas.add(d)
-            if len(batch) < PAGE:
-                break
-        contagem: dict = defaultdict(int)
-        for d in datas_unicas:
-            try:
-                mes = int(d[5:7])
-                contagem[mes] += 1
-            except Exception:
-                pass
-        return dict(contagem)
+        )
     except Exception:
         return {}
 
@@ -4786,31 +4801,14 @@ def get_numero_aula_no_ano(data_referencia) -> int:
     Usado para exibir o número sequencial da aula na tela de Gestão de Fluxo.
     """
     try:
-        import datetime as _dt
         if isinstance(data_referencia, str):
-            data_referencia = _dt.date.fromisoformat(data_referencia[:10])
-        inicio_ano = _dt.date(data_referencia.year, 1, 1).isoformat()
-        fim = data_referencia.isoformat()
-        PAGE = 1000
-        datas_unicas: set = set()
-        for start in range(0, 500_000, PAGE):
-            r = (
-                supabase.from_("frequencia")
-                .select("data_aula")
-                .gte("data_aula", inicio_ano)
-                .lte("data_aula", fim)
-                .order("data_aula")
-                .range(start, start + PAGE - 1)
-                .execute()
+            data_referencia = datetime.date.fromisoformat(data_referencia[:10])
+        return len(
+            get_datas_aulas_validas(
+                datetime.date(data_referencia.year, 1, 1).isoformat(),
+                data_referencia.isoformat(),
             )
-            batch = r.data or []
-            for row in batch:
-                d = str(row.get("data_aula", ""))[:10]
-                if d:
-                    datas_unicas.add(d)
-            if len(batch) < PAGE:
-                break
-        return len(datas_unicas)
+        )
     except Exception:
         return 0
 

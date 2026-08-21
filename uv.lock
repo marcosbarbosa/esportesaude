@@ -2583,6 +2583,7 @@ dependencies = [
     { name = "qrcode", extra = ["pil"] },
     { name = "streamlit" },
     { name = "streamlit-keyup" },
+    { name = "streamlit-sortables" },
     { name = "supabase" },
     { name = "svglib" },
     { name = "tf-keras" },
@@ -2602,6 +2603,7 @@ requires-dist = [
     { name = "qrcode", extras = ["pil"], specifier = ">=8.0" },
     { name = "streamlit", specifier = ">=1.55.0" },
     { name = "streamlit-keyup", specifier = ">=0.3.0" },
+    { name = "streamlit-sortables", specifier = ">=0.3.1" },
     { name = "supabase", specifier = ">=2.28.2" },
     { name = "svglib", specifier = "<1.6" },
     { name = "tf-keras", specifier = ">=2.19.0" },
@@ -2878,6 +2880,18 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/88/25/d153babd6d8dff72ee2e56976862ec7fdd7856ec7da2cb6ffd4b3b12f336/streamlit_keyup-0.3.0.tar.gz", hash = "sha256:8595a14892423243669e5d50e982853ffb7eb201b65952a48676133ab9bbc937", size = 7387, upload-time = "2025-01-02T14:48:40.245Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/14/ed/facce225c0d360b9bfa053c827029312e1b255e84d79320bda3539417b50/streamlit_keyup-0.3.0-py3-none-any.whl", hash = "sha256:ec7221617b1c832526db52859196c417578d6b4285942fbd10a0b2ff313899b3", size = 7493, upload-time = "2025-01-02T14:48:35.414Z" },
+]
+
+[[package]]
+name = "streamlit-sortables"
+version = "0.3.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "streamlit" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/11/10/00c3ae0f183d41bb3608157283a2c92e4f4db87cb21a73e96b3c2c2ca58f/streamlit_sortables-0.3.1.tar.gz", hash = "sha256:9bed78f4407f2b9b1ddead8b6459d1af839aab427b7b5fe4c091e6870630acfe", size = 564139, upload-time = "2025-01-13T07:37:44.533Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/3d/b4/edbef9fa8e49f5df2745a178c44b23553d8472c22fb23f44f6949d544410/streamlit_sortables-0.3.1-py3-none-any.whl", hash = "sha256:1847b2fa2041762b6442e21224bd8c0316c5412e4eb3a38fa748cf7ced834d49", size = 570356, upload-time = "2025-01-13T07:37:42.852Z" },
 ]
 
 [[package]]
