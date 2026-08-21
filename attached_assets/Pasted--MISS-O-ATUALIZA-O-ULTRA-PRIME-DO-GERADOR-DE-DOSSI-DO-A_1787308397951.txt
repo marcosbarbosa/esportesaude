@@ -1,0 +1,47 @@
+🚀 MISSÃO: ATUALIZAÇÃO ULTRA-PRIME DO GERADOR DE DOSSIÊ DO ALUNO (gerador_pdf.py)
+
+Precisamos refatorar o arquivo gerador_pdf.py (e suas integrações em database.py / prontuario_view.py) para lançar a versão "Super Mega Prime" do Dossiê do Aluno em PDF.
+
+O objetivo é transformar o documento em uma peça de alto impacto visual e clínico, baseada na metodologia AIDA (Atenção, Interesse, Desejo, Ação), que encante os alunos e mostre com clareza o seu progresso e os pontos onde precisam evoluir.
+
+==============================================================================
+🎯 ESPECIFICAÇÕES TÉCNICAS E VISUAIS
+==============================================================================
+
+1. INCLUSÃO DE 3 NOVOS GRÁFICOS (Gerados via Matplotlib em BytesIO com 300 DPI):
+
+  A) Gráfico 1 - Donut/Pizza de Assiduidade e Compromisso (Atenção & Interesse):
+     - Distribuição percentual de Presenças (Verde #10B981), Faltas (Vermelho #EF4444) e Justificadas (Amarelo #F59E0B).
+     - Centro vazado exibindo o percentual geral de Assiduidade (ex: 90.0%).
+     - Legenda limpa e títulos acessíveis.
+
+  B) Gráfico 2 - Gráfico de Linha de Evolução e Consistência (Desejo):
+     - Linha do tempo mensal (meses no eixo X: Abr, Mai, Jun, Jul, Ago).
+     - Eixo Y principal: Volume de aulas presentes por mês.
+     - Linha de tendência suave demonstrando a constância do aluno ao longo do semestre.
+
+  C) Gráfico 3 - Gráfico de Barras Horizontais / Radar de Foco Técnico & Blindagem Articular:
+     - Mapeamento dos segmentos corporais mais estimulados nas aulas que o aluno compareceu (Ombro, Joelho, Lombar, Core, Coordenação).
+     - Barra visual com cores institucionais (Azul #1D4ED8, Verde #22C55E) mostrando o volume de supervisões recebidas.
+
+2. ESTRUTURAÇÃO DO DOCUMENTO (Metodologia AIDA):
+
+  - TOPO (Atenção):
+    * Cabeçalho institucional impecável com Logo, Título "DOSSIÊ CLÍNICO E DE EVOLUÇÃO FUNCIONAL", foto do aluno em alta definição e Card de Destaque com Idade, Turma e Status.
+
+  - BLOCO CENTRAL (Interesse & Desejo):
+    * Grid lado a lado integrando os gráficos gerados com as métricas vitais (PA mais recente, IMC, Escala de Borg/Esforço e Histórico de Atestado).
+    * Seção "Conquistas do Aluno": Destaque para total de aulas concluídas, sequência de treinos e redução de riscos.
+
+  - BLOCO FINAL (Ação & Evolução):
+    * Criar a seção destacada "🎯 SEU PLANO DE EVOLUÇÃO PARA O PRÓXIMO CICLO":
+      - 🟢 O que você conquistou (Pontos Fortes): elogio à frequência e dedicação.
+      - 🟡 O que precisamos focar (Pontos de Atenção): recomendações práticas (ex: manter hidratação, controle de amplitude no ombro, melhorar regularidade às segundas-feiras, etc.).
+      - 📋 Mensagem de encerramento afetuosa da equipe IMBRA.
+
+3. DIRETRIZES DE CÓDIGO:
+  - Utilize ReportLab ou FPDF2 (mantendo o framework atual do projeto).
+  - Garanta que todos os buffers de imagem do Matplotlib sejam fechados corretamente (plt.close(fig)) para evitar consumo de memória.
+  - Implemente tratamento gracioso de exceções (try/except): se algum dado de histórico não existir, exiba um card informativo amigável em vez de quebrar a geração do PDF.
+
+Por favor, apresente a refatoração completa do gerador_pdf.py pronto para teste e download no Portal do Aluno.
