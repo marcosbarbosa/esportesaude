@@ -871,6 +871,7 @@ def _inv_frequencia():
         get_ultima_presenca_batch, load_frequencia_ultima_presenca,
         get_presencas_dia, bi_presencas_periodo, bi_frequencia_turmas,
         bi_resumo_studio, get_diarios_periodo, listar_datas_aulas_registradas,
+        get_estatisticas_frequencia_aluno, get_frequencia_aluno_serie,
     ):
         try:
             fn.clear()
@@ -3334,33 +3335,62 @@ def atualizar_turma_aluno(aluno_id, nova_turma):
 @st.cache_data(ttl=120, show_spinner=False)
 def get_estatisticas_frequencia_aluno(aluno_id):
     try:
-        res = supabase.from_("frequencia").select("status").eq("aluno_id", str(aluno_id)).execute()
-        if not res.data:
-            return {"total": 0, "presentes": 0, "faltas": 0, "percentual": 0.0}
-        total = len(res.data)
-        presentes = sum(1 for r in res.data if r["status"] == "PRESENTE")
-        return {"total": total, "presentes": presentes, "faltas": total - presentes,
-                "percentual": (presentes / total) * 100 if total > 0 else 0.0}
+        registros = get_frequencia_aluno_serie(aluno_id)
+        contagem = {"PRESENTE": 0, "FALTA": 0, "JUSTIFICADA": 0}
+        for registro in registros:
+            status = str(registro.get("status", "")).upper()
+            if status in contagem:
+                contagem[status] += 1
+        total = sum(contagem.values())
+        presentes = contagem["PRESENTE"]
+        return {
+            "total": total,
+            "presentes": presentes,
+            "faltas": contagem["FALTA"],
+            "justificadas": contagem["JUSTIFICADA"],
+            "percentual": (presentes / total) * 100 if total > 0 else 0.0,
+        }
     except Exception:
-        return {"total": 0, "presentes": 0, "faltas": 0, "percentual": 0.0}
+        return {"total": 0, "presentes": 0, "faltas": 0, "justificadas": 0, "percentual": 0.0}
 
 
 def get_frequencia_aluno_serie(aluno_id: str) -> list:
-    """Retorna serie temporal completa de frequencia do aluno para grafico de linha.
+    """Retorna série canônica do aluno para gráficos e resumos de frequência.
 
-    Retorna lista de dicts [{data_aula: str, status: str}, ...] do mais antigo ao mais novo.
-    Limite seguro de 1000 registros (~6 anos de aulas diarias).
+    Considera apenas os status reconhecidos e exclui datas bloqueadas pelo
+    Calendário Institucional, mantendo o dossiê consistente com o BI.
     """
     try:
-        res = (
-            supabase.from_("frequencia")
-            .select("data_aula, status")
-            .eq("aluno_id", str(aluno_id))
-            .order("data_aula", desc=False)
-            .limit(1000)
-            .execute()
-        )
-        return res.data or []
+        registros = []
+        pagina = 1000
+        for inicio in range(0, 500_000, pagina):
+            resposta = (
+                supabase.from_("frequencia")
+                .select("data_aula, status")
+                .eq("aluno_id", str(aluno_id))
+                .order("data_aula", desc=False)
+                .range(inicio, inicio + pagina - 1)
+                .execute()
+            )
+            lote = resposta.data or []
+            registros.extend(lote)
+            if len(lote) < pagina:
+                break
+        registros = [
+            registro for registro in registros
+            if str(registro.get("status", "")).upper() in {"PRESENTE", "FALTA", "JUSTIFICADA"}
+            and str(registro.get("data_aula", ""))[:10]
+        ]
+        if not registros:
+            return []
+        datas_validas = set(get_datas_aulas_validas(
+            min(str(registro["data_aula"])[:10] for registro in registros),
+            max(str(registro["data_aula"])[:10] for registro in registros),
+        ))
+        return [
+            registro for registro in registros
+            if str(registro["data_aula"])[:10] in datas_validas
+        ]
     except Exception:
         return []
 

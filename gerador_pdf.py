@@ -501,6 +501,284 @@ def criar_documento_pdf(data_aula, turma):
 # ==============================================================================
 # 2. RELATÓRIO: DOSSIÊ CLÍNICO INDIVIDUAL DO ALUNO (v3 — Decisão Administrativa)
 # ==============================================================================
+_STATUS_FREQUENCIA_VALIDOS = {"PRESENTE", "FALTA", "JUSTIFICADA"}
+
+
+def _data_frequencia_valida(valor):
+    """Devolve a data de um lançamento ou ``None`` quando o dado é inválido."""
+    try:
+        return datetime.date.fromisoformat(str(valor)[:10])
+    except Exception:
+        return None
+
+
+def resumir_assiduidade_dossie(freq_serie, estatisticas=None):
+    """Consolida presença, falta e justificativa sem misturar os três estados.
+
+    O retorno tem valores seguros para renderização mesmo quando a série ainda
+    não está disponível. O fallback mantém compatibilidade com os chamadores
+    antigos que ainda entregam apenas o dicionário de estatísticas.
+    """
+    contagem = {"PRESENTE": 0, "FALTA": 0, "JUSTIFICADA": 0}
+    for registro in freq_serie or []:
+        status = str(registro.get("status", "")).upper().strip()
+        if status in contagem and _data_frequencia_valida(registro.get("data_aula")):
+            contagem[status] += 1
+
+    total = sum(contagem.values())
+    if total == 0 and estatisticas:
+        presentes = max(0, int(estatisticas.get("presentes", 0) or 0))
+        faltas = max(0, int(estatisticas.get("faltas", 0) or 0))
+        justificadas = max(0, int(estatisticas.get("justificadas", 0) or 0))
+        total_informado = max(0, int(estatisticas.get("total", 0) or 0))
+        if total_informado:
+            faltas = max(faltas, total_informado - presentes - justificadas)
+        contagem = {
+            "PRESENTE": presentes,
+            "FALTA": faltas,
+            "JUSTIFICADA": justificadas,
+        }
+        total = sum(contagem.values())
+
+    percentual = (contagem["PRESENTE"] / total * 100) if total else 0.0
+    return {
+        "total": total,
+        "presentes": contagem["PRESENTE"],
+        "faltas": contagem["FALTA"],
+        "justificadas": contagem["JUSTIFICADA"],
+        "percentual": percentual,
+        "tem_dados": bool(total),
+    }
+
+
+def preparar_evolucao_mensal_dossie(freq_serie):
+    """Agrupa presenças mensais e calcula uma tendência curta e legível."""
+    por_mes = {}
+    for registro in freq_serie or []:
+        if str(registro.get("status", "")).upper().strip() != "PRESENTE":
+            continue
+        data = _data_frequencia_valida(registro.get("data_aula"))
+        if not data:
+            continue
+        chave = data.strftime("%Y-%m")
+        por_mes[chave] = por_mes.get(chave, 0) + 1
+
+    meses = sorted(por_mes)
+    meses_pt = ("Jan", "Fev", "Mar", "Abr", "Mai", "Jun",
+                "Jul", "Ago", "Set", "Out", "Nov", "Dez")
+    valores = [por_mes[mes] for mes in meses]
+    labels = [f"{meses_pt[int(mes[5:]) - 1]}/{mes[2:4]}" for mes in meses]
+    tendencia = []
+    for indice, valor in enumerate(valores):
+        vizinhos = valores[max(0, indice - 1): min(len(valores), indice + 2)]
+        tendencia.append(round(sum(vizinhos) / len(vizinhos), 2) if vizinhos else valor)
+    return {"meses": meses, "labels": labels, "valores": valores, "tendencia": tendencia}
+
+
+def contar_focos_tecnicos_dossie(historico):
+    """Conta, por aula com diário, os cinco focos técnicos do painel visual."""
+    palavras = {
+        "Ombro": ("ombro", "elevacao", "supino", "remada", "halter", "triceps", "biceps"),
+        "Joelho": ("joelho", "agachamento", "salto", "corrida", "step", "leg press"),
+        "Lombar": ("lombar", "coluna", "peso morto", "dead lift", "hiperextensao"),
+        "Core": ("core", "prancha", "abdominal", "estabilizacao", "tronco"),
+        "Coordenacao": ("coordenacao", "equilibrio", "agilidade", "ritmo", "propriocepcao"),
+    }
+    resultado = {segmento: 0 for segmento in palavras}
+    for aula in historico or []:
+        texto = " ".join(
+            str(aula.get(campo, "") or "")
+            for campo in ("exercicios_executados", "objetivo_geral", "foco_clinico_social")
+        )
+        texto = _normalizar_texto_dossie(texto)
+        for segmento, termos in palavras.items():
+            if any(termo in texto for termo in termos):
+                resultado[segmento] += 1
+    return resultado
+
+
+def filtrar_historico_canonico_dossie(historico, freq_serie):
+    """Mantém diários somente em aulas canônicas com presença do aluno.
+
+    A série de frequência já sai filtrada pelo Calendário Institucional. Usar
+    esse conjunto também no foco técnico impede que uma aula marcada depois
+    como ``sem aula`` permaneça em um gráfico isolado do painel.
+    """
+    datas_presentes = {
+        str(registro.get("data_aula", ""))[:10]
+        for registro in (freq_serie or [])
+        if str(registro.get("status", "")).upper().strip() == "PRESENTE"
+        and _data_frequencia_valida(registro.get("data_aula"))
+    }
+    return [
+        aula for aula in (historico or [])
+        if str(aula.get("data_aula", ""))[:10] in datas_presentes
+    ]
+
+
+def _normalizar_texto_dossie(texto):
+    import unicodedata
+    return "".join(
+        caractere for caractere in unicodedata.normalize("NFKD", str(texto).lower())
+        if not unicodedata.combining(caractere)
+    )
+
+
+def _salvar_figura_dossie(figura):
+    """Serializa uma figura para PNG em memória e sempre libera o Matplotlib."""
+    import matplotlib.pyplot as plt
+    buffer = io.BytesIO()
+    try:
+        figura.savefig(buffer, format="png", dpi=300, bbox_inches="tight",
+                       facecolor="white", pad_inches=0.08)
+        buffer.seek(0)
+        return buffer
+    except Exception:
+        buffer.close()
+        raise
+    finally:
+        plt.close(figura)
+
+
+def gerar_grafico_assiduidade_dossie(resumo):
+    """Cria o donut de assiduidade em um ``BytesIO`` com 300 DPI."""
+    import matplotlib
+    matplotlib.use("Agg", force=True)
+    import matplotlib.pyplot as plt
+
+    valores = [resumo.get("presentes", 0), resumo.get("faltas", 0), resumo.get("justificadas", 0)]
+    labels = ["Presenças", "Faltas", "Justificadas"]
+    cores = ["#10B981", "#EF4444", "#F59E0B"]
+    figura, eixo = plt.subplots(figsize=(4.2, 3.2))
+    if sum(valores):
+        eixo.pie(valores, colors=cores, startangle=90, counterclock=False,
+                 wedgeprops={"width": 0.42, "edgecolor": "white"})
+        centro = f"{resumo.get('percentual', 0):.1f}%"
+        subtitulo = "assiduidade"
+    else:
+        eixo.pie([1], colors=["#E5E7EB"], wedgeprops={"width": 0.42, "edgecolor": "white"})
+        centro, subtitulo = "—", "sem registros"
+    eixo.text(0, 0.08, centro, ha="center", va="center", fontsize=18,
+              fontweight="bold", color="#0F172A")
+    eixo.text(0, -0.16, subtitulo, ha="center", va="center", fontsize=8, color="#64748B")
+    eixo.set_title("Assiduidade e compromisso", fontsize=11, fontweight="bold",
+                   color="#0F172A", pad=8)
+    if sum(valores):
+        legenda = [f"{label}: {valor}" for label, valor in zip(labels, valores)]
+        eixo.legend(legenda, loc="lower center", bbox_to_anchor=(0.5, -0.20),
+                    ncol=3, frameon=False, fontsize=7)
+    eixo.axis("equal")
+    figura.tight_layout()
+    return _salvar_figura_dossie(figura)
+
+
+def gerar_grafico_evolucao_mensal_dossie(evolucao):
+    """Cria a linha mensal de presenças e sua tendência em ``BytesIO``."""
+    import matplotlib
+    matplotlib.use("Agg", force=True)
+    import matplotlib.pyplot as plt
+
+    figura, eixo = plt.subplots(figsize=(5.4, 3.2))
+    valores = evolucao.get("valores", [])
+    if valores:
+        x = list(range(len(valores)))
+        eixo.plot(x, valores, color="#1D4ED8", marker="o", linewidth=2.4,
+                  markersize=5, label="Presenças")
+        eixo.plot(x, evolucao.get("tendencia", valores), color="#22C55E",
+                  linewidth=2, linestyle="--", label="Tendência")
+        eixo.fill_between(x, valores, color="#DBEAFE", alpha=0.65)
+        eixo.set_xticks(x, evolucao.get("labels", []))
+        eixo.set_ylim(bottom=0)
+        eixo.legend(frameon=False, fontsize=7, loc="upper left")
+        eixo.set_ylabel("Aulas presentes", fontsize=8)
+    else:
+        eixo.text(0.5, 0.5, "Ainda não há presenças suficientes\npara mostrar a evolução mensal.",
+                  ha="center", va="center", fontsize=10, color="#64748B", transform=eixo.transAxes)
+        eixo.set_xticks([])
+        eixo.set_yticks([])
+    eixo.set_title("Evolução e consistência mensal", fontsize=11, fontweight="bold",
+                   color="#0F172A", pad=8)
+    eixo.grid(axis="y", color="#E2E8F0", linewidth=0.8)
+    for lado in ("top", "right", "left"):
+        eixo.spines[lado].set_visible(False)
+    eixo.tick_params(axis="both", labelsize=7, colors="#475569")
+    figura.tight_layout()
+    return _salvar_figura_dossie(figura)
+
+
+def gerar_grafico_foco_tecnico_dossie(focos):
+    """Cria barras horizontais dos cinco segmentos técnicos em ``BytesIO``."""
+    import matplotlib
+    matplotlib.use("Agg", force=True)
+    import matplotlib.pyplot as plt
+
+    segmentos = list(focos.keys())
+    valores = [focos[segmento] for segmento in segmentos]
+    figura, eixo = plt.subplots(figsize=(7.2, 2.7))
+    if any(valores):
+        cores = ["#1D4ED8" if valor == max(valores) and valor else "#22C55E" for valor in valores]
+        barras = eixo.barh(segmentos, valores, color=cores, height=0.56)
+        for barra, valor in zip(barras, valores):
+            eixo.text(barra.get_width() + 0.08, barra.get_y() + barra.get_height() / 2,
+                      str(valor), va="center", fontsize=8, color="#334155")
+        eixo.set_xlim(0, max(valores) + max(1, max(valores) * 0.2))
+        eixo.set_xlabel("Aulas com estímulo/supervisão registrada", fontsize=8)
+    else:
+        eixo.text(0.5, 0.5, "Nenhum diário técnico disponível para este período.",
+                  ha="center", va="center", fontsize=10, color="#64748B", transform=eixo.transAxes)
+        eixo.set_xticks([])
+        eixo.set_yticks([])
+    eixo.invert_yaxis()
+    eixo.set_title("Foco técnico e blindagem articular", fontsize=11, fontweight="bold",
+                   color="#0F172A", pad=8)
+    eixo.grid(axis="x", color="#E2E8F0", linewidth=0.8)
+    for lado in ("top", "right", "left"):
+        eixo.spines[lado].set_visible(False)
+    eixo.tick_params(axis="both", labelsize=8, colors="#475569")
+    figura.tight_layout()
+    return _salvar_figura_dossie(figura)
+
+
+def _inserir_buffer_imagem(pdf, buffer, x, y, largura, altura):
+    """Insere um PNG em memória no FPDF sem deixar arquivo temporário no disco."""
+    caminho = None
+    try:
+        with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as arquivo:
+            caminho = arquivo.name
+            buffer.seek(0)
+            arquivo.write(buffer.read())
+        pdf.image(caminho, x=x, y=y, w=largura, h=altura)
+        return True
+    except Exception:
+        return False
+    finally:
+        try:
+            buffer.close()
+        except Exception:
+            pass
+        if caminho:
+            try:
+                os.remove(caminho)
+            except OSError:
+                pass
+
+
+def _desenhar_fallback_grafico(pdf, x, y, largura, altura, titulo, mensagem):
+    """Mostra um cartão amigável se uma imagem do painel não puder ser exibida."""
+    pdf.set_fill_color(248, 250, 252)
+    pdf.set_draw_color(203, 213, 225)
+    pdf.rect(x, y, largura, altura, style="FD")
+    pdf.set_xy(x + 5, y + max(8, altura / 2 - 5))
+    pdf.set_font("Arial", "B", 9)
+    pdf.set_text_color(71, 85, 105)
+    pdf.cell(largura - 10, 4, limpar_texto(titulo), align="C")
+    pdf.set_xy(x + 5, y + max(13, altura / 2))
+    pdf.set_font("Arial", "", 7.5)
+    pdf.set_text_color(100, 116, 139)
+    pdf.multi_cell(largura - 10, 3.5, limpar_texto(mensagem), align="C")
+    pdf.set_text_color(0, 0, 0)
+
+
 def criar_documento_aluno_pdf(aluno_data, avaliacoes, historico, estatisticas, incluir_cadastro=False):
     """
     Dossie Clinico v3 — 9 secoes para tomada de decisao administrativa:
@@ -664,36 +942,32 @@ def criar_documento_aluno_pdf(aluno_data, avaliacoes, historico, estatisticas, i
         imc_str       = f"{imc:.1f} kg/m2"
         imc_class_str = _imc_class(imc)
 
-    # Contagem EXATA direto de freq_serie — mesma fonte dos gráficos.
-    # Elimina qualquer divergência entre resumo textual e barras/calendário.
-    if freq_serie:
-        _fs_pres  = sum(1 for _r in freq_serie if str(_r.get("status","")).upper() == "PRESENTE")
-        _fs_just  = sum(1 for _r in freq_serie if str(_r.get("status","")).upper() == "JUSTIFICADA")
-        _fs_total = len(freq_serie)
-        pres_total = _fs_pres
-        faltas     = _fs_total - _fs_pres          # inclui JUSTIFICADA (convenção existente)
-        pct        = (_fs_pres / _fs_total * 100) if _fs_total > 0 else 0.0
-    else:
-        # fallback: sem dados de série, usa dict de estatísticas do banco
-        pres_total = estatisticas.get("presentes",  0)   if estatisticas else 0
-        faltas     = estatisticas.get("faltas",     0)   if estatisticas else 0
-        pct        = estatisticas.get("percentual", 0.0) if estatisticas else 0.0
-        _fs_just   = 0
+    # Uma única consolidação alimenta os gráficos, a narrativa e as seções
+    # legadas. Faltas e justificativas não são mais agrupadas na mesma métrica.
+    historico = filtrar_historico_canonico_dossie(historico, freq_serie)
+    resumo_frequencia = resumir_assiduidade_dossie(freq_serie, estatisticas)
+    pres_total = resumo_frequencia["presentes"]
+    faltas = resumo_frequencia["faltas"]
+    _fs_just = resumo_frequencia["justificadas"]
+    pct = resumo_frequencia["percentual"]
+    evolucao_mensal = preparar_evolucao_mensal_dossie(freq_serie)
+    focos_tecnicos = contar_focos_tecnicos_dossie(historico)
 
     cutoff_60 = hoje - datetime.timedelta(days=60)
     pres_60, total_60 = 0, 0
     for _r in freq_serie:
         try:
             _d = datetime.date.fromisoformat(str(_r.get("data_aula", ""))[:10])
-            if _d >= cutoff_60:
+            if _d >= cutoff_60 and str(_r.get("status", "")).upper() in _STATUS_FREQUENCIA_VALIDOS:
                 total_60 += 1
-                if _r.get("status") == "PRESENTE":
+                if str(_r.get("status", "")).upper() == "PRESENTE":
                     pres_60 += 1
         except Exception:
             pass
     pct_60 = (pres_60 / total_60 * 100) if total_60 > 0 else 0.0
 
     nasc = aluno_data.get("data_nascimento")
+    idade_a = None
     nasc_str = "Nao informado"
     if pd.notna(nasc) and str(nasc).strip():
         try:
@@ -736,6 +1010,16 @@ def criar_documento_aluno_pdf(aluno_data, avaliacoes, historico, estatisticas, i
         bloqueado_manual=bool(aluno_data.get("atestado_bloqueado")),
     )
 
+    ultima_avaliacao = avaliacoes[0] if avaliacoes else {}
+    borg = (
+        ultima_avaliacao.get("borg")
+        or ultima_avaliacao.get("escala_borg")
+        or ultima_avaliacao.get("nivel_esforco")
+        or ultima_avaliacao.get("esforco")
+    )
+    borg_texto = _safe_str(borg, "Sem registro")
+    status_aluno = _safe_str(aluno_data.get("status"), "Ativo")
+
     # ── Construção do PDF ─────────────────────────────────────────────────────
     pdf = PDF()
     pdf.add_page()
@@ -743,7 +1027,7 @@ def criar_documento_aluno_pdf(aluno_data, avaliacoes, historico, estatisticas, i
 
     pdf.set_font("Arial", "B", 13)
     pdf.set_text_color(10, 37, 64)
-    pdf.cell(0, 8, limpar_texto("DOSSIE CLINICO E DESPORTIVO DO ALUNO"), align="C", ln=1)
+    pdf.cell(0, 8, limpar_texto("DOSSIÊ CLÍNICO E DE EVOLUÇÃO FUNCIONAL"), align="C", ln=1)
     pdf.set_font("Arial", "", 9)
     pdf.set_text_color(120, 120, 120)
     pdf.cell(0, 5,
@@ -751,6 +1035,146 @@ def criar_documento_aluno_pdf(aluno_data, avaliacoes, historico, estatisticas, i
              align="C", ln=1)
     pdf.set_text_color(0, 0, 0)
     pdf.ln(2)
+
+    # ── ABERTURA AIDA: atenção (perfil de destaque) ───────────────────────────
+    _hero_y = pdf.get_y()
+    pdf.set_fill_color(239, 246, 255)
+    pdf.set_draw_color(191, 219, 254)
+    pdf.rect(12, _hero_y, 186, 49, style="FD")
+    pdf.set_draw_color(0, 0, 0)
+    pdf.set_xy(18, _hero_y + 5)
+    pdf.set_font("Arial", "B", 14)
+    pdf.set_text_color(15, 23, 42)
+    pdf.cell(132, 7, limpar_texto(_safe_str(aluno_data.get("nome"), "Aluno")), ln=1)
+    pdf.set_x(18)
+    pdf.set_font("Arial", "", 8.5)
+    pdf.set_text_color(71, 85, 105)
+    pdf.multi_cell(128, 4.5, limpar_texto(
+        "ATENÇÃO - Um retrato claro da sua jornada, do cuidado já recebido e do próximo passo."
+    ))
+
+    _foto_hero = aluno_data.get("foto_url")
+    if pd.notna(_foto_hero) and str(_foto_hero).strip().lower() not in ("", "nan", "none", "null"):
+        foto_tmp = baixar_imagem_supabase(str(_foto_hero)) or baixar_imagem_temp(str(_foto_hero))
+        if foto_tmp:
+            try:
+                pdf.image(foto_tmp, x=163, y=_hero_y + 5, w=28, h=35)
+                pdf.rect(163, _hero_y + 5, 28, 35)
+            except Exception:
+                pass
+            finally:
+                try:
+                    os.remove(foto_tmp)
+                except OSError:
+                    pass
+
+    _cards_y = _hero_y + 29
+    _cartoes = [
+        ("IDADE", f"{idade_a} anos" if idade_a is not None else "Não informada"),
+        ("TURMA", _safe_str(aluno_data.get("turma"), "Não informada")[:28]),
+        ("SITUAÇÃO", status_aluno),
+    ]
+    for _indice, (_titulo_cartao, _valor_cartao) in enumerate(_cartoes):
+        _x_cartao = 18 + _indice * 45
+        pdf.set_fill_color(255, 255, 255)
+        pdf.set_draw_color(219, 234, 254)
+        pdf.rect(_x_cartao, _cards_y, 41, 13, style="FD")
+        pdf.set_xy(_x_cartao + 2, _cards_y + 2)
+        pdf.set_font("Arial", "B", 6.5)
+        pdf.set_text_color(100, 116, 139)
+        pdf.cell(37, 3, limpar_texto(_titulo_cartao))
+        pdf.set_xy(_x_cartao + 2, _cards_y + 6)
+        pdf.set_font("Arial", "B", 8)
+        pdf.set_text_color(15, 23, 42)
+        pdf.cell(37, 4, limpar_texto(_valor_cartao), align="C")
+    pdf.set_text_color(0, 0, 0)
+    pdf.set_y(_hero_y + 54)
+
+    # ── AIDA: interesse e desejo (painel visual de evolução) ─────────────────
+    pdf.add_page()
+    _cabecalho_padrao(pdf, "Painel visual de evolução")
+    pdf.set_font("Arial", "B", 12)
+    pdf.set_text_color(10, 37, 64)
+    pdf.cell(0, 7, limpar_texto("INTERESSE E DESEJO - Sua evolução em números"), ln=1)
+    pdf.set_font("Arial", "", 8.5)
+    pdf.set_text_color(71, 85, 105)
+    pdf.multi_cell(0, 4.5, limpar_texto(
+        "Os indicadores abaixo consideram somente os lançamentos válidos registrados pela equipe."
+    ))
+    pdf.set_text_color(0, 0, 0)
+    _painel_y = pdf.get_y() + 2
+    try:
+        _donut_inserido = _inserir_buffer_imagem(
+            pdf, gerar_grafico_assiduidade_dossie(resumo_frequencia), 12, _painel_y, 88, 63
+        )
+    except Exception:
+        _donut_inserido = False
+    if not _donut_inserido:
+        _desenhar_fallback_grafico(
+            pdf, 12, _painel_y, 88, 63, "Assiduidade indisponível",
+            "Não foi possível montar este gráfico agora. Os lançamentos permanecem preservados.",
+        )
+    try:
+        _evolucao_inserida = _inserir_buffer_imagem(
+            pdf, gerar_grafico_evolucao_mensal_dossie(evolucao_mensal), 108, _painel_y, 90, 63
+        )
+    except Exception:
+        _evolucao_inserida = False
+    if not _evolucao_inserida:
+        _desenhar_fallback_grafico(
+            pdf, 108, _painel_y, 90, 63, "Evolução mensal indisponível",
+            "Assim que houver registros disponíveis, a equipe poderá acompanhar esta tendência.",
+        )
+    _focos_y = _painel_y + 67
+    try:
+        _focos_inseridos = _inserir_buffer_imagem(
+            pdf, gerar_grafico_foco_tecnico_dossie(focos_tecnicos), 12, _focos_y, 186, 53
+        )
+    except Exception:
+        _focos_inseridos = False
+    if not _focos_inseridos:
+        _desenhar_fallback_grafico(
+            pdf, 12, _focos_y, 186, 53, "Foco técnico indisponível",
+            "Os registros clínicos continuam disponíveis nas seções detalhadas deste dossiê.",
+        )
+
+    def _cartao_metrica(x, titulo, valor, detalhe, cor):
+        pdf.set_fill_color(248, 250, 252)
+        pdf.set_draw_color(226, 232, 240)
+        pdf.rect(x, _focos_y + 57, 43, 22, style="FD")
+        pdf.set_xy(x + 3, _focos_y + 60)
+        pdf.set_font("Arial", "B", 6.3)
+        pdf.set_text_color(*cor)
+        pdf.cell(37, 3.5, limpar_texto(titulo), align="C")
+        pdf.set_xy(x + 3, _focos_y + 65)
+        pdf.set_font("Arial", "B", 9)
+        pdf.set_text_color(15, 23, 42)
+        pdf.cell(37, 4, limpar_texto(valor), align="C")
+        pdf.set_xy(x + 3, _focos_y + 70)
+        pdf.set_font("Arial", "", 6.3)
+        pdf.set_text_color(100, 116, 139)
+        pdf.multi_cell(37, 3, limpar_texto(detalhe), align="C")
+
+    _pa_valor = "Sem histórico"
+    if ultima_pa:
+        _pa_valor = f"{ultima_pa.get('sistolica', '?')}/{ultima_pa.get('diastolica', '?')} mmHg"
+    _cartao_metrica(12, "PRESSÃO ARTERIAL", _pa_valor, "Último registro disponível", (29, 78, 216))
+    _cartao_metrica(60, "IMC", imc_str, imc_class_str or "Aguardando medidas", (34, 197, 94))
+    _cartao_metrica(108, "BORG / ESFORÇO", borg_texto, "Percepção registrada na avaliação", (245, 158, 11))
+    _cartao_metrica(
+        156, "ATESTADO", _safe_str(_status_atestado_pdf.get("rotulo_atestado"), "Sem histórico"),
+        "Situação de aptidão mais recente", (139, 92, 246),
+    )
+    pdf.set_text_color(0, 0, 0)
+    pdf.set_y(_focos_y + 83)
+    pdf.set_font("Arial", "I", 7)
+    pdf.set_text_color(100, 116, 139)
+    pdf.multi_cell(0, 3.5, limpar_texto(
+        "Leitura acolhedora: ausência de histórico significa que a equipe ainda não registrou esse indicador."
+    ), align="C")
+    pdf.set_text_color(0, 0, 0)
+    pdf.add_page()
+    _cabecalho_padrao(pdf, "Histórico clínico detalhado")
 
     # ══════════════════════════════════════════════════════════════════════════
     # 1. PERFIL + PAINEL DE INDICADORES
@@ -1043,11 +1467,13 @@ def criar_documento_aluno_pdf(aluno_data, avaliacoes, historico, estatisticas, i
             qued = int(_safe_float(av.get("quedas_6m")))
             f_d  = int(_safe_float(av.get("forca_dir")  or av.get("simetria_dir")))
             f_e  = int(_safe_float(av.get("forca_esq")  or av.get("simetria_esq")))
-            mob_d   = _safe_str(av.get("mobilidade_pes_dir"), "—")
-            mob_e   = _safe_str(av.get("mobilidade_pes_esq"), "—")
-            borg    = _safe_str(av.get("borg"),    "—")
-            bristol = _safe_str(av.get("bristol"), "—")
-            urina   = _safe_str(av.get("urina"),   "—")
+            # ``pdf.write`` não passa pelo conversor latin-1 usado nos cartões.
+            # Use o traço simples nos fallbacks desta seção detalhada.
+            mob_d   = _safe_str(av.get("mobilidade_pes_dir"), "-")
+            mob_e   = _safe_str(av.get("mobilidade_pes_esq"), "-")
+            borg    = _safe_str(av.get("borg"),    "-")
+            bristol = _safe_str(av.get("bristol"), "-")
+            urina   = _safe_str(av.get("urina"),   "-")
             cir  = _safe_str(av.get("cirurgias")    or av.get("cirurgias_lesoes"))
             meds = _safe_str(av.get("medicamentos") or av.get("observacoes"))
 
@@ -1283,9 +1709,12 @@ def criar_documento_aluno_pdf(aluno_data, avaliacoes, historico, estatisticas, i
             if _yw not in _sem_labels:
                 _sem_labels[_yw] = _fd6.strftime("%d/%m")
             _st6 = str(_r6.get("status","")).upper()
-            if   _st6 == "PRESENTE":    _sem_data[_yw]["P"] += 1
-            elif _st6 == "JUSTIFICADA": _sem_data[_yw]["J"] += 1
-            else:                        _sem_data[_yw]["A"] += 1
+            if _st6 == "PRESENTE":
+                _sem_data[_yw]["P"] += 1
+            elif _st6 == "JUSTIFICADA":
+                _sem_data[_yw]["J"] += 1
+            elif _st6 == "FALTA":
+                _sem_data[_yw]["A"] += 1
         except Exception:
             pass
     _sem_keys = sorted(_sem_labels.keys())
@@ -1403,7 +1832,7 @@ def criar_documento_aluno_pdf(aluno_data, avaliacoes, historico, estatisticas, i
     # Resumo numérico
     pdf.set_font("Arial", "", 9)
     _mc(pdf, 5, limpar_texto(
-        f"Total: {pres_total}x presencas  |  {faltas} faltas  |  "
+        f"Total: {pres_total}x presencas  |  {faltas} faltas  |  {_fs_just} justificadas  |  "
         f"Assiduidade geral: {pct:.1f}%  |  Ultimos 60 dias: {pres_60}x ({pct_60:.1f}%)"
     ))
 
@@ -1864,9 +2293,9 @@ def criar_documento_aluno_pdf(aluno_data, avaliacoes, historico, estatisticas, i
         pdf.set_text_color(0, 0, 0)
 
     # ══════════════════════════════════════════════════════════════════════════
-    # 9. RESUMO EXECUTIVO
+    # 9. AÇÃO E PRÓXIMO CICLO
     # ══════════════════════════════════════════════════════════════════════════
-    _secao(pdf, 9, "Resumo Executivo — Perfil Funcional e Proxima Fase")
+    _secao(pdf, 9, "SEU PLANO DE EVOLUÇÃO PARA O PRÓXIMO CICLO")
 
     _kv(pdf, "IMC",
         f"{imc_str}  —  {imc_class_str}" if imc_class_str else "Nao calculado",
@@ -1876,7 +2305,7 @@ def criar_documento_aluno_pdf(aluno_data, avaliacoes, historico, estatisticas, i
                   ("Regular (50-79%)"  if pct >= 50 else "Baixa (< 50%)"))
     freq_cor   = (34, 139, 34) if pct >= 80 else ((220, 120, 0) if pct >= 50 else (180, 0, 0))
     _kv(pdf, "Assiduidade Total",
-        f"{pct:.1f}%  —  {freq_class}  ({pres_total}x pres. / {faltas} faltas)",
+        f"{pct:.1f}%  —  {freq_class}  ({pres_total}x pres. / {faltas} faltas / {_fs_just} justificadas)",
         cor_valor=freq_cor)
 
     f60_class = "Excelente" if pct_60 >= 80 else ("Regular" if pct_60 >= 50 else "Baixa")
@@ -1918,11 +2347,6 @@ def criar_documento_aluno_pdf(aluno_data, avaliacoes, historico, estatisticas, i
         _kv(pdf, "Areas com Foco Tecnico", "Sem registro de foco tecnico especifico", cor_valor=(34, 139, 34))
 
     pdf.ln(3)
-    pdf.set_font("Arial", "B", 10)
-    pdf.set_text_color(10, 37, 64)
-    pdf.cell(0, 6, limpar_texto("Recomendacoes para a proxima fase:"), ln=1)
-    pdf.set_text_color(0, 0, 0)
-    pdf.set_font("Arial", "", 10)
     recs = [
         "Monitorar nivel de dor no inicio e fim de cada aula (escala 0-10).",
         "Registrar queixas e relatos de melhora no diario de bordo.",
@@ -1938,10 +2362,70 @@ def criar_documento_aluno_pdf(aluno_data, avaliacoes, historico, estatisticas, i
         recs.append("Realizar avaliacao clinica inicial completa (TUG, forca, biofeedback).")
     elif len(avaliacoes) == 1:
         recs.append("Repetir avaliacao clinica para iniciar acompanhamento de evolucao.")
-    for i, rec in enumerate(recs, 1):
-        _mc(pdf, 5, limpar_texto(f"  {i}. {rec}"))
 
-    pdf.ln(5)
+    conquistas = []
+    if resumo_frequencia["tem_dados"]:
+        conquistas.append(
+            f"Você participou de {pres_total} aula(s) e alcançou {pct:.1f}% de assiduidade."
+        )
+    else:
+        conquistas.append("Seu acompanhamento começou: os próximos lançamentos mostrarão sua evolução aqui.")
+    if len(avaliacoes) >= 2 and dor_fin < dor_ini:
+        conquistas.append("Houve melhora registrada na percepção de dor entre as avaliações.")
+    if any(focos_tecnicos.values()):
+        conquistas.append("Você recebeu supervisão técnica personalizada nos movimentos trabalhados.")
+    else:
+        conquistas.append("A equipe segue preparada para registrar seus próximos focos de movimento.")
+
+    if pdf.get_y() > 205:
+        pdf.add_page()
+        _cabecalho_padrao(pdf, "Plano de evolução")
+
+    def _bloco_plano(titulo, texto, fundo, cor):
+        if pdf.get_y() > 247:
+            pdf.add_page()
+            _cabecalho_padrao(pdf, "Plano de evolução")
+        y_inicio = pdf.get_y()
+        pdf.set_fill_color(*fundo)
+        pdf.set_draw_color(*cor)
+        pdf.rect(12, y_inicio, 186, 8, style="FD")
+        pdf.set_xy(16, y_inicio + 2)
+        pdf.set_font("Arial", "B", 9)
+        pdf.set_text_color(*cor)
+        pdf.cell(178, 4, limpar_texto(titulo))
+        pdf.set_xy(16, y_inicio + 10)
+        pdf.set_font("Arial", "", 8.5)
+        pdf.set_text_color(51, 65, 85)
+        pdf.multi_cell(178, 4.2, limpar_texto(texto))
+        altura = max(19, pdf.get_y() - y_inicio + 3)
+        pdf.set_fill_color(*fundo)
+        pdf.set_draw_color(*fundo)
+        pdf.rect(12, y_inicio + 8, 186, altura - 8, style="FD")
+        pdf.set_xy(16, y_inicio + 10)
+        pdf.set_font("Arial", "", 8.5)
+        pdf.set_text_color(51, 65, 85)
+        pdf.multi_cell(178, 4.2, limpar_texto(texto))
+        pdf.set_text_color(0, 0, 0)
+        pdf.set_y(y_inicio + altura + 3)
+
+    _bloco_plano(
+        "O QUE VOCÊ CONQUISTOU - Pontos fortes",
+        " ".join(conquistas),
+        (236, 253, 245), (5, 150, 105),
+    )
+    _bloco_plano(
+        "O QUE PRECISAMOS FOCAR - Pontos de atenção",
+        " ".join(f"{indice}. {recomendacao}" for indice, recomendacao in enumerate(recs[:4], 1)),
+        (255, 251, 235), (217, 119, 6),
+    )
+    _bloco_plano(
+        "MENSAGEM DA EQUIPE IMBRA",
+        "Cada presença é um passo no seu cuidado. Continue compartilhando como você se sente, "
+        "respeite o seu ritmo e conte com a nossa equipe para seguir evoluindo com segurança.",
+        (239, 246, 255), (29, 78, 216),
+    )
+
+    pdf.ln(2)
     pdf.set_font("Arial", "I", 8)
     pdf.set_text_color(150, 150, 150)
     _mc(pdf, 5, limpar_texto(
