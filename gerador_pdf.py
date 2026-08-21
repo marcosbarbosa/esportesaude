@@ -1020,6 +1020,359 @@ def criar_documento_aluno_pdf(aluno_data, avaliacoes, historico, estatisticas, i
     borg_texto = _safe_str(borg, "Sem registro")
     status_aluno = _safe_str(aluno_data.get("status"), "Ativo")
 
+    # Os alertas são calculados antes da composição das páginas para que o
+    # dossiê completo possa apresentar a análise e o plano logo após o painel
+    # visual, sem depender da renderização posterior do diário.
+    alertas_globais = []
+    for _hist_alerta in (historico or []):
+        _data_alerta = _dt_str(_hist_alerta.get("data_aula", ""))
+        _exercicios_alerta = _safe_str(_hist_alerta.get("exercicios_executados"), "")
+        alertas_globais.extend(
+            [(_data_alerta, alerta) for alerta in _risco_exercicio(_exercicios_alerta)]
+        )
+
+    _tags_cs_raw = _safe_str(aluno_data.get("tags_saude"), "")
+    _tags_cs_iniciais = [
+        tag.strip() for tag in _tags_cs_raw.split(",")
+        if tag.strip() and tag.strip() not in ("Nao informado", "Sem registro")
+    ]
+
+    def _renderizar_dicas_professor():
+        """Exibe as orientações EXECUTAR/EVITAR logo após o plano do dossiê completo."""
+        if not _tags_cs_iniciais:
+            return
+
+        dicas_padrao = {
+            "Hipertensão/Cardiopatia (inclui Arritmia)": (
+                "isometria prolongada, manobra de Valsalva e exercicios com a cabeca abaixo da linha do coracao.",
+                "aerobico leve a moderado, forca dinamica com respiracao fluida e pausas. Monitorar a pressao arterial."
+            ),
+            "Artrose/Artrite/Condromalacia": (
+                "alto impacto e agachamentos profundos que provoquem dor articular.",
+                "baixo impacto, fortalecimento isometrico leve e mobilidade dentro da amplitude sem dor."
+            ),
+            "Diabetes Mellitus Tipo II / Pré-diabetes": (
+                "treino em jejum prolongado e calor extremo sem acompanhamento.",
+                "aerobico com resistencia, hidratacao e fonte de acucar de absorcao rapida acessivel."
+            ),
+            "Câncer (tratamento/remissão)": (
+                "esforco exaustivo em dias de fadiga e atividades sem liberacao medica atualizada.",
+                "exercicios leves a moderados, alongamento e descanso conforme os sinais de fadiga."
+            ),
+            "Osteoporose": (
+                "flexao extrema da coluna, torcoes bruscas e atividades com risco de queda.",
+                "sustentacao de peso com carga leve a moderada, equilibrio e propriocepcao."
+            ),
+            "DPOC/Asma": (
+                "frio ou ar seco intenso e alta intensidade continua sem pausas.",
+                "controle respiratorio, intervalos para recuperacao e monitoramento da dispneia."
+            ),
+            "Obesidade Grau II/III": (
+                "corrida intensa, saltos e alto impacto articular.",
+                "caminhada, bicicleta ou hidroginastica com progressao gradual de carga e duracao."
+            ),
+            "Alzheimer/Demência": (
+                "ambientes desconhecidos sem supervisao e exercicios complexos sem adaptacao.",
+                "rotinas previsiveis, coordenacao simples, comunicacao calma e supervisao proxima."
+            ),
+            "Hipotireoidismo / Hashimoto": (
+                "volume excessivo que agrave a fadiga.",
+                "forca moderada e aerobico controlado, respeitando os sinais de fadiga."
+            ),
+            "Fibromialgia": (
+                "treinos longos de alta intensidade e excesso de carga excentrica.",
+                "aerobico leve, alongamentos suaves e progressao lenta dentro dos limites de dor."
+            ),
+            "Ansiedade / Depressão": (
+                "ambientes extremamente competitivos e estressantes.",
+                "atividades ritmicas, caminhadas, respiracao consciente e exercicios em grupo."
+            ),
+            "AVC Controlado": (
+                "esforcos repentinos, picos de pressao e desequilibrios sem suporte.",
+                "simetria, coordenacao e atividades de vida diaria adaptadas, com supervisao e monitoramento."
+            ),
+            "Autismo": (
+                "excesso de estimulo sonoro ou visual e mudancas sem aviso.",
+                "rotinas estruturadas, coordenacao e comunicacao antecipada em ambiente calmo."
+            ),
+            "Colesterol Alto / Dislipidemia": (
+                "sessoes intensas isoladas sem base aerobica.",
+                "aerobico moderado regular e treino de forca complementar, com hidratacao."
+            ),
+        }
+
+        dicas_banco = {}
+        try:
+            from database import get_tags_clinicas
+            dicas_banco = {
+                item.get("nome", ""): item.get("dica_treino", "")
+                for item in (get_tags_clinicas() or [])
+            }
+        except Exception:
+            pass
+
+        if pdf.get_y() > 222:
+            pdf.add_page()
+            _cabecalho_padrao(pdf, "Dicas para o professor")
+        pdf.set_fill_color(254, 226, 226)
+        pdf.set_draw_color(252, 165, 165)
+        pdf.set_font("Arial", "B", 11)
+        pdf.set_text_color(127, 29, 29)
+        pdf.cell(0, 7, limpar_texto("  RECOMENDACOES / DICAS PARA O PROFESSOR"), ln=1, fill=True)
+        pdf.set_text_color(0, 0, 0)
+        pdf.ln(2)
+
+        for tag in _tags_cs_iniciais:
+            if pdf.get_y() > 246:
+                pdf.add_page()
+                _cabecalho_padrao(pdf, "Dicas para o professor")
+            evitar, executar = "", ""
+            dica_banco = dicas_banco.get(tag, "")
+            if dica_banco:
+                import re as _re_dicas
+                match_evitar = _re_dicas.search(r"EVITAR:\s*(.*?)(?=EXECUTAR:|$)", dica_banco, _re_dicas.DOTALL)
+                match_executar = _re_dicas.search(r"EXECUTAR:\s*(.*)", dica_banco, _re_dicas.DOTALL)
+                evitar = match_evitar.group(1).strip() if match_evitar else ""
+                executar = match_executar.group(1).strip() if match_executar else ""
+            if not (evitar or executar):
+                dica_local = dicas_padrao.get(tag)
+                if not dica_local:
+                    tag_normalizada = tag.lower()
+                    dica_local = next(
+                        (dica for nome, dica in dicas_padrao.items()
+                         if tag_normalizada in nome.lower() or nome.lower().startswith(tag_normalizada[:8])),
+                        None,
+                    )
+                if dica_local:
+                    evitar, executar = dica_local
+
+            pdf.set_fill_color(255, 243, 205)
+            pdf.set_draw_color(200, 160, 40)
+            pdf.set_font("Arial", "B", 9.5)
+            pdf.set_text_color(80, 50, 0)
+            pdf.cell(0, 5.5, limpar_texto(f"  {tag}"), ln=1, fill=True)
+            pdf.set_text_color(0, 0, 0)
+            if evitar:
+                pdf.set_font("Arial", "B", 8.5)
+                pdf.set_text_color(180, 0, 0)
+                pdf.write(4.5, "EVITAR: ")
+                pdf.set_font("Arial", "", 8.5)
+                pdf.set_text_color(120, 20, 20)
+                _mc_inline(pdf, 4.5, limpar_texto(evitar))
+            if executar:
+                pdf.set_font("Arial", "B", 8.5)
+                pdf.set_text_color(0, 110, 0)
+                pdf.write(4.5, "EXECUTAR: ")
+                pdf.set_font("Arial", "", 8.5)
+                pdf.set_text_color(0, 70, 0)
+                _mc_inline(pdf, 4.5, limpar_texto(executar))
+            pdf.set_text_color(0, 0, 0)
+            pdf.ln(2)
+
+    def _renderizar_analise_e_plano():
+        """Renderiza as seções 8 e 9 na posição adequada para cada dossiê."""
+        codigos_encontrados = {a[0] for _, a in alertas_globais}
+
+        # ══════════════════════════════════════════════════════════════════════
+        # 8. ANÁLISE DE RISCO CONSOLIDADA
+        # ══════════════════════════════════════════════════════════════════════
+        _secao(pdf, 8, "Foco Tecnico - Analise Consolidada e Orientacoes")
+        if alertas_globais:
+            grupos = defaultdict(list)
+            for dt_h, (codigo, descricao) in alertas_globais:
+                grupos[codigo].append((dt_h, descricao))
+
+            for cod in ["OMBRO-ALTO", "OMBRO-MOD", "JOELHO", "LOMBAR"]:
+                if cod not in grupos:
+                    continue
+                _regs = grupos[cod]
+                if pdf.get_y() > 255:
+                    pdf.add_page()
+                pdf.set_font("Arial", "B", 10)
+                pdf.set_text_color(*_COR_RISCO.get(cod, (0, 0, 0)))
+                pdf.cell(0, 6, limpar_texto(
+                    f"{_LABEL_RISCO.get(cod, cod)}  —  {len(_regs)} ocorrencia(s)"), ln=1)
+                pdf.set_text_color(0, 0, 0)
+                pdf.set_font("Arial", "", 9)
+                for dt_h, desc in _regs[:8]:
+                    pdf.cell(0, 5, limpar_texto(f"    . {dt_h}: {desc}"), ln=1)
+                if len(_regs) > 8:
+                    pdf.cell(0, 5, limpar_texto(f"    ... e mais {len(_regs)-8} ocorrencia(s)"), ln=1)
+                pdf.ln(2)
+
+            pdf.set_font("Arial", "B", 10)
+            pdf.set_text_color(10, 37, 64)
+            pdf.cell(0, 6, limpar_texto("Orientacoes tecnicas para o proximo ciclo:"), ln=1)
+            pdf.set_text_color(0, 0, 0)
+            pdf.set_font("Arial", "", 9)
+            if "OMBRO-ALTO" in codigos_encontrados:
+                _mc(pdf, 5, limpar_texto(
+                    "  [OMBRO] Orientacao tecnica: controlar amplitude em exercicios de elevacao, "
+                    "priorizando movimentos abaixo de 90 graus. Confirmar conforto com o aluno "
+                    "e verificar laudo ortopedico se houver queixa de dor."))
+            if "OMBRO-MOD" in codigos_encontrados:
+                _mc(pdf, 5, limpar_texto(
+                    "  [OMBRO] Orientacao tecnica: monitorar conforto em remadas e halteres. "
+                    "Reduzir amplitude ao primeiro sinal de desconforto."))
+            if "JOELHO" in codigos_encontrados:
+                _mc(pdf, 5, limpar_texto(
+                    "  [JOELHO] Orientacao tecnica: priorizar amplitude parcial e isometrico. "
+                    "Evitar impacto excessivo — substituir por versao de baixo impacto quando necessario."))
+            if "LOMBAR" in codigos_encontrados:
+                _mc(pdf, 5, limpar_texto(
+                    "  [LOMBAR] Orientacao tecnica: manter ativacao do core e coluna neutra "
+                    "durante todo o exercicio. Evitar flexao forcada de tronco com carga."))
+        else:
+            pdf.set_font("Arial", "", 10)
+            pdf.set_text_color(34, 139, 34)
+            pdf.cell(0, 6, limpar_texto("Nenhuma aula com foco tecnico especifico registrada."), ln=1)
+            pdf.set_text_color(0, 0, 0)
+
+        # ══════════════════════════════════════════════════════════════════════
+        # 9. AÇÃO E PRÓXIMO CICLO
+        # ══════════════════════════════════════════════════════════════════════
+        _secao(pdf, 9, "SEU PLANO DE EVOLUÇÃO PARA O PRÓXIMO CICLO")
+        _kv(pdf, "IMC",
+            f"{imc_str}  —  {imc_class_str}" if imc_class_str else "Nao calculado",
+            cor_valor=(34, 100, 34) if imc_class_str == "Normal (22-27)" else (180, 80, 0))
+
+        freq_class = ("Excelente (>= 80%)" if pct >= 80 else
+                      ("Regular (50-79%)" if pct >= 50 else "Baixa (< 50%)"))
+        freq_cor = (34, 139, 34) if pct >= 80 else ((220, 120, 0) if pct >= 50 else (180, 0, 0))
+        _kv(pdf, "Assiduidade Total",
+            f"{pct:.1f}%  —  {freq_class}  ({pres_total}x pres. / {faltas} faltas / {_fs_just} justificadas)",
+            cor_valor=freq_cor)
+
+        f60_class = "Excelente" if pct_60 >= 80 else ("Regular" if pct_60 >= 50 else "Baixa")
+        f60_cor = (34, 139, 34) if pct_60 >= 80 else ((220, 120, 0) if pct_60 >= 50 else (180, 0, 0))
+        _kv(pdf, "Freq. Ultimos 60 Dias",
+            f"{pct_60:.1f}%  —  {f60_class}  ({pres_60}x em {total_60} aulas)",
+            cor_valor=f60_cor)
+
+        if ultima_pa:
+            _pa_cls = str(ultima_pa.get("classificacao", "")).lower()
+            _pa_cor = _PA_COR.get(_pa_cls, (100, 100, 100))
+            _pa_dt = _dt_str(ultima_pa.get("data", ""))
+            _pa_lbl = _PA_LABEL.get(_pa_cls, _pa_cls.title() or "—")
+            _kv(pdf, "Ultima Pressao Arterial",
+                f"{ultima_pa.get('sistolica','?')}/{ultima_pa.get('diastolica','?')} mmHg"
+                f"  —  {_pa_lbl}  ({_pa_dt})",
+                cor_valor=_pa_cor)
+
+        if len(avaliacoes) >= 2:
+            dor_ini = _safe_float(avaliacoes[-1].get("dor_nivel") or avaliacoes[-1].get("nivel_dor"))
+            dor_fin = _safe_float(avaliacoes[0].get("dor_nivel") or avaliacoes[0].get("nivel_dor"))
+            if dor_fin < dor_ini:
+                tend, t_cor = f"Melhora ({dor_ini:.0f}/10 -> {dor_fin:.0f}/10)", (34, 139, 34)
+            elif dor_fin > dor_ini:
+                tend, t_cor = f"Piora ({dor_ini:.0f}/10 -> {dor_fin:.0f}/10)", (180, 0, 0)
+            else:
+                tend, t_cor = f"Estavel ({dor_fin:.0f}/10)", (100, 100, 100)
+            _kv(pdf, "Tendencia de Dor", tend, cor_valor=t_cor)
+
+        if codigos_encontrados:
+            _areas_ft = []
+            if any("OMBRO" in c for c in codigos_encontrados):
+                _areas_ft.append("Ombro")
+            if "JOELHO" in codigos_encontrados:
+                _areas_ft.append("Joelho")
+            if "LOMBAR" in codigos_encontrados:
+                _areas_ft.append("Lombar")
+            _kv(pdf, "Areas com Foco Tecnico",
+                ", ".join(_areas_ft) + " (aulas educativas com maior supervisao de amplitude)",
+                cor_valor=(30, 100, 180))
+        else:
+            _kv(pdf, "Areas com Foco Tecnico", "Sem registro de foco tecnico especifico",
+                cor_valor=(34, 139, 34))
+
+        pdf.ln(3)
+        recs = [
+            "Monitorar nivel de dor no inicio e fim de cada aula (escala 0-10).",
+            "Registrar queixas e relatos de melhora no diario de bordo.",
+            "Manter frequencia acima de 75% para garantir progressao funcional.",
+        ]
+        if "OMBRO-ALTO" in codigos_encontrados:
+            recs.insert(0, "Orientacao tecnica: verificar amplitude em exercicios de ombro. Confirmar conforto com o aluno.")
+        if "OMBRO-MOD" in codigos_encontrados or "OMBRO-ALTO" in codigos_encontrados:
+            recs.append("Encaminhar para fisioterapia se o aluno relatar dor de ombro acima de 4/10 por mais de 2 aulas.")
+        if pct < 75:
+            recs.append("Investigar motivos das faltas — considerar ligacao de acolhimento.")
+        if len(avaliacoes) == 0:
+            recs.append("Realizar avaliacao clinica inicial completa (TUG, forca, biofeedback).")
+        elif len(avaliacoes) == 1:
+            recs.append("Repetir avaliacao clinica para iniciar acompanhamento de evolucao.")
+
+        conquistas = []
+        if resumo_frequencia["tem_dados"]:
+            conquistas.append(
+                f"Você participou de {pres_total} aula(s) e alcançou {pct:.1f}% de assiduidade."
+            )
+        else:
+            conquistas.append("Seu acompanhamento começou: os próximos lançamentos mostrarão sua evolução aqui.")
+        if len(avaliacoes) >= 2 and dor_fin < dor_ini:
+            conquistas.append("Houve melhora registrada na percepção de dor entre as avaliações.")
+        if any(focos_tecnicos.values()):
+            conquistas.append("Você recebeu supervisão técnica personalizada nos movimentos trabalhados.")
+        else:
+            conquistas.append("A equipe segue preparada para registrar seus próximos focos de movimento.")
+
+        if pdf.get_y() > 205:
+            pdf.add_page()
+            _cabecalho_padrao(pdf, "Plano de evolução")
+
+        def _bloco_plano(titulo, texto, fundo, cor):
+            if pdf.get_y() > 247:
+                pdf.add_page()
+                _cabecalho_padrao(pdf, "Plano de evolução")
+            y_inicio = pdf.get_y()
+            pdf.set_fill_color(*fundo)
+            pdf.set_draw_color(*cor)
+            pdf.rect(12, y_inicio, 186, 8, style="FD")
+            pdf.set_xy(16, y_inicio + 2)
+            pdf.set_font("Arial", "B", 9)
+            pdf.set_text_color(*cor)
+            pdf.cell(178, 4, limpar_texto(titulo))
+            pdf.set_xy(16, y_inicio + 10)
+            pdf.set_font("Arial", "", 8.5)
+            pdf.set_text_color(51, 65, 85)
+            pdf.multi_cell(178, 4.2, limpar_texto(texto))
+            altura = max(19, pdf.get_y() - y_inicio + 3)
+            pdf.set_fill_color(*fundo)
+            pdf.set_draw_color(*fundo)
+            pdf.rect(12, y_inicio + 8, 186, altura - 8, style="FD")
+            pdf.set_xy(16, y_inicio + 10)
+            pdf.set_font("Arial", "", 8.5)
+            pdf.set_text_color(51, 65, 85)
+            pdf.multi_cell(178, 4.2, limpar_texto(texto))
+            pdf.set_text_color(0, 0, 0)
+            pdf.set_y(y_inicio + altura + 3)
+
+        _bloco_plano(
+            "O QUE VOCÊ CONQUISTOU - Pontos fortes",
+            " ".join(conquistas),
+            (236, 253, 245), (5, 150, 105),
+        )
+        _bloco_plano(
+            "O QUE PRECISAMOS FOCAR - Pontos de atenção",
+            " ".join(f"{indice}. {recomendacao}" for indice, recomendacao in enumerate(recs[:4], 1)),
+            (255, 251, 235), (217, 119, 6),
+        )
+        _bloco_plano(
+            "MENSAGEM DA EQUIPE IMBRA",
+            "Cada presença é um passo no seu cuidado. Continue compartilhando como você se sente, "
+            "respeite o seu ritmo e conte com a nossa equipe para seguir evoluindo com segurança.",
+            (239, 246, 255), (29, 78, 216),
+        )
+        _renderizar_dicas_professor()
+        pdf.ln(2)
+        pdf.set_font("Arial", "I", 8)
+        pdf.set_text_color(150, 150, 150)
+        _mc(pdf, 5, limpar_texto(
+            "Este dossie foi gerado automaticamente pelo sistema IMBRA com base nos dados clinicos e de frequencia "
+            "registrados pelos profissionais responsaveis. Nao substitui avaliacao medica presencial."
+        ))
+        pdf.set_text_color(0, 0, 0)
+
     # ── Construção do PDF ─────────────────────────────────────────────────────
     pdf = PDF()
     pdf.add_page()
@@ -1173,8 +1526,17 @@ def criar_documento_aluno_pdf(aluno_data, avaliacoes, historico, estatisticas, i
         "Leitura acolhedora: ausência de histórico significa que a equipe ainda não registrou esse indicador."
     ), align="C")
     pdf.set_text_color(0, 0, 0)
+
+    # No dossiê completo, a leitura de evolução vem imediatamente depois da
+    # página visual de interesse e desejo, antes do histórico detalhado.
+    if incluir_cadastro:
+        pdf.add_page()
+        _cabecalho_padrao(pdf, "Foco tecnico e plano de evolucao")
+        _renderizar_analise_e_plano()
+
     pdf.add_page()
     _cabecalho_padrao(pdf, "Histórico clínico detalhado")
+
 
     # ══════════════════════════════════════════════════════════════════════════
     # 1. PERFIL + PAINEL DE INDICADORES
@@ -1276,7 +1638,7 @@ def criar_documento_aluno_pdf(aluno_data, avaliacoes, historico, estatisticas, i
     _tags_cs_raw = _safe_str(aluno_data.get("tags_saude"), "")
     _tags_cs = [t.strip() for t in _tags_cs_raw.split(",") if t.strip()]
 
-    if _tags_cs:
+    if _tags_cs and not incluir_cadastro:
         # Fallback local (ASCII-safe) caso o banco não esteja disponivel
         _DICAS_LOCAL_CS = {
             "Hipertensão/Cardiopatia (inclui Arritmia)": (
@@ -1576,6 +1938,47 @@ def criar_documento_aluno_pdf(aluno_data, avaliacoes, historico, estatisticas, i
         pdf.set_text_color(150, 150, 150)
         pdf.cell(0, 6, limpar_texto("Nenhuma medicao de pressao arterial registrada."), ln=1)
         pdf.set_text_color(0, 0, 0)
+
+    # Legenda orientativa para que o aluno não receba apenas um rótulo técnico.
+    # Ela só aparece quando o histórico contém Estágio 2, sem transformar uma
+    # medição isolada em diagnóstico ou autorização médica para atividade.
+    _tem_estagio2 = any(
+        str(rec.get("classificacao", "")).lower() == "estagio2"
+        for rec in registros_pa
+    )
+    if _tem_estagio2:
+        if pdf.get_y() > 248:
+            pdf.add_page()
+            _cabecalho_padrao(pdf, "Interpretação da pressão arterial")
+        _legenda_pa_y = pdf.get_y() + 2
+        pdf.set_fill_color(255, 247, 237)
+        pdf.set_draw_color(253, 186, 116)
+        pdf.rect(12, _legenda_pa_y, 186, 34, style="FD")
+        pdf.set_xy(17, _legenda_pa_y + 4)
+        pdf.set_font("Arial", "B", 9)
+        pdf.set_text_color(154, 52, 18)
+        pdf.cell(176, 4, limpar_texto("Como interpretar o Estagio 2"), ln=1)
+        pdf.set_xy(17, _legenda_pa_y + 10)
+        pdf.set_font("Arial", "", 8)
+        pdf.set_text_color(67, 56, 47)
+        pdf.multi_cell(
+            176, 3.8, limpar_texto(
+                "Estagio 2 significa que a pressao medida ficou em uma faixa mais alta "
+                "(sistolica >= 140 ou diastolica >= 90 mmHg). Para o aluno, isso indica "
+                "que a medida deve ser confirmada e acompanhada por um profissional de saude."
+            )
+        )
+        pdf.set_xy(17, _legenda_pa_y + 23)
+        pdf.set_font("Arial", "I", 7.5)
+        pdf.multi_cell(
+            176, 3.6, limpar_texto(
+                "Uma medicao isolada nao fecha diagnostico nem define, sozinha, se o aluno "
+                "pode participar das atividades. Se aparecer Crise Hipertensiva "
+                "(sistolica > 180 ou diastolica > 120), buscar avaliacao imediata."
+            )
+        )
+        pdf.set_text_color(0, 0, 0)
+        pdf.set_y(_legenda_pa_y + 37)
 
     # ══════════════════════════════════════════════════════════════════════════
     # 4. ATESTADO MÉDICO E LIBERAÇÃO
@@ -2160,8 +2563,6 @@ def criar_documento_aluno_pdf(aluno_data, avaliacoes, historico, estatisticas, i
         except Exception:
             _temp_map = {}
 
-    alertas_globais = []
-
     if historico:
         for h in historico:
             if pdf.get_y() > 248:
@@ -2174,7 +2575,6 @@ def criar_documento_aluno_pdf(aluno_data, avaliacoes, historico, estatisticas, i
             relatos = _safe_str(h.get("relatos_melhora"),       "")
 
             alertas = _risco_exercicio(exc)
-            alertas_globais.extend([(dt_h, a) for a in alertas])
 
             fill_r = (225, 238, 255) if any(a[0] == "OMBRO-ALTO" for a in alertas) else \
                      (235, 235, 255) if alertas else (235, 245, 255)
@@ -2233,6 +2633,14 @@ def criar_documento_aluno_pdf(aluno_data, avaliacoes, historico, estatisticas, i
     else:
         pdf.set_font("Arial", "", 10)
         pdf.cell(0, 6, limpar_texto("Nenhuma participacao com diario registrada."), ln=1)
+
+    # O dossiê completo já exibiu essas seções após o painel AIDA. O dossiê
+    # clínico preserva a ordem original, após o diário técnico.
+    if incluir_cadastro:
+        saida = pdf.output(dest="S")
+        if isinstance(saida, str):
+            return saida.encode("latin1")
+        return bytes(saida)
 
     # ══════════════════════════════════════════════════════════════════════════
     # 8. ANÁLISE DE RISCO CONSOLIDADA

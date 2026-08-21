@@ -163,6 +163,85 @@ class DossieEvolucaoTests(unittest.TestCase):
             "Assiduidade indisponível", unittest.mock.ANY,
         )
 
+    def test_pdf_inclui_legenda_para_estagio_2(self):
+        aluno = {"id": "aluno-pa", "nome": "Paulo", "turma": "09H", "status": "Ativo"}
+        pa = [{
+            "sistolica": 145,
+            "diastolica": 92,
+            "classificacao": "estagio2",
+            "data": "2026-05-08",
+        }]
+        with (
+            patch("database.get_registros_pa", return_value=pa),
+            patch("database.get_atestados_temporarios", return_value=None),
+            patch("database.buscar_historico_dores", return_value=[]),
+            patch("database.get_frequencia_aluno_serie", return_value=[]),
+            patch("gerador_pdf._buscar_temperaturas_historicas", return_value={}),
+        ):
+            resultado = criar_documento_aluno_pdf(aluno, [], [], {})
+
+        self.assertTrue(resultado.startswith(b"%PDF"))
+        self.assertGreater(len(resultado), 10_000)
+
+    def test_dossie_completo_mostra_analise_e_plano_antes_do_historico(self):
+        aluno = {
+            "id": "aluno-ordem",
+            "nome": "Celia",
+            "turma": "09H",
+            "status": "Ativo",
+            "tags_saude": "Artrose/Artrite/Condromalacia",
+        }
+        serie = [{"data_aula": "2026-05-08", "status": "PRESENTE"}]
+        historico = [{
+            "data_aula": "2026-05-08",
+            "exercicios_executados": "Remada com supervisao",
+        }]
+        textos = []
+        cell_original = gerador_pdf.PDF.cell
+
+        def capturar_texto(pdf, *args, **kwargs):
+            texto = args[2] if len(args) >= 3 else kwargs.get("txt", "")
+            if isinstance(texto, str):
+                textos.append(texto)
+            return cell_original(pdf, *args, **kwargs)
+
+        with (
+            patch("database.get_registros_pa", return_value=[]),
+            patch("database.get_atestados_temporarios", return_value=None),
+            patch("database.buscar_historico_dores", return_value=[]),
+            patch("database.get_frequencia_aluno_serie", return_value=serie),
+            patch("gerador_pdf._buscar_temperaturas_historicas", return_value={}),
+            patch.object(gerador_pdf.PDF, "cell", new=capturar_texto),
+        ):
+            resultado = criar_documento_aluno_pdf(
+                aluno, [], historico, {}, incluir_cadastro=True
+            )
+
+        self.assertTrue(resultado.startswith(b"%PDF"))
+        indice_interesse = next(
+            i for i, texto in enumerate(textos)
+            if "INTERESSE E DESEJO" in texto
+        )
+        indice_analise = next(
+            i for i, texto in enumerate(textos)
+            if "8. Foco Tecnico - Analise Consolidada e Orientacoes" in texto
+        )
+        indice_plano = next(
+            i for i, texto in enumerate(textos)
+            if "9. SEU PLANO DE EVOLUÇÃO PARA O PRÓXIMO CICLO" in texto
+        )
+        indice_dicas = next(
+            i for i, texto in enumerate(textos)
+            if "RECOMENDACOES / DICAS PARA O PROFESSOR" in texto
+        )
+        indice_perfil = next(
+            i for i, texto in enumerate(textos)
+            if "1. Perfil Pessoal" in texto
+        )
+        self.assertLess(indice_interesse, indice_analise)
+        self.assertLess(indice_analise, indice_perfil)
+        self.assertLess(indice_plano, indice_dicas)
+        self.assertLess(indice_dicas, indice_perfil)
 
 if __name__ == "__main__":
     unittest.main()
