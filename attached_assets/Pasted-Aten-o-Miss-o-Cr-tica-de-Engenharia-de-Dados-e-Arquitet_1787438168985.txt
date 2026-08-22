@@ -1,0 +1,49 @@
+Atenção: Missão Crítica de Engenharia de Dados e Arquitetura Clínica (MÓDULO ZERO - FASE 1).
+
+CONTEXTO:
+Precisamos implementar a Fase 1 do Catálogo Clínico Estruturado no sistema MoveRight. O objetivo é criar catálogos clínicos administráveis e uma base relacional para futuras condições, restrições e adaptações.
+
+REGRAS OBRIGATÓRIAS (NÃO DESTRUTIVAS):
+
+NÃO remova, renomeie, apague ou sobrescreva os campos antigos (problemas_saude, restricoes_fisicas, tags_saude).
+
+NÃO altere as telas de operação diária (Inscrição, Prontuário, Frequência) nesta fase.
+
+Crie uma migration SQL reversível e documentada.
+
+A SUA MISSÃO:
+
+PASSO 1: Estrutura do Banco de Dados (SQL)
+Crie as tabelas abaixo no banco de dados (Supabase/PostgreSQL), garantindo chaves primárias e estrangeiras:
+
+catalogo_condicoes_clinicas (id, codigo, nome_padrao, categoria, ativo)
+
+catalogo_restricoes_movimento (id, codigo, nome_padrao, ativo)
+
+catalogo_adaptacoes (id, codigo, nome_padrao, ativo)
+
+aluno_condicoes_clinicas (vínculo aluno -> condicao, com status, fonte_informacao, data, observacao_contextual)
+
+aluno_restricoes_fisicas (vínculo aluno -> restricao, com regiao_corporal, nivel_orientacao, status_revisao)
+
+historico_revisoes_clinicas (tabela de auditoria para salvar logs de alterações)
+
+PASSO 2: Script de Seed (Carga Inicial)
+Crie um arquivo Python (ex: scripts/seed_catalogos.py) que injete dados iniciais nestes catálogos.
+
+Condições: Artrose, Lombalgia, Osteoporose, Hipertensão arterial, Diabetes mellitus tipo 2, Risco de queda, Parkinson.
+
+Restrições: Evitar impacto, Evitar saltos, Reduzir amplitude do movimento, Evitar agachamento profundo, Evitar carga acima da cabeça, Manter intensidade leve a moderada.
+
+Adaptações: Cadeira alta com apoio, Exercício sentado, Redução de carga, Supervisão próxima.
+
+PASSO 3: Interface Administrativa Segura
+Crie uma nova view em Streamlit: views/catalogos_clinicos_view.py.
+
+Crie abas (st.tabs) para gerenciar: 1. Condições Clínicas, 2. Restrições de Movimento, 3. Adaptações Recomendadas.
+
+Em cada aba, crie um CRUD (Dataframe pesquisável, formulário para adicionar novo, botão para ativar/inativar).
+
+Injete o acesso a esta tela no menu de 'Administração / Configurações' do Gestor. Esta tela deve ser acessível apenas para o perfil de SuperAdmin.
+
+Execute o Passo 1, 2 e 3 de forma modular. Mostre-me o código gerado!
