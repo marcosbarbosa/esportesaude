@@ -109,14 +109,21 @@ BEGIN
 END;
 $$;
 
-ALTER TABLE aluno_restricoes_fisicas
-    DROP CONSTRAINT IF EXISTS fk_aluno_restricoes_condicao_aluno;
-
-ALTER TABLE aluno_restricoes_fisicas
-    ADD CONSTRAINT fk_aluno_restricoes_condicao_aluno
-    FOREIGN KEY (condicao_aluno_id, aluno_id)
-    REFERENCES aluno_condicoes_clinicas(id, aluno_id)
-    ON DELETE RESTRICT;
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint
+        WHERE conname = 'fk_aluno_restricoes_condicao_aluno'
+          AND conrelid = 'aluno_restricoes_fisicas'::regclass
+    ) THEN
+        ALTER TABLE aluno_restricoes_fisicas
+            ADD CONSTRAINT fk_aluno_restricoes_condicao_aluno
+            FOREIGN KEY (condicao_aluno_id, aluno_id)
+            REFERENCES aluno_condicoes_clinicas(id, aluno_id)
+            ON DELETE RESTRICT;
+    END IF;
+END;
+$$;
 
 CREATE INDEX IF NOT EXISTS idx_aluno_restricoes_condicao_aluno_id
     ON aluno_restricoes_fisicas (condicao_aluno_id);
@@ -208,14 +215,21 @@ BEGIN
 END;
 $$;
 
-ALTER TABLE aluno_adaptacoes_recomendadas
-    DROP CONSTRAINT IF EXISTS fk_aluno_adaptacoes_restricao;
-
-ALTER TABLE aluno_adaptacoes_recomendadas
-    ADD CONSTRAINT fk_aluno_adaptacoes_restricao
-    FOREIGN KEY (restricao_aluno_id, aluno_id)
-    REFERENCES aluno_restricoes_fisicas(id, aluno_id)
-    ON DELETE RESTRICT;
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint
+        WHERE conname = 'fk_aluno_adaptacoes_restricao'
+          AND conrelid = 'aluno_adaptacoes_recomendadas'::regclass
+    ) THEN
+        ALTER TABLE aluno_adaptacoes_recomendadas
+            ADD CONSTRAINT fk_aluno_adaptacoes_restricao
+            FOREIGN KEY (restricao_aluno_id, aluno_id)
+            REFERENCES aluno_restricoes_fisicas(id, aluno_id)
+            ON DELETE RESTRICT;
+    END IF;
+END;
+$$;
 
 CREATE INDEX IF NOT EXISTS idx_aluno_adaptacoes_aluno_id
     ON aluno_adaptacoes_recomendadas (aluno_id);
