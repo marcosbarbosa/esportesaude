@@ -1,0 +1,150 @@
+CONFIRMAÇÃO DE SCHEMA REAL — IMBRA — Esporte e Saúde 60+
+
+A migration 006 já foi executada.
+
+Confirmado no Supabase:
+- As seis tabelas foram criadas.
+- RLS está habilitado nas seis tabelas.
+- Não existe ainda aluno_adaptacoes_recomendadas.
+- aluno_restricoes_fisicas NÃO possui condicao_aluno_id.
+- Os catálogos ainda possuem somente campos básicos.
+- Nenhuma tela Streamlit nova deve ser alterada ainda.
+- Não fazer rollback, DROP TABLE, UPDATE em alunos ou alteração em tags_saude.
+
+Crie agora, SOMENTE NO REPOSITÓRIO, sem executar no Supabase:
+
+migrations/007_complemento_catalogos_clinicos.sql
+
+A migration 007 deve ser idempotente e complementar a 006 usando
+ADD COLUMN IF NOT EXISTS, CREATE TABLE IF NOT EXISTS, CREATE INDEX IF NOT EXISTS
+e verificações seguras de constraints/triggers.
+
+1. Em aluno_restricoes_fisicas, adicionar:
+
+condicao_aluno_id UUID NULL
+REFERENCES aluno_condicoes_clinicas(id)
+ON DELETE RESTRICT;
+
+Criar índice idx_aluno_restricoes_condicao_aluno_id.
+
+2. Criar tabela aluno_adaptacoes_recomendadas:
+
+- id UUID PK DEFAULT gen_random_uuid()
+- aluno_id UUID NOT NULL REFERENCES alunos(id) ON DELETE RESTRICT
+- restricao_aluno_id UUID NULL REFERENCES aluno_restricoes_fisicas(id) ON DELETE RESTRICT
+- adaptacao_id UUID NOT NULL REFERENCES catalogo_adaptacoes(id) ON DELETE RESTRICT
+- status TEXT NOT NULL DEFAULT 'PENDENTE'
+- observacao_operacional TEXT
+- data_inicio DATE
+- data_validade DATE
+- revisado_por TEXT
+- revisado_em TIMESTAMPTZ
+- ativo BOOLEAN NOT NULL DEFAULT TRUE
+- criado_por TEXT
+- criado_em TIMESTAMPTZ NOT NULL DEFAULT NOW()
+- atualizado_em TIMESTAMPTZ NOT NULL DEFAULT NOW()
+
+Criar:
+- constraint de status: PENDENTE, VALIDADO, REJEITADO, EXPIRADO, REVOGADO;
+- índice por aluno_id;
+- índice por restricao_aluno_id;
+- índice parcial único para não duplicar adaptação ativa;
+- trigger de atualizado_em reutilizando a função existente, se possível.
+
+3. Adicionar aos catálogos:
+
+catalogo_condicoes_clinicas:
+- descricao_operacional TEXT;
+- exige_revisao_periodica BOOLEAN NOT NULL DEFAULT FALSE;
+- intervalo_revisao_dias INTEGER;
+- revisado_por TEXT;
+- revisado_em TIMESTAMPTZ.
+
+catalogo_restricoes_movimento:
+- categoria_movimento TEXT;
+- descricao_simples_para_aluno TEXT;
+- exige_validacao_clinica BOOLEAN NOT NULL DEFAULT TRUE;
+- nivel_padrao_sugerido TEXT;
+- revisado_por TEXT;
+- revisado_em TIMESTAMPTZ.
+
+catalogo_adaptacoes:
+- categoria_adaptacao TEXT;
+- descricao_operacional TEXT;
+- descricao_simples_para_aluno TEXT;
+- revisado_por TEXT;
+- revisado_em TIMESTAMPTZ.
+
+4. Adicionar dados individuais:
+
+aluno_condicoes_clinicas:
+- data_informacao DATE;
+- data_revisao_prevista DATE;
+- responsavel_validacao TEXT.
+
+aluno_restricoes_fisicas:
+- data_inicio DATE;
+- data_validade DATE;
+- responsavel_validacao TEXT;
+- texto_original_legado TEXT;
+- observacao_contextual TEXT.
+
+Preservar observacao_original intacta.
+
+5. Atualizar constraints de status/fonte usando migration segura.
+
+Status de revisão desejados:
+- PENDENTE
+- SUGERIDO_POR_MIGRACAO
+- VALIDADO
+- REJEITADO
+- EXPIRADO
+- REVOGADO
+
+Fontes desejadas:
+- AUTORRELATO
+- ATESTADO_MEDICO
+- LAUDO
+- FAMILIAR_RESPONSAVEL
+- OBSERVACAO_PROFISSIONAL
+- REGISTRO_LEGADO
+- OUTRA
+
+Preservar valores existentes CADASTRO_MANUAL e DECLARACAO_ALUNO durante a
+transição; não gerar erro em dados existentes.
+
+6. Atualizar historico_revisoes_clinicas:
+
+- incluir entidade ALUNO_ADAPTACAO;
+- permitir ações EXPIRACAO e REVOGACAO, preservando as ações existentes.
+
+7. RLS:
+
+- manter RLS habilitado;
+- inspecionar policies existentes;
+- não criar policy pública permissiva;
+- documentar o impacto da autenticação atual baseada em backend Streamlit;
+- não bloquear a app existente, pois nenhuma tela atual consome essas tabelas.
+
+8. Criar também:
+scripts/seed_catalogos_clinicos_v2.py
+
+O seed deve ser idempotente e não tocar em alunos, tags_saude,
+problemas_saude ou restricoes_fisicas.
+
+Ele deve ampliar:
+- condições clínicas;
+- restrições;
+- adaptações;
+- hierarquia Cardiovascular → Cardiopatia / doença cardíaca → subtipos;
+- campos de descrição operacional e linguagem simples.
+
+NÃO executar a 007 nem o seed.
+
+ENTREGAR:
+A. SQL completo da 007.
+B. Código completo do seed v2.
+C. Queries de pré e pós-verificação.
+D. Estratégia RLS.
+E. Rollback não destrutivo.
+F. Resumo de impacto no sistema atual.
