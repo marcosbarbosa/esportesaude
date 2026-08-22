@@ -1,0 +1,344 @@
+**Não execute ainda.** A primeira entrega é promissora, mas a migration precisa de correções críticas antes de ir ao Supabase — inclusive há sinais de sintaxe incompleta no arquivo e ela deixou de fora itens que você havia definido como essenciais, especialmente a ligação `condicao_aluno_id` e a tabela de adaptações por aluno. [ppl-ai-file-upload.s3.amazonaws](https://ppl-ai-file-upload.s3.amazonaws.com/web/direct-files/attachments/27643775/6c9e881c-64dd-4b3e-a6c5-451a737b0e47/006_catalogos_clinicos-3.sql?AWSAccessKeyId=ASIA2F3EMEYETFEKSBIG&Signature=2JryC2TgU2GV%2Fbo4Jm8OZWJcYrI%3D&x-amz-security-token=IQoJb3JpZ2luX2VjEAAaCXVzLWVhc3QtMSJGMEQCIHdX7YpDUOCg6DrCjkug4%2FYM7naG1sXDZ6Yf33uz5DYjAiACxezQUtBsoc1Kbba2ojgF4dDjeBISzsbHiDBnPYquOyr8BAjI%2F%2F%2F%2F%2F%2F%2F%2F%2F%2F8BEAEaDDY5OTc1MzMwOTcwNSIMIHOctu6%2FZP2hKtNUKtAEntrpR7%2FR7BEq3SoDtS%2F3CdC%2FrROH1MckW9xcxH%2BsODgWJEKXlLlzBlqvErhO92EO2yMj%2FDaEpW7SKWKhyR%2Fn9ovglM5Yee3sKd3KgOw4JezXPoR6EQ24PIQeeRH14i95Ix4bWZjrCt67jrRAGHzzIKX24HlgKyPLgdYqovA8jFVGocCHBpTpVfnrD1x3%2BgLux0Lhvy42KpfTzxHghmaXX1wBSDl7I%2BqGBLIEC0qXPuQVTqtx0euyT6oLBZSN9g9sDSv%2FoOSeqW2FkedKq1M35q5Zu84hcvQ6jkIPtfrik2y%2BnZTinCJBfKo1X%2B4TC7OvWJfDzuXMv0IpIpJPLYrbBdbYlPFZHoNky9ekNtz1Pd90xP9REk0WgmSq1sbr4Z2G47n7Uv%2BwHjnMpky4EEuIr114nWePboWFuglUYAxrXJs42xY3keEx7pKCLxmBKKOCrxz0wCbWUZYV5mYJuGSuH4FdiCBAdMYDzXc4eton3wnbgDSIwdLXbz3uHeXk0tC%2BPkWIvzkdUNqRoxErG12yf2rwae5b%2FeMK%2Bm00evOrGNtDj254750du3ATqTJC0zsD%2Ffu9C9vUwAK8kqcLuaW%2B%2FJjn86iRzFrlUlT0A%2Bx%2BYdC7%2FKQH1gYV2eLtjcHqhKMvW2DmxC0cL6uXrBhEacfBTrtI%2FbYi4qFGEVNc22wV5Fwr8PyV2vX6r3D1HdvNn%2FjdpCvXHB6DYlup8nBgaU7hZYQvH6kq42mbttYvnLCtMlwp8PI1j3ozAf%2BEgrpE5DsfSVL9CbQHFbGFe7vonMxwNTDT1qjUBjqZATT4YStEvEaFNFFFlDSj7IWzx3iy81XDrlQexr5K0YN9uTU4VJ8AbJsFvVpOX7Mq8jbo0imEG3vU9lir9Q097jQNWQOl2k%2BpPncmwyRFqAucoVbPl6JuLHStwhGfXZ%2FOLJVa69UOhopEV13wOw10wJ2%2FtLZ57ZSAS7t0yvrrk9pG%2F6f%2BIRcaXaM30ujDOrj3f1MmOaijRcWIFw%3D%3D&Expires=1787443494)
+
+## Problemas a corrigir primeiro
+
+### 1. Há erros aparentes de sintaxe SQL
+
+No conteúdo recebido, alguns `CREATE TABLE` e `CHECK` parecem não estar fechados corretamente com `);`, por exemplo ao fim de:
+
+- `catalogo_condicoes_clinicas`;
+- `aluno_condicoes_clinicas`;
+- `aluno_restricoes_fisicas`;
+- `historico_revisoes_clinicas`.
+
+Isso pode ser truncamento da visualização, mas precisa ser conferido no arquivo real antes de executar. Se estiver igual no Replit, a migration falhará no Supabase. [ppl-ai-file-upload.s3.amazonaws](https://ppl-ai-file-upload.s3.amazonaws.com/web/direct-files/attachments/27643775/6c9e881c-64dd-4b3e-a6c5-451a737b0e47/006_catalogos_clinicos-3.sql?AWSAccessKeyId=ASIA2F3EMEYETFEKSBIG&Signature=2JryC2TgU2GV%2Fbo4Jm8OZWJcYrI%3D&x-amz-security-token=IQoJb3JpZ2luX2VjEAAaCXVzLWVhc3QtMSJGMEQCIHdX7YpDUOCg6DrCjkug4%2FYM7naG1sXDZ6Yf33uz5DYjAiACxezQUtBsoc1Kbba2ojgF4dDjeBISzsbHiDBnPYquOyr8BAjI%2F%2F%2F%2F%2F%2F%2F%2F%2F%2F8BEAEaDDY5OTc1MzMwOTcwNSIMIHOctu6%2FZP2hKtNUKtAEntrpR7%2FR7BEq3SoDtS%2F3CdC%2FrROH1MckW9xcxH%2BsODgWJEKXlLlzBlqvErhO92EO2yMj%2FDaEpW7SKWKhyR%2Fn9ovglM5Yee3sKd3KgOw4JezXPoR6EQ24PIQeeRH14i95Ix4bWZjrCt67jrRAGHzzIKX24HlgKyPLgdYqovA8jFVGocCHBpTpVfnrD1x3%2BgLux0Lhvy42KpfTzxHghmaXX1wBSDl7I%2BqGBLIEC0qXPuQVTqtx0euyT6oLBZSN9g9sDSv%2FoOSeqW2FkedKq1M35q5Zu84hcvQ6jkIPtfrik2y%2BnZTinCJBfKo1X%2B4TC7OvWJfDzuXMv0IpIpJPLYrbBdbYlPFZHoNky9ekNtz1Pd90xP9REk0WgmSq1sbr4Z2G47n7Uv%2BwHjnMpky4EEuIr114nWePboWFuglUYAxrXJs42xY3keEx7pKCLxmBKKOCrxz0wCbWUZYV5mYJuGSuH4FdiCBAdMYDzXc4eton3wnbgDSIwdLXbz3uHeXk0tC%2BPkWIvzkdUNqRoxErG12yf2rwae5b%2FeMK%2Bm00evOrGNtDj254750du3ATqTJC0zsD%2Ffu9C9vUwAK8kqcLuaW%2B%2FJjn86iRzFrlUlT0A%2Bx%2BYdC7%2FKQH1gYV2eLtjcHqhKMvW2DmxC0cL6uXrBhEacfBTrtI%2FbYi4qFGEVNc22wV5Fwr8PyV2vX6r3D1HdvNn%2FjdpCvXHB6DYlup8nBgaU7hZYQvH6kq42mbttYvnLCtMlwp8PI1j3ozAf%2BEgrpE5DsfSVL9CbQHFbGFe7vonMxwNTDT1qjUBjqZATT4YStEvEaFNFFFlDSj7IWzx3iy81XDrlQexr5K0YN9uTU4VJ8AbJsFvVpOX7Mq8jbo0imEG3vU9lir9Q097jQNWQOl2k%2BpPncmwyRFqAucoVbPl6JuLHStwhGfXZ%2FOLJVa69UOhopEV13wOw10wJ2%2FtLZ57ZSAS7t0yvrrk9pG%2F6f%2BIRcaXaM30ujDOrj3f1MmOaijRcWIFw%3D%3D&Expires=1787443494)
+
+### 2. Falta `condicao_aluno_id`
+
+Você decidiu — e eu recomendei — que cada restrição deveria opcionalmente apontar para a condição do aluno que a justifica.
+
+O arquivo atual de `aluno_restricoes_fisicas` tem:
+
+```sql
+aluno_id UUID NOT NULL,
+restricao_id UUID NOT NULL,
+```
+
+Mas **não tem**:
+
+```sql
+condicao_aluno_id UUID
+REFERENCES aluno_condicoes_clinicas(id)
+ON DELETE RESTRICT
+```
+
+Sem isso, o sistema não consegue responder com precisão:
+
+> “Por qual condição clínica esta restrição foi definida?”
+
+Esse vínculo precisa entrar agora, antes da migration ser executada. [ppl-ai-file-upload.s3.amazonaws](https://ppl-ai-file-upload.s3.amazonaws.com/web/direct-files/attachments/27643775/6c9e881c-64dd-4b3e-a6c5-451a737b0e47/006_catalogos_clinicos-3.sql?AWSAccessKeyId=ASIA2F3EMEYETFEKSBIG&Signature=2JryC2TgU2GV%2Fbo4Jm8OZWJcYrI%3D&x-amz-security-token=IQoJb3JpZ2luX2VjEAAaCXVzLWVhc3QtMSJGMEQCIHdX7YpDUOCg6DrCjkug4%2FYM7naG1sXDZ6Yf33uz5DYjAiACxezQUtBsoc1Kbba2ojgF4dDjeBISzsbHiDBnPYquOyr8BAjI%2F%2F%2F%2F%2F%2F%2F%2F%2F%2F8BEAEaDDY5OTc1MzMwOTcwNSIMIHOctu6%2FZP2hKtNUKtAEntrpR7%2FR7BEq3SoDtS%2F3CdC%2FrROH1MckW9xcxH%2BsODgWJEKXlLlzBlqvErhO92EO2yMj%2FDaEpW7SKWKhyR%2Fn9ovglM5Yee3sKd3KgOw4JezXPoR6EQ24PIQeeRH14i95Ix4bWZjrCt67jrRAGHzzIKX24HlgKyPLgdYqovA8jFVGocCHBpTpVfnrD1x3%2BgLux0Lhvy42KpfTzxHghmaXX1wBSDl7I%2BqGBLIEC0qXPuQVTqtx0euyT6oLBZSN9g9sDSv%2FoOSeqW2FkedKq1M35q5Zu84hcvQ6jkIPtfrik2y%2BnZTinCJBfKo1X%2B4TC7OvWJfDzuXMv0IpIpJPLYrbBdbYlPFZHoNky9ekNtz1Pd90xP9REk0WgmSq1sbr4Z2G47n7Uv%2BwHjnMpky4EEuIr114nWePboWFuglUYAxrXJs42xY3keEx7pKCLxmBKKOCrxz0wCbWUZYV5mYJuGSuH4FdiCBAdMYDzXc4eton3wnbgDSIwdLXbz3uHeXk0tC%2BPkWIvzkdUNqRoxErG12yf2rwae5b%2FeMK%2Bm00evOrGNtDj254750du3ATqTJC0zsD%2Ffu9C9vUwAK8kqcLuaW%2B%2FJjn86iRzFrlUlT0A%2Bx%2BYdC7%2FKQH1gYV2eLtjcHqhKMvW2DmxC0cL6uXrBhEacfBTrtI%2FbYi4qFGEVNc22wV5Fwr8PyV2vX6r3D1HdvNn%2FjdpCvXHB6DYlup8nBgaU7hZYQvH6kq42mbttYvnLCtMlwp8PI1j3ozAf%2BEgrpE5DsfSVL9CbQHFbGFe7vonMxwNTDT1qjUBjqZATT4YStEvEaFNFFFlDSj7IWzx3iy81XDrlQexr5K0YN9uTU4VJ8AbJsFvVpOX7Mq8jbo0imEG3vU9lir9Q097jQNWQOl2k%2BpPncmwyRFqAucoVbPl6JuLHStwhGfXZ%2FOLJVa69UOhopEV13wOw10wJ2%2FtLZ57ZSAS7t0yvrrk9pG%2F6f%2BIRcaXaM30ujDOrj3f1MmOaijRcWIFw%3D%3D&Expires=1787443494)
+
+### 3. Falta `aluno_adaptacoes_recomendadas`
+
+O plano aprovado previa a tabela que liga:
+
+> aluno → restrição individual → adaptação recomendada.
+
+Ela não está entre as seis tabelas criadas. Sem ela, o sistema terá condição e restrição, mas não terá como registrar de modo estruturado a solução prática, como:
+
+- “Usar cadeira alta com apoio”;
+- “reduzir amplitude”;
+- “usar elástico leve”;
+- “realizar exercício sentado”;
+- “supervisão próxima”.
+
+Essa tabela é indispensável para que a equipe tenha algo útil na aula, e não apenas uma lista do que é proibido. [ppl-ai-file-upload.s3.amazonaws](https://ppl-ai-file-upload.s3.amazonaws.com/web/direct-files/attachments/27643775/6c9e881c-64dd-4b3e-a6c5-451a737b0e47/006_catalogos_clinicos-3.sql?AWSAccessKeyId=ASIA2F3EMEYETFEKSBIG&Signature=2JryC2TgU2GV%2Fbo4Jm8OZWJcYrI%3D&x-amz-security-token=IQoJb3JpZ2luX2VjEAAaCXVzLWVhc3QtMSJGMEQCIHdX7YpDUOCg6DrCjkug4%2FYM7naG1sXDZ6Yf33uz5DYjAiACxezQUtBsoc1Kbba2ojgF4dDjeBISzsbHiDBnPYquOyr8BAjI%2F%2F%2F%2F%2F%2F%2F%2F%2F%2F8BEAEaDDY5OTc1MzMwOTcwNSIMIHOctu6%2FZP2hKtNUKtAEntrpR7%2FR7BEq3SoDtS%2F3CdC%2FrROH1MckW9xcxH%2BsODgWJEKXlLlzBlqvErhO92EO2yMj%2FDaEpW7SKWKhyR%2Fn9ovglM5Yee3sKd3KgOw4JezXPoR6EQ24PIQeeRH14i95Ix4bWZjrCt67jrRAGHzzIKX24HlgKyPLgdYqovA8jFVGocCHBpTpVfnrD1x3%2BgLux0Lhvy42KpfTzxHghmaXX1wBSDl7I%2BqGBLIEC0qXPuQVTqtx0euyT6oLBZSN9g9sDSv%2FoOSeqW2FkedKq1M35q5Zu84hcvQ6jkIPtfrik2y%2BnZTinCJBfKo1X%2B4TC7OvWJfDzuXMv0IpIpJPLYrbBdbYlPFZHoNky9ekNtz1Pd90xP9REk0WgmSq1sbr4Z2G47n7Uv%2BwHjnMpky4EEuIr114nWePboWFuglUYAxrXJs42xY3keEx7pKCLxmBKKOCrxz0wCbWUZYV5mYJuGSuH4FdiCBAdMYDzXc4eton3wnbgDSIwdLXbz3uHeXk0tC%2BPkWIvzkdUNqRoxErG12yf2rwae5b%2FeMK%2Bm00evOrGNtDj254750du3ATqTJC0zsD%2Ffu9C9vUwAK8kqcLuaW%2B%2FJjn86iRzFrlUlT0A%2Bx%2BYdC7%2FKQH1gYV2eLtjcHqhKMvW2DmxC0cL6uXrBhEacfBTrtI%2FbYi4qFGEVNc22wV5Fwr8PyV2vX6r3D1HdvNn%2FjdpCvXHB6DYlup8nBgaU7hZYQvH6kq42mbttYvnLCtMlwp8PI1j3ozAf%2BEgrpE5DsfSVL9CbQHFbGFe7vonMxwNTDT1qjUBjqZATT4YStEvEaFNFFFlDSj7IWzx3iy81XDrlQexr5K0YN9uTU4VJ8AbJsFvVpOX7Mq8jbo0imEG3vU9lir9Q097jQNWQOl2k%2BpPncmwyRFqAucoVbPl6JuLHStwhGfXZ%2FOLJVa69UOhopEV13wOw10wJ2%2FtLZ57ZSAS7t0yvrrk9pG%2F6f%2BIRcaXaM30ujDOrj3f1MmOaijRcWIFw%3D%3D&Expires=1787443494)
+
+### 4. Catálogos ficaram simplificados demais
+
+A tabela de condições tem `categoria` e `grupo`, o que foi positivo — especialmente para separar “Cardiopatia” como grupo dentro de “Cardiovascular”. Porém, faltam campos acordados para governança:
+
+```text
+descricao_operacional
+exige_revisao_periodica
+intervalo_revisao_dias
+revisado_por
+revisado_em
+```
+
+A tabela de restrições também precisa de:
+
+```text
+categoria_movimento
+descricao_simples_para_aluno
+exige_validacao_clinica
+nivel_padrao_sugerido
+revisado_por
+revisado_em
+```
+
+E a tabela de adaptações precisa de:
+
+```text
+categoria_adaptacao
+descricao_operacional
+descricao_simples_para_aluno
+revisado_por
+revisado_em
+```
+
+Esses campos são essenciais para gerar futuramente PDFs em linguagem simples, telas operacionais e termos individualizados sem depender de texto improvisado. [ppl-ai-file-upload.s3.amazonaws](https://ppl-ai-file-upload.s3.amazonaws.com/web/direct-files/attachments/27643775/6c9e881c-64dd-4b3e-a6c5-451a737b0e47/006_catalogos_clinicos-3.sql?AWSAccessKeyId=ASIA2F3EMEYETFEKSBIG&Signature=2JryC2TgU2GV%2Fbo4Jm8OZWJcYrI%3D&x-amz-security-token=IQoJb3JpZ2luX2VjEAAaCXVzLWVhc3QtMSJGMEQCIHdX7YpDUOCg6DrCjkug4%2FYM7naG1sXDZ6Yf33uz5DYjAiACxezQUtBsoc1Kbba2ojgF4dDjeBISzsbHiDBnPYquOyr8BAjI%2F%2F%2F%2F%2F%2F%2F%2F%2F%2F8BEAEaDDY5OTc1MzMwOTcwNSIMIHOctu6%2FZP2hKtNUKtAEntrpR7%2FR7BEq3SoDtS%2F3CdC%2FrROH1MckW9xcxH%2BsODgWJEKXlLlzBlqvErhO92EO2yMj%2FDaEpW7SKWKhyR%2Fn9ovglM5Yee3sKd3KgOw4JezXPoR6EQ24PIQeeRH14i95Ix4bWZjrCt67jrRAGHzzIKX24HlgKyPLgdYqovA8jFVGocCHBpTpVfnrD1x3%2BgLux0Lhvy42KpfTzxHghmaXX1wBSDl7I%2BqGBLIEC0qXPuQVTqtx0euyT6oLBZSN9g9sDSv%2FoOSeqW2FkedKq1M35q5Zu84hcvQ6jkIPtfrik2y%2BnZTinCJBfKo1X%2B4TC7OvWJfDzuXMv0IpIpJPLYrbBdbYlPFZHoNky9ekNtz1Pd90xP9REk0WgmSq1sbr4Z2G47n7Uv%2BwHjnMpky4EEuIr114nWePboWFuglUYAxrXJs42xY3keEx7pKCLxmBKKOCrxz0wCbWUZYV5mYJuGSuH4FdiCBAdMYDzXc4eton3wnbgDSIwdLXbz3uHeXk0tC%2BPkWIvzkdUNqRoxErG12yf2rwae5b%2FeMK%2Bm00evOrGNtDj254750du3ATqTJC0zsD%2Ffu9C9vUwAK8kqcLuaW%2B%2FJjn86iRzFrlUlT0A%2Bx%2BYdC7%2FKQH1gYV2eLtjcHqhKMvW2DmxC0cL6uXrBhEacfBTrtI%2FbYi4qFGEVNc22wV5Fwr8PyV2vX6r3D1HdvNn%2FjdpCvXHB6DYlup8nBgaU7hZYQvH6kq42mbttYvnLCtMlwp8PI1j3ozAf%2BEgrpE5DsfSVL9CbQHFbGFe7vonMxwNTDT1qjUBjqZATT4YStEvEaFNFFFlDSj7IWzx3iy81XDrlQexr5K0YN9uTU4VJ8AbJsFvVpOX7Mq8jbo0imEG3vU9lir9Q097jQNWQOl2k%2BpPncmwyRFqAucoVbPl6JuLHStwhGfXZ%2FOLJVa69UOhopEV13wOw10wJ2%2FtLZ57ZSAS7t0yvrrk9pG%2F6f%2BIRcaXaM30ujDOrj3f1MmOaijRcWIFw%3D%3D&Expires=1787443494)
+
+### 5. RLS está explicitamente desativado
+
+No final, a migration faz:
+
+```sql
+ALTER TABLE ... DISABLE ROW LEVEL SECURITY;
+```
+
+para todas as tabelas clínicas. Isso é contrário ao objetivo de proteção de dados sensíveis. Como se trata de informações de saúde, não recomendo colocar essas tabelas em produção com RLS desativado. [ppl-ai-file-upload.s3.amazonaws](https://ppl-ai-file-upload.s3.amazonaws.com/web/direct-files/attachments/27643775/6c9e881c-64dd-4b3e-a6c5-451a737b0e47/006_catalogos_clinicos-3.sql?AWSAccessKeyId=ASIA2F3EMEYETFEKSBIG&Signature=2JryC2TgU2GV%2Fbo4Jm8OZWJcYrI%3D&x-amz-security-token=IQoJb3JpZ2luX2VjEAAaCXVzLWVhc3QtMSJGMEQCIHdX7YpDUOCg6DrCjkug4%2FYM7naG1sXDZ6Yf33uz5DYjAiACxezQUtBsoc1Kbba2ojgF4dDjeBISzsbHiDBnPYquOyr8BAjI%2F%2F%2F%2F%2F%2F%2F%2F%2F%2F8BEAEaDDY5OTc1MzMwOTcwNSIMIHOctu6%2FZP2hKtNUKtAEntrpR7%2FR7BEq3SoDtS%2F3CdC%2FrROH1MckW9xcxH%2BsODgWJEKXlLlzBlqvErhO92EO2yMj%2FDaEpW7SKWKhyR%2Fn9ovglM5Yee3sKd3KgOw4JezXPoR6EQ24PIQeeRH14i95Ix4bWZjrCt67jrRAGHzzIKX24HlgKyPLgdYqovA8jFVGocCHBpTpVfnrD1x3%2BgLux0Lhvy42KpfTzxHghmaXX1wBSDl7I%2BqGBLIEC0qXPuQVTqtx0euyT6oLBZSN9g9sDSv%2FoOSeqW2FkedKq1M35q5Zu84hcvQ6jkIPtfrik2y%2BnZTinCJBfKo1X%2B4TC7OvWJfDzuXMv0IpIpJPLYrbBdbYlPFZHoNky9ekNtz1Pd90xP9REk0WgmSq1sbr4Z2G47n7Uv%2BwHjnMpky4EEuIr114nWePboWFuglUYAxrXJs42xY3keEx7pKCLxmBKKOCrxz0wCbWUZYV5mYJuGSuH4FdiCBAdMYDzXc4eton3wnbgDSIwdLXbz3uHeXk0tC%2BPkWIvzkdUNqRoxErG12yf2rwae5b%2FeMK%2Bm00evOrGNtDj254750du3ATqTJC0zsD%2Ffu9C9vUwAK8kqcLuaW%2B%2FJjn86iRzFrlUlT0A%2Bx%2BYdC7%2FKQH1gYV2eLtjcHqhKMvW2DmxC0cL6uXrBhEacfBTrtI%2FbYi4qFGEVNc22wV5Fwr8PyV2vX6r3D1HdvNn%2FjdpCvXHB6DYlup8nBgaU7hZYQvH6kq42mbttYvnLCtMlwp8PI1j3ozAf%2BEgrpE5DsfSVL9CbQHFbGFe7vonMxwNTDT1qjUBjqZATT4YStEvEaFNFFFlDSj7IWzx3iy81XDrlQexr5K0YN9uTU4VJ8AbJsFvVpOX7Mq8jbo0imEG3vU9lir9Q097jQNWQOl2k%2BpPncmwyRFqAucoVbPl6JuLHStwhGfXZ%2FOLJVa69UOhopEV13wOw10wJ2%2FtLZ57ZSAS7t0yvrrk9pG%2F6f%2BIRcaXaM30ujDOrj3f1MmOaijRcWIFw%3D%3D&Expires=1787443494)
+
+O correto, nesta fase, é um destes caminhos:
+
+- habilitar RLS e criar políticas mínimas de acesso por perfil; ou
+- não expor as tabelas diretamente pelo client e usar apenas backend seguro até as políticas existirem.
+
+Mas **não deixar RLS permanentemente desligado**.
+
+### 6. Status e fonte precisam ser mais completos
+
+O modelo atual usa `PENDENTE`, `SUGERIDO`, `CONFIRMADO`, `REJEITADO`, `OBSOLETO`. É um começo bom, mas para seu fluxo eu recomendaria separar:
+
+- **estado clínico do registro:** `ATIVA`, `HISTORICO`, `NAO_INFORMADO`;
+- **estado de revisão:** `PENDENTE`, `SUGERIDO_POR_MIGRACAO`, `VALIDADO`, `REJEITADO`, `EXPIRADO`, `REVOGADO`;
+- **fonte:** `AUTORRELATO`, `ATESTADO_MEDICO`, `LAUDO`, `FAMILIAR_RESPONSAVEL`, `OBSERVACAO_PROFISSIONAL`, `REGISTRO_LEGADO`.
+
+Hoje “CADASTRO_MANUAL” e “DECLARACAO_ALUNO” podem ficar ambíguos: o cadastro foi preenchido por quem? Qual documento sustentou a informação? [ppl-ai-file-upload.s3.amazonaws](https://ppl-ai-file-upload.s3.amazonaws.com/web/direct-files/attachments/27643775/6c9e881c-64dd-4b3e-a6c5-451a737b0e47/006_catalogos_clinicos-3.sql?AWSAccessKeyId=ASIA2F3EMEYETFEKSBIG&Signature=2JryC2TgU2GV%2Fbo4Jm8OZWJcYrI%3D&x-amz-security-token=IQoJb3JpZ2luX2VjEAAaCXVzLWVhc3QtMSJGMEQCIHdX7YpDUOCg6DrCjkug4%2FYM7naG1sXDZ6Yf33uz5DYjAiACxezQUtBsoc1Kbba2ojgF4dDjeBISzsbHiDBnPYquOyr8BAjI%2F%2F%2F%2F%2F%2F%2F%2F%2F%2F8BEAEaDDY5OTc1MzMwOTcwNSIMIHOctu6%2FZP2hKtNUKtAEntrpR7%2FR7BEq3SoDtS%2F3CdC%2FrROH1MckW9xcxH%2BsODgWJEKXlLlzBlqvErhO92EO2yMj%2FDaEpW7SKWKhyR%2Fn9ovglM5Yee3sKd3KgOw4JezXPoR6EQ24PIQeeRH14i95Ix4bWZjrCt67jrRAGHzzIKX24HlgKyPLgdYqovA8jFVGocCHBpTpVfnrD1x3%2BgLux0Lhvy42KpfTzxHghmaXX1wBSDl7I%2BqGBLIEC0qXPuQVTqtx0euyT6oLBZSN9g9sDSv%2FoOSeqW2FkedKq1M35q5Zu84hcvQ6jkIPtfrik2y%2BnZTinCJBfKo1X%2B4TC7OvWJfDzuXMv0IpIpJPLYrbBdbYlPFZHoNky9ekNtz1Pd90xP9REk0WgmSq1sbr4Z2G47n7Uv%2BwHjnMpky4EEuIr114nWePboWFuglUYAxrXJs42xY3keEx7pKCLxmBKKOCrxz0wCbWUZYV5mYJuGSuH4FdiCBAdMYDzXc4eton3wnbgDSIwdLXbz3uHeXk0tC%2BPkWIvzkdUNqRoxErG12yf2rwae5b%2FeMK%2Bm00evOrGNtDj254750du3ATqTJC0zsD%2Ffu9C9vUwAK8kqcLuaW%2B%2FJjn86iRzFrlUlT0A%2Bx%2BYdC7%2FKQH1gYV2eLtjcHqhKMvW2DmxC0cL6uXrBhEacfBTrtI%2FbYi4qFGEVNc22wV5Fwr8PyV2vX6r3D1HdvNn%2FjdpCvXHB6DYlup8nBgaU7hZYQvH6kq42mbttYvnLCtMlwp8PI1j3ozAf%2BEgrpE5DsfSVL9CbQHFbGFe7vonMxwNTDT1qjUBjqZATT4YStEvEaFNFFFlDSj7IWzx3iy81XDrlQexr5K0YN9uTU4VJ8AbJsFvVpOX7Mq8jbo0imEG3vU9lir9Q097jQNWQOl2k%2BpPncmwyRFqAucoVbPl6JuLHStwhGfXZ%2FOLJVa69UOhopEV13wOw10wJ2%2FtLZ57ZSAS7t0yvrrk9pG%2F6f%2BIRcaXaM30ujDOrj3f1MmOaijRcWIFw%3D%3D&Expires=1787443494)
+
+### 7. Faltam datas críticas nas restrições
+
+A tabela de restrições não possui:
+
+```text
+data_inicio
+data_validade
+responsavel_validacao
+texto_original_legado
+```
+
+Ela possui `observacao_original`, mas precisa separar claramente o texto legado do contexto novo. Sem validade, uma orientação antiga pode continuar aparecendo ao professor como se ainda estivesse vigente.
+
+## O que está bem feito
+
+Apesar dos ajustes acima, há boas decisões:
+
+- Usa UUID e `gen_random_uuid()`.  
+- Mantém os campos legados intactos.  
+- Usa `ON DELETE RESTRICT` nos vínculos clínicos.  
+- Cria índices e previne duplicidade de vínculos ativos.  
+- Prevê auditoria em JSONB.  
+- Possui `BEGIN`/`COMMIT` e rollback somente documentado.  
+- O seed é idempotente e ainda não classifica aluno nenhum. [ppl-ai-file-upload.s3.amazonaws](https://ppl-ai-file-upload.s3.amazonaws.com/web/direct-files/attachments/27643775/6c9e881c-64dd-4b3e-a6c5-451a737b0e47/006_catalogos_clinicos-3.sql?AWSAccessKeyId=ASIA2F3EMEYETFEKSBIG&Signature=2JryC2TgU2GV%2Fbo4Jm8OZWJcYrI%3D&x-amz-security-token=IQoJb3JpZ2luX2VjEAAaCXVzLWVhc3QtMSJGMEQCIHdX7YpDUOCg6DrCjkug4%2FYM7naG1sXDZ6Yf33uz5DYjAiACxezQUtBsoc1Kbba2ojgF4dDjeBISzsbHiDBnPYquOyr8BAjI%2F%2F%2F%2F%2F%2F%2F%2F%2F%2F8BEAEaDDY5OTc1MzMwOTcwNSIMIHOctu6%2FZP2hKtNUKtAEntrpR7%2FR7BEq3SoDtS%2F3CdC%2FrROH1MckW9xcxH%2BsODgWJEKXlLlzBlqvErhO92EO2yMj%2FDaEpW7SKWKhyR%2Fn9ovglM5Yee3sKd3KgOw4JezXPoR6EQ24PIQeeRH14i95Ix4bWZjrCt67jrRAGHzzIKX24HlgKyPLgdYqovA8jFVGocCHBpTpVfnrD1x3%2BgLux0Lhvy42KpfTzxHghmaXX1wBSDl7I%2BqGBLIEC0qXPuQVTqtx0euyT6oLBZSN9g9sDSv%2FoOSeqW2FkedKq1M35q5Zu84hcvQ6jkIPtfrik2y%2BnZTinCJBfKo1X%2B4TC7OvWJfDzuXMv0IpIpJPLYrbBdbYlPFZHoNky9ekNtz1Pd90xP9REk0WgmSq1sbr4Z2G47n7Uv%2BwHjnMpky4EEuIr114nWePboWFuglUYAxrXJs42xY3keEx7pKCLxmBKKOCrxz0wCbWUZYV5mYJuGSuH4FdiCBAdMYDzXc4eton3wnbgDSIwdLXbz3uHeXk0tC%2BPkWIvzkdUNqRoxErG12yf2rwae5b%2FeMK%2Bm00evOrGNtDj254750du3ATqTJC0zsD%2Ffu9C9vUwAK8kqcLuaW%2B%2FJjn86iRzFrlUlT0A%2Bx%2BYdC7%2FKQH1gYV2eLtjcHqhKMvW2DmxC0cL6uXrBhEacfBTrtI%2FbYi4qFGEVNc22wV5Fwr8PyV2vX6r3D1HdvNn%2FjdpCvXHB6DYlup8nBgaU7hZYQvH6kq42mbttYvnLCtMlwp8PI1j3ozAf%2BEgrpE5DsfSVL9CbQHFbGFe7vonMxwNTDT1qjUBjqZATT4YStEvEaFNFFFlDSj7IWzx3iy81XDrlQexr5K0YN9uTU4VJ8AbJsFvVpOX7Mq8jbo0imEG3vU9lir9Q097jQNWQOl2k%2BpPncmwyRFqAucoVbPl6JuLHStwhGfXZ%2FOLJVa69UOhopEV13wOw10wJ2%2FtLZ57ZSAS7t0yvrrk9pG%2F6f%2BIRcaXaM30ujDOrj3f1MmOaijRcWIFw%3D%3D&Expires=1787443494)
+
+A migration anterior de tags mostra por que a nova estrutura é necessária: ela grava diretamente textos de tags no campo `tags_saude` dos alunos, inclusive agrupando “Hipertensão/Cardiopatia (inclui Arritmia)”. A nova fase deve preservar essas tags como legado visual, mas tratar informações clínicas detalhadas em tabelas separadas e com validação. [ppl-ai-file-upload.s3.amazonaws](https://ppl-ai-file-upload.s3.amazonaws.com/web/direct-files/attachments/27643775/abd7ef96-6372-4ad1-ad3c-3304e08e1153/005_tags_clinicas_patologias_pdf.sql?AWSAccessKeyId=ASIA2F3EMEYETFEKSBIG&Signature=xXt4HsZrcNxuYFG3%2FcFJFyiKVUo%3D&x-amz-security-token=IQoJb3JpZ2luX2VjEAAaCXVzLWVhc3QtMSJGMEQCIHdX7YpDUOCg6DrCjkug4%2FYM7naG1sXDZ6Yf33uz5DYjAiACxezQUtBsoc1Kbba2ojgF4dDjeBISzsbHiDBnPYquOyr8BAjI%2F%2F%2F%2F%2F%2F%2F%2F%2F%2F8BEAEaDDY5OTc1MzMwOTcwNSIMIHOctu6%2FZP2hKtNUKtAEntrpR7%2FR7BEq3SoDtS%2F3CdC%2FrROH1MckW9xcxH%2BsODgWJEKXlLlzBlqvErhO92EO2yMj%2FDaEpW7SKWKhyR%2Fn9ovglM5Yee3sKd3KgOw4JezXPoR6EQ24PIQeeRH14i95Ix4bWZjrCt67jrRAGHzzIKX24HlgKyPLgdYqovA8jFVGocCHBpTpVfnrD1x3%2BgLux0Lhvy42KpfTzxHghmaXX1wBSDl7I%2BqGBLIEC0qXPuQVTqtx0euyT6oLBZSN9g9sDSv%2FoOSeqW2FkedKq1M35q5Zu84hcvQ6jkIPtfrik2y%2BnZTinCJBfKo1X%2B4TC7OvWJfDzuXMv0IpIpJPLYrbBdbYlPFZHoNky9ekNtz1Pd90xP9REk0WgmSq1sbr4Z2G47n7Uv%2BwHjnMpky4EEuIr114nWePboWFuglUYAxrXJs42xY3keEx7pKCLxmBKKOCrxz0wCbWUZYV5mYJuGSuH4FdiCBAdMYDzXc4eton3wnbgDSIwdLXbz3uHeXk0tC%2BPkWIvzkdUNqRoxErG12yf2rwae5b%2FeMK%2Bm00evOrGNtDj254750du3ATqTJC0zsD%2Ffu9C9vUwAK8kqcLuaW%2B%2FJjn86iRzFrlUlT0A%2Bx%2BYdC7%2FKQH1gYV2eLtjcHqhKMvW2DmxC0cL6uXrBhEacfBTrtI%2FbYi4qFGEVNc22wV5Fwr8PyV2vX6r3D1HdvNn%2FjdpCvXHB6DYlup8nBgaU7hZYQvH6kq42mbttYvnLCtMlwp8PI1j3ozAf%2BEgrpE5DsfSVL9CbQHFbGFe7vonMxwNTDT1qjUBjqZATT4YStEvEaFNFFFlDSj7IWzx3iy81XDrlQexr5K0YN9uTU4VJ8AbJsFvVpOX7Mq8jbo0imEG3vU9lir9Q097jQNWQOl2k%2BpPncmwyRFqAucoVbPl6JuLHStwhGfXZ%2FOLJVa69UOhopEV13wOw10wJ2%2FtLZ57ZSAS7t0yvrrk9pG%2F6f%2BIRcaXaM30ujDOrj3f1MmOaijRcWIFw%3D%3D&Expires=1787443494)
+
+## O que pedir ao Replit agora
+
+Copie e envie este prompt ao Agent:
+
+```text
+PARE. NÃO EXECUTE a migration 006 nem o seed no Supabase ainda.
+
+Faça uma revisão corretiva da primeira entrega de Catálogos Clínicos para o
+projeto IMBRA — Esporte e Saúde 60+.
+
+A migration atual é uma boa base, mas não está aprovada para execução porque
+faltam componentes essenciais e existe risco de sintaxe/RLS.
+
+CORREÇÕES OBRIGATÓRIAS
+
+1. VALIDAR SINTAXE
+
+Revise integralmente migrations/006_catalogos_clinicos.sql e confirme que
+todos os CREATE TABLE, CHECK, parênteses, vírgulas, triggers e transações
+terminam corretamente.
+
+Não assumir que o arquivo está válido apenas porque foi gerado. Execute uma
+validação SQL segura, sem aplicar no banco de produção, ou revise linha a linha.
+
+2. ADICIONAR VÍNCULO CONDIÇÃO → RESTRIÇÃO
+
+Na tabela aluno_restricoes_fisicas, adicionar:
+
+condicao_aluno_id UUID NULL
+REFERENCES aluno_condicoes_clinicas(id)
+ON DELETE RESTRICT
+
+Criar índice para condicao_aluno_id.
+
+Esse vínculo é opcional, mas altamente recomendado, pois cada restrição precisa
+poder indicar qual condição do aluno a motivou.
+
+3. CRIAR TABELA DE ADAPTAÇÕES INDIVIDUAIS
+
+Adicionar a tabela aluno_adaptacoes_recomendadas:
+
+- id UUID PK;
+- aluno_id UUID NOT NULL REFERENCES alunos(id) ON DELETE RESTRICT;
+- restricao_aluno_id UUID NULL
+  REFERENCES aluno_restricoes_fisicas(id) ON DELETE RESTRICT;
+- adaptacao_id UUID NOT NULL
+  REFERENCES catalogo_adaptacoes(id) ON DELETE RESTRICT;
+- status TEXT NOT NULL DEFAULT 'PENDENTE';
+- observacao_operacional TEXT;
+- data_inicio DATE;
+- data_validade DATE;
+- revisado_por TEXT;
+- revisado_em TIMESTAMPTZ;
+- ativo BOOLEAN NOT NULL DEFAULT TRUE;
+- criado_por TEXT;
+- criado_em TIMESTAMPTZ;
+- atualizado_em TIMESTAMPTZ;
+
+Criar constraints de status, índices por aluno_id e restricao_aluno_id, prevenção
+de duplicidade de vínculo ativo e trigger de atualizado_em.
+
+Adicionar também a entidade ALUNO_ADAPTACAO ao historico_revisoes_clinicas.
+
+4. COMPLETAR CATÁLOGOS
+
+Adicionar os campos abaixo sem remover os já criados.
+
+catalogo_condicoes_clinicas:
+- descricao_operacional TEXT;
+- exige_revisao_periodica BOOLEAN NOT NULL DEFAULT FALSE;
+- intervalo_revisao_dias INTEGER;
+- revisado_por TEXT;
+- revisado_em TIMESTAMPTZ;
+
+catalogo_restricoes_movimento:
+- categoria_movimento TEXT;
+- descricao_simples_para_aluno TEXT;
+- exige_validacao_clinica BOOLEAN NOT NULL DEFAULT TRUE;
+- nivel_padrao_sugerido TEXT;
+- revisado_por TEXT;
+- revisado_em TIMESTAMPTZ;
+
+catalogo_adaptacoes:
+- categoria_adaptacao TEXT;
+- descricao_operacional TEXT;
+- descricao_simples_para_aluno TEXT;
+- revisado_por TEXT;
+- revisado_em TIMESTAMPTZ;
+
+5. MELHORAR DADOS INDIVIDUAIS
+
+Em aluno_condicoes_clinicas, garantir:
+- data_informacao DATE;
+- data_revisao_prevista DATE;
+- profissional_responsavel_id ou responsavel_validacao TEXT;
+- observacao_contextual TEXT;
+
+Em aluno_restricoes_fisicas, adicionar:
+- data_inicio DATE;
+- data_validade DATE;
+- responsavel_validacao TEXT;
+- texto_original_legado TEXT;
+- observacao_contextual TEXT;
+
+Não remover observacao_original sem antes migrar seu conteúdo para
+texto_original_legado ou documentar a compatibilidade.
+
+6. PADRONIZAR STATUS E FONTES
+
+Usar, preferencialmente:
+
+status_revisao:
+- PENDENTE;
+- SUGERIDO_POR_MIGRACAO;
+- VALIDADO;
+- REJEITADO;
+- EXPIRADO;
+- REVOGADO.
+
+fonte_informacao:
+- AUTORRELATO;
+- ATESTADO_MEDICO;
+- LAUDO;
+- FAMILIAR_RESPONSAVEL;
+- OBSERVACAO_PROFISSIONAL;
+- REGISTRO_LEGADO;
+- OUTRA.
+
+A implementação deve permitir que dados de autorrelato existam como alerta,
+mas não sejam usados automaticamente para bloquear presença ou gerar termo
+clínico individualizado.
+
+7. RLS: NÃO DEIXAR DESATIVADO
+
+Remover as linhas que deixam RLS permanentemente desabilitado.
+
+Em vez disso:
+- habilitar RLS nas tabelas clínicas;
+- apresentar políticas SQL recomendadas;
+- se o modelo atual de usuários ainda não permitir políticas completas, não
+  inventar permissões: documentar o bloqueio e preparar a migration sem
+  expor acesso público direto às tabelas.
+
+Dados de saúde são sensíveis. Não deixar tabelas clínicas em produção com
+RLS desativado.
+
+8. EXPANDIR SEED
+
+O seed deve continuar idempotente e sem tocar em alunos, mas precisa conter
+o pré-povoamento aprovado:
+
+- condições clínicas;
+- restrições de movimento;
+- adaptações recomendadas;
+- grupo Cardiopatia dentro da categoria CARDIOVASCULAR;
+- Cardiopatia não especificada como condição de triagem, distinta de:
+  doença isquêmica/coronária, histórico de infarto, insuficiência cardíaca,
+  arritmia, cardiomiopatia, valvopatia, marca-passo/desfibrilador e outra
+  condição cardíaca especificada.
+
+Também expandir o seed além de 17 condições / 6 restrições / 4 adaptações,
+mantendo o catálogo inicial operacional aprovado.
+
+9. NÃO EXECUTAR NO SUPABASE
+
+Após corrigir os arquivos, NÃO rode:
+- a migration;
+- o seed;
+- qualquer UPDATE em alunos;
+- qualquer alteração em tags_saude;
+- qualquer classificação automatizada.
+
+ENTREGUE PARA VALIDAÇÃO:
+
+A. Diff/resumo preciso das mudanças.
+B. Migration SQL completa revisada.
+C. Seed completo revisado.
+D. Estratégia de RLS.
+E. Comandos de dry-run.
+F. Checklist pré-execução.
+G. Lista de queries de conferência pós-execução.
+
+Só após minha autorização explícita será permitido executar no Supabase.
+```
+
+## Sequência certa depois da correção
+
+1. Replit corrige os arquivos.  
+2. Você me manda os dois conteúdos atualizados: migration e seed.  
+3. Eu faço uma revisão final de estrutura, segurança, RLS, duplicidade e compatibilidade com seu sistema atual.  
+4. Fazemos backup do Supabase e uma tag no Git.  
+5. Executamos **somente a migration**.  
+6. Conferimos se as tabelas, constraints e índices foram criados.  
+7. Executamos o seed em `--dry-run`.  
+8. Conferimos a lista de registros que seriam inseridos.  
+9. Executamos o seed real.  
+10. Só depois criamos a área administrativa e a tela de revisão humana.
+
+Portanto, a resposta objetiva é: **não clique para executar ainda; devolva ao Replit o prompt corretivo acima e peça os arquivos revisados para validação final.**
