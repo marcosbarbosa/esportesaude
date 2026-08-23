@@ -10,11 +10,13 @@ After EVERY workflow restart or code change that triggers a rerun, always execut
 2. `applyCanvasActions` — update shape `artifact:v3:default-imbra-chamada-main-py` with a cache-busted URL
 
 ## Why
-The Replit Canvas iframe uses a different WebSocket proxy path than the standard Preview pane. After a server restart, this proxy layer sometimes gets permanently stuck with WebSocket onerror floods even though `curl localhost:8000/_stcore/health` returns "ok". Force-reloading the iframe shape via `applyCanvasActions` breaks the stuck state.
+The Replit Canvas iframe uses a different WebSocket proxy path than the standard Preview pane. After a server restart, this proxy layer sometimes gets permanently stuck with WebSocket onerror floods even though `curl localhost:5000/_stcore/health` returns "ok". Force-reloading the iframe shape via `applyCanvasActions` breaks the stuck state.
+
+Never append `:5000` to the public `replit.dev` URL. Port 5000 is internal; the public preview is served at the domain root after Replit forwards it to external port 80. A public URL ending in `:5000` returns the Replit “couldn't reach this app” page even while Streamlit is healthy.
 
 ## URL format for reload
 Direct Streamlit URL (bypasses workspace_iframe.html wrapper, more stable):
-`https://${REPLIT_DEV_DOMAIN}/?_r=${Date.now()}`
+`https://${REPLIT_DEV_DOMAIN}/?_r=<unique-cache-token>`
 
 Current domain: `8859dbcc-e36e-4d16-8217-c288d14b7b73-00-3ce8mxj6fzww0.riker.replit.dev`
 Shape ID: `artifact:v3:default-imbra-chamada-main-py`
@@ -28,7 +30,7 @@ await applyCanvasActions({
     shapeId: "artifact:v3:default-imbra-chamada-main-py",
     updates: {
       shapeType: "iframe",
-      url: `https://8859dbcc-e36e-4d16-8217-c288d14b7b73-00-3ce8mxj6fzww0.riker.replit.dev/?_r=${Date.now()}`,
+      url: "https://8859dbcc-e36e-4d16-8217-c288d14b7b73-00-3ce8mxj6fzww0.riker.replit.dev/?_r=<unique-cache-token>",
       state: "live"
     }
   }]
