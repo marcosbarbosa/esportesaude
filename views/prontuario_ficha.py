@@ -2057,30 +2057,30 @@ def renderizar_ficha():
         t1, t2, t3, t4, t5, t6, t7 = st.tabs(
             [
                 "👤 Perfil e Contato",
-                "📝 Nova Medição",
-                "📊 Histórico Clínico",
-                "📂 Documentação Legal",
                 "🏘️ Perfil Social",
-                "🩻 Mapa de Dores",
+                "📂 Documentação Legal",
+                "🩻 Mapa de Sintomas e Bem-Estar",
                 "🩺 Pressão Arterial",
+                "📊 Histórico Clínico",
+                "📝 Nova Medição",
             ]
         )
         with t1:
             render_aba_perfil(aluno)
         with t2:
-            with st.container(border=True):
-                render_formulario_medicao(aluno, edit=None)
-        with t3:
-            render_aba_historico(aluno)
-        with t4:
-            render_aba_documentos(aluno)
-        with t5:
             render_aba_social(aluno)
-        with t6:
+        with t3:
+            render_aba_documentos(aluno)
+        with t4:
             render_aba_mapa_dores(
                 aluno, email_usuario=st.session_state.get("email", "")
             )
-        with t7:
+        with t5:
             renderizar_aba_pressao_arterial(
                 aluno, email_usuario=st.session_state.get("email", "")
             )
+        with t6:
+            render_aba_historico(aluno)
+        with t7:
+            with st.container(border=True):
+                render_formulario_medicao(aluno, edit=None)
