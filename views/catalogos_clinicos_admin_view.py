@@ -15,6 +15,7 @@ from utils.catalogos_clinicos_admin import (
     alterar_ativo_item_catalogo,
     atualizar_item_catalogo,
     criar_item_catalogo,
+    diagnosticar_backend_catalogos_clinicos,
     listar_itens_catalogo,
     reconciliar_auditorias_pendentes,
     validar_acesso_catalogos_clinicos,
@@ -41,6 +42,37 @@ _CONFIG_TIPOS = {
         "coluna_categoria": "categoria_adaptacao",
     },
 }
+
+_ROTULOS_DIAGNOSTICO = (
+    ("SUPABASE_URL configurada", "supabase_url_configurada"),
+    ("SERVICE_ROLE configurada", "service_role_configurada"),
+    ("Sessão autenticada", "sessao_autenticada"),
+    ("Perfil SuperAdmin", "perfil_superadmin"),
+    ("E-mail ADMIN_MASTER", "email_admin_master"),
+    ("Perfil autorizado", "perfil_autorizado"),
+    (
+        "Cliente administrativo",
+        "cliente_administrativo_inicializado",
+    ),
+)
+
+
+def _renderizar_diagnostico_backend(diagnostico: dict[str, bool]) -> None:
+    cliente_inicializado = diagnostico["cliente_administrativo_inicializado"]
+    with st.expander(
+        "Diagnóstico seguro do backend",
+        expanded=not cliente_inicializado,
+    ):
+        st.caption(
+            "Somente a presença das configurações e o estado da autorização "
+            "são exibidos. Nenhum valor ou detalhe técnico é apresentado."
+        )
+        for rotulo, chave in _ROTULOS_DIAGNOSTICO:
+            if chave == "cliente_administrativo_inicializado":
+                estado = "inicializado" if diagnostico[chave] else "não inicializado"
+            else:
+                estado = "sim" if diagnostico[chave] else "não"
+            st.write(f"{rotulo}: **{estado}**")
 
 
 def _formatar_revisao(item: dict[str, Any]) -> str:
@@ -310,6 +342,14 @@ def tela_catalogos_clinicos_admin() -> None:
         "Os itens podem ser ativados ou inativados, mas não são excluídos "
         "permanentemente. O código de cada item é imutável após o cadastro."
     )
+    diagnostico = diagnosticar_backend_catalogos_clinicos()
+    _renderizar_diagnostico_backend(diagnostico)
+    if not diagnostico["cliente_administrativo_inicializado"]:
+        st.warning(
+            "O serviço administrativo de catálogos não está disponível no momento."
+        )
+        return
+
     try:
         reconciliacao = reconciliar_auditorias_pendentes()
     except CatalogoClinicoErro as exc:

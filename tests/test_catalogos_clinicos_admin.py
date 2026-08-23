@@ -171,7 +171,12 @@ def test_bloqueia_usuario_sem_perfil_antes_de_criar_cliente(monkeypatch):
         admin._cliente_administrativo()
 
 
-def test_secret_ausente_retorna_erro_sanitizado(sessao_autorizada):
+def test_secret_ausente_retorna_erro_sanitizado(
+    sessao_autorizada, monkeypatch
+):
+    monkeypatch.delenv("SUPABASE_URL", raising=False)
+    monkeypatch.delenv("SUPABASE_SERVICE_ROLE_KEY", raising=False)
+
     with pytest.raises(admin.CatalogoClinicoErro) as erro:
         admin._cliente_administrativo()
 
@@ -179,6 +184,95 @@ def test_secret_ausente_retorna_erro_sanitizado(sessao_autorizada):
     assert "SUPABASE" not in mensagem
     assert "chave" not in mensagem.lower()
     assert "URL" not in mensagem
+
+
+def test_usa_variaveis_de_ambiente_como_fallback_seguro(
+    sessao_autorizada, monkeypatch
+):
+    monkeypatch.setenv("SUPABASE_URL", "https://supabase-fallback.invalid")
+    monkeypatch.setenv("SUPABASE_SERVICE_ROLE_KEY", "service-role-fallback")
+    cliente = object()
+    argumentos = []
+    monkeypatch.setattr(
+        admin,
+        "_criar_cliente_administrativo",
+        lambda url, key: argumentos.append((url, key)) or cliente,
+    )
+
+    assert admin._cliente_administrativo() is cliente
+    assert argumentos == [
+        ("https://supabase-fallback.invalid", "service-role-fallback")
+    ]
+
+
+def test_st_secrets_tem_precedencia_sobre_variaveis_de_ambiente(
+    sessao_autorizada, monkeypatch
+):
+    sessao_autorizada.secrets = {
+        "SUPABASE_URL": "https://supabase-secrets.invalid",
+        "SUPABASE_SERVICE_ROLE_KEY": "service-role-secrets",
+    }
+    monkeypatch.setenv("SUPABASE_URL", "https://supabase-ambiente.invalid")
+    monkeypatch.setenv("SUPABASE_SERVICE_ROLE_KEY", "service-role-ambiente")
+    argumentos = []
+    monkeypatch.setattr(
+        admin,
+        "_criar_cliente_administrativo",
+        lambda url, key: argumentos.append((url, key)) or object(),
+    )
+
+    admin._cliente_administrativo()
+
+    assert argumentos == [
+        ("https://supabase-secrets.invalid", "service-role-secrets")
+    ]
+
+
+def test_falha_ao_inicializar_cliente_retorna_erro_sanitizado(
+    sessao_autorizada, monkeypatch
+):
+    sessao_autorizada.secrets = {
+        "SUPABASE_URL": "https://supabase-secrets.invalid",
+        "SUPABASE_SERVICE_ROLE_KEY": "service-role-secrets",
+    }
+
+    def falhar_cliente(*_args):
+        raise RuntimeError("token-interno-que-nao-pode-vazar")
+
+    monkeypatch.setattr(admin, "_criar_cliente_administrativo", falhar_cliente)
+
+    with pytest.raises(admin.CatalogoClinicoErro) as erro:
+        admin._cliente_administrativo()
+
+    assert "token-interno" not in str(erro.value)
+    assert "serviço administrativo" in str(erro.value)
+
+
+def test_diagnostico_informa_apenas_estados_seguros(
+    sessao_autorizada, monkeypatch
+):
+    sessao_autorizada.secrets = {
+        "SUPABASE_URL": "https://supabase-secrets.invalid",
+        "SUPABASE_SERVICE_ROLE_KEY": "service-role-secrets",
+    }
+    monkeypatch.setattr(
+        admin,
+        "_criar_cliente_administrativo",
+        lambda *_args: object(),
+    )
+
+    diagnostico = admin.diagnosticar_backend_catalogos_clinicos()
+
+    assert diagnostico == {
+        "supabase_url_configurada": True,
+        "service_role_configurada": True,
+        "sessao_autenticada": True,
+        "perfil_superadmin": True,
+        "email_admin_master": True,
+        "perfil_autorizado": True,
+        "cliente_administrativo_inicializado": True,
+    }
+    assert all(isinstance(valor, bool) for valor in diagnostico.values())
 
 
 def test_normaliza_codigo_e_valida_intervalo():
@@ -588,6 +682,15 @@ view.reconciliar_auditorias_pendentes = lambda: {
     "reconciliadas": 0,
     "pendentes": 0,
 }
+view.diagnosticar_backend_catalogos_clinicos = lambda: {
+    "supabase_url_configurada": True,
+    "service_role_configurada": True,
+    "sessao_autenticada": True,
+    "perfil_superadmin": True,
+    "email_admin_master": True,
+    "perfil_autorizado": True,
+    "cliente_administrativo_inicializado": True,
+}
 view.listar_itens_catalogo = lambda tipo, busca="", status="Todos": []
 view.tela_catalogos_clinicos_admin()
 """
@@ -602,6 +705,7 @@ view.tela_catalogos_clinicos_admin()
         "Restrições de movimento",
         "Adaptações recomendadas",
     ]
+    assert app.expander[0].label == "Diagnóstico seguro do backend"
     assert [botao.label for botao in app.button] == [
         "Cadastrar condição clínica",
         "Cadastrar restrição de movimento",

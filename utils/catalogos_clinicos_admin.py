@@ -8,6 +8,7 @@ cliente padrão do aplicativo.
 from __future__ import annotations
 
 from datetime import UTC, datetime
+import os
 import re
 import unicodedata
 from typing import Any
@@ -89,6 +90,25 @@ def validar_acesso_catalogos_clinicos() -> str:
     return operador
 
 
+def _valor_configuracao_backend(nome: str) -> str:
+    """Lê uma configuração de servidor sem expor seu valor."""
+    try:
+        valor = st.secrets.get(nome)
+    except Exception:
+        valor = None
+    if valor:
+        return str(valor).strip()
+    return os.environ.get(nome, "").strip()
+
+
+def _credenciais_administrativas() -> tuple[str, str]:
+    """Obtém as credenciais após a autorização feita pelo chamador."""
+    return (
+        _valor_configuracao_backend("SUPABASE_URL"),
+        _valor_configuracao_backend("SUPABASE_SERVICE_ROLE_KEY"),
+    )
+
+
 @st.cache_resource(show_spinner=False)
 def _criar_cliente_administrativo(url: str, service_role_key: str) -> Client:
     """Cria o cliente privilegiado exclusivamente no processo Streamlit."""
@@ -99,8 +119,7 @@ def _cliente_administrativo() -> Client:
     """Obtém o cliente privilegiado somente após validar a sessão no backend."""
     validar_acesso_catalogos_clinicos()
     try:
-        url = st.secrets["SUPABASE_URL"]
-        service_role_key = st.secrets["SUPABASE_SERVICE_ROLE_KEY"]
+        url, service_role_key = _credenciais_administrativas()
     except Exception as exc:
         raise CatalogoClinicoErro(
             "O serviço administrativo de catálogos não está disponível no momento."
@@ -110,7 +129,49 @@ def _cliente_administrativo() -> Client:
         raise CatalogoClinicoErro(
             "O serviço administrativo de catálogos não está disponível no momento."
         )
-    return _criar_cliente_administrativo(url, service_role_key)
+    try:
+        return _criar_cliente_administrativo(url, service_role_key)
+    except Exception as exc:
+        raise CatalogoClinicoErro(
+            "O serviço administrativo de catálogos não está disponível no momento."
+        ) from exc
+
+
+def diagnosticar_backend_catalogos_clinicos() -> dict[str, bool]:
+    """Retorna somente estados seguros, sem valores ou detalhes de exceção."""
+    sessao_autenticada = st.session_state.get("usuario_logado") is True
+    perfil_superadmin = st.session_state.get("perfil") == "SuperAdmin"
+    email_admin_master = _email_da_sessao() == ADMIN_MASTER.lower()
+    perfil_autorizado = (
+        sessao_autenticada and perfil_superadmin and email_admin_master
+    )
+    diagnostico = {
+        "supabase_url_configurada": False,
+        "service_role_configurada": False,
+        "sessao_autenticada": sessao_autenticada,
+        "perfil_superadmin": perfil_superadmin,
+        "email_admin_master": email_admin_master,
+        "perfil_autorizado": perfil_autorizado,
+        "cliente_administrativo_inicializado": False,
+    }
+    if not perfil_autorizado:
+        return diagnostico
+
+    try:
+        url, service_role_key = _credenciais_administrativas()
+    except Exception:
+        return diagnostico
+    diagnostico["supabase_url_configurada"] = bool(url)
+    diagnostico["service_role_configurada"] = bool(service_role_key)
+    if not url or not service_role_key:
+        return diagnostico
+
+    try:
+        _cliente_administrativo()
+    except Exception:
+        return diagnostico
+    diagnostico["cliente_administrativo_inicializado"] = True
+    return diagnostico
 
 
 def _config_catalogo(tipo: str) -> dict[str, Any]:
