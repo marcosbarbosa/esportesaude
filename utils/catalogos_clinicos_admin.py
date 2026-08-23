@@ -53,6 +53,12 @@ _CATALOGOS: dict[str, dict[str, Any]] = {
 _CATALOGOS_POR_ENTIDADE = {
     config["entidade"]: config for config in _CATALOGOS.values()
 }
+_TABELAS_DIAGNOSTICO = (
+    "catalogo_condicoes_clinicas",
+    "catalogo_restricoes_movimento",
+    "catalogo_adaptacoes",
+    "historico_revisoes_clinicas",
+)
 
 
 class CatalogoClinicoErro(Exception):
@@ -90,15 +96,23 @@ def validar_acesso_catalogos_clinicos() -> str:
     return operador
 
 
-def _valor_configuracao_backend(nome: str) -> str:
-    """Lê uma configuração de servidor sem expor seu valor."""
+def _configuracao_backend(nome: str) -> tuple[str, str]:
+    """Lê uma configuração e informa apenas sua fonte segura."""
     try:
         valor = st.secrets.get(nome)
     except Exception:
         valor = None
     if valor:
-        return str(valor).strip()
-    return os.environ.get(nome, "").strip()
+        return str(valor).strip(), "st.secrets"
+    valor_ambiente = os.environ.get(nome, "").strip()
+    if valor_ambiente:
+        return valor_ambiente, "os.environ"
+    return "", "não encontrada"
+
+
+def _valor_configuracao_backend(nome: str) -> str:
+    """Lê uma configuração de servidor sem expor seu valor."""
+    return _configuracao_backend(nome)[0]
 
 
 def _credenciais_administrativas() -> tuple[str, str]:
@@ -137,7 +151,7 @@ def _cliente_administrativo() -> Client:
         ) from exc
 
 
-def diagnosticar_backend_catalogos_clinicos() -> dict[str, bool]:
+def diagnosticar_backend_catalogos_clinicos() -> dict[str, Any]:
     """Retorna somente estados seguros, sem valores ou detalhes de exceção."""
     sessao_autenticada = st.session_state.get("usuario_logado") is True
     perfil_superadmin = st.session_state.get("perfil") == "SuperAdmin"
@@ -152,25 +166,47 @@ def diagnosticar_backend_catalogos_clinicos() -> dict[str, bool]:
         "perfil_superadmin": perfil_superadmin,
         "email_admin_master": email_admin_master,
         "perfil_autorizado": perfil_autorizado,
+        "fonte_supabase_url": "não verificada",
+        "fonte_service_role": "não verificada",
+        "import_supabase_disponivel": True,
+        "etapa_cliente_administrativo": "não verificado",
         "cliente_administrativo_inicializado": False,
+        "tabelas": {
+            tabela: False for tabela in _TABELAS_DIAGNOSTICO
+        },
     }
     if not perfil_autorizado:
         return diagnostico
 
     try:
-        url, service_role_key = _credenciais_administrativas()
+        url, fonte_url = _configuracao_backend("SUPABASE_URL")
+        service_role_key, fonte_service_role = _configuracao_backend(
+            "SUPABASE_SERVICE_ROLE_KEY"
+        )
     except Exception:
+        diagnostico["etapa_cliente_administrativo"] = "falha ao ler configuração"
         return diagnostico
+    diagnostico["fonte_supabase_url"] = fonte_url
+    diagnostico["fonte_service_role"] = fonte_service_role
     diagnostico["supabase_url_configurada"] = bool(url)
     diagnostico["service_role_configurada"] = bool(service_role_key)
     if not url or not service_role_key:
+        diagnostico["etapa_cliente_administrativo"] = "credenciais ausentes"
         return diagnostico
 
     try:
-        _cliente_administrativo()
+        cliente = _cliente_administrativo()
     except Exception:
+        diagnostico["etapa_cliente_administrativo"] = "falha na criação"
         return diagnostico
+    diagnostico["etapa_cliente_administrativo"] = "inicializado"
     diagnostico["cliente_administrativo_inicializado"] = True
+    for tabela in _TABELAS_DIAGNOSTICO:
+        try:
+            cliente.table(tabela).select("id").limit(1).execute()
+        except Exception:
+            continue
+        diagnostico["tabelas"][tabela] = True
     return diagnostico
 
 

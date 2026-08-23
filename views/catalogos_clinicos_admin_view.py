@@ -43,36 +43,57 @@ _CONFIG_TIPOS = {
     },
 }
 
-_ROTULOS_DIAGNOSTICO = (
+_ROTULOS_DIAGNOSTICO_BOOLEANO = (
     ("SUPABASE_URL configurada", "supabase_url_configurada"),
     ("SERVICE_ROLE configurada", "service_role_configurada"),
     ("Sessão autenticada", "sessao_autenticada"),
     ("Perfil SuperAdmin", "perfil_superadmin"),
     ("E-mail ADMIN_MASTER", "email_admin_master"),
     ("Perfil autorizado", "perfil_autorizado"),
-    (
-        "Cliente administrativo",
-        "cliente_administrativo_inicializado",
-    ),
 )
+_ROTULOS_TABELAS_DIAGNOSTICO = {
+    "catalogo_condicoes_clinicas": "Condições clínicas",
+    "catalogo_restricoes_movimento": "Restrições de movimento",
+    "catalogo_adaptacoes": "Adaptações recomendadas",
+    "historico_revisoes_clinicas": "Histórico de revisões clínicas",
+}
 
 
-def _renderizar_diagnostico_backend(diagnostico: dict[str, bool]) -> None:
+def _renderizar_diagnostico_backend(diagnostico: dict[str, Any]) -> None:
     cliente_inicializado = diagnostico["cliente_administrativo_inicializado"]
+    tabelas_acessiveis = all(diagnostico["tabelas"].values())
     with st.expander(
         "Diagnóstico seguro do backend",
-        expanded=not cliente_inicializado,
+        expanded=not cliente_inicializado or not tabelas_acessiveis,
     ):
         st.caption(
             "Somente a presença das configurações e o estado da autorização "
             "são exibidos. Nenhum valor ou detalhe técnico é apresentado."
         )
-        for rotulo, chave in _ROTULOS_DIAGNOSTICO:
-            if chave == "cliente_administrativo_inicializado":
-                estado = "inicializado" if diagnostico[chave] else "não inicializado"
-            else:
-                estado = "sim" if diagnostico[chave] else "não"
+        for rotulo, chave in _ROTULOS_DIAGNOSTICO_BOOLEANO:
+            estado = "sim" if diagnostico[chave] else "não"
             st.write(f"{rotulo}: **{estado}**")
+        st.write(
+            f"Fonte SUPABASE_URL: **{diagnostico['fonte_supabase_url']}**"
+        )
+        st.write(
+            f"Fonte SERVICE_ROLE: **{diagnostico['fonte_service_role']}**"
+        )
+        importacao = (
+            "disponível"
+            if diagnostico["import_supabase_disponivel"]
+            else "indisponível"
+        )
+        st.write(f"Importação Supabase: **{importacao}**")
+        st.write(
+            "Cliente administrativo: "
+            f"**{diagnostico['etapa_cliente_administrativo']}**"
+        )
+        st.write("Acesso somente de leitura às tabelas:")
+        for tabela, acessivel in diagnostico["tabelas"].items():
+            rotulo = _ROTULOS_TABELAS_DIAGNOSTICO[tabela]
+            estado = "acessível" if acessivel else "não acessível"
+            st.write(f"- {rotulo}: **{estado}**")
 
 
 def _formatar_revisao(item: dict[str, Any]) -> str:
@@ -344,11 +365,6 @@ def tela_catalogos_clinicos_admin() -> None:
     )
     diagnostico = diagnosticar_backend_catalogos_clinicos()
     _renderizar_diagnostico_backend(diagnostico)
-    if not diagnostico["cliente_administrativo_inicializado"]:
-        st.warning(
-            "O serviço administrativo de catálogos não está disponível no momento."
-        )
-        return
 
     try:
         reconciliacao = reconciliar_auditorias_pendentes()

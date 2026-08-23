@@ -258,21 +258,30 @@ def test_diagnostico_informa_apenas_estados_seguros(
     monkeypatch.setattr(
         admin,
         "_criar_cliente_administrativo",
-        lambda *_args: object(),
+        lambda *_args: _ClienteFalso(),
     )
 
     diagnostico = admin.diagnosticar_backend_catalogos_clinicos()
 
-    assert diagnostico == {
-        "supabase_url_configurada": True,
-        "service_role_configurada": True,
-        "sessao_autenticada": True,
-        "perfil_superadmin": True,
-        "email_admin_master": True,
-        "perfil_autorizado": True,
-        "cliente_administrativo_inicializado": True,
+    assert diagnostico["supabase_url_configurada"] is True
+    assert diagnostico["service_role_configurada"] is True
+    assert diagnostico["sessao_autenticada"] is True
+    assert diagnostico["perfil_superadmin"] is True
+    assert diagnostico["email_admin_master"] is True
+    assert diagnostico["perfil_autorizado"] is True
+    assert diagnostico["fonte_supabase_url"] == "st.secrets"
+    assert diagnostico["fonte_service_role"] == "st.secrets"
+    assert diagnostico["import_supabase_disponivel"] is True
+    assert diagnostico["etapa_cliente_administrativo"] == "inicializado"
+    assert diagnostico["cliente_administrativo_inicializado"] is True
+    assert diagnostico["tabelas"] == {
+        "catalogo_condicoes_clinicas": True,
+        "catalogo_restricoes_movimento": True,
+        "catalogo_adaptacoes": True,
+        "historico_revisoes_clinicas": True,
     }
-    assert all(isinstance(valor, bool) for valor in diagnostico.values())
+    assert "service-role-secrets" not in str(diagnostico)
+    assert "supabase-secrets.invalid" not in str(diagnostico)
 
 
 def test_normaliza_codigo_e_valida_intervalo():
@@ -689,7 +698,17 @@ view.diagnosticar_backend_catalogos_clinicos = lambda: {
     "perfil_superadmin": True,
     "email_admin_master": True,
     "perfil_autorizado": True,
+    "fonte_supabase_url": "os.environ",
+    "fonte_service_role": "os.environ",
+    "import_supabase_disponivel": True,
+    "etapa_cliente_administrativo": "inicializado",
     "cliente_administrativo_inicializado": True,
+    "tabelas": {
+        "catalogo_condicoes_clinicas": True,
+        "catalogo_restricoes_movimento": True,
+        "catalogo_adaptacoes": True,
+        "historico_revisoes_clinicas": True,
+    },
 }
 view.listar_itens_catalogo = lambda tipo, busca="", status="Todos": []
 view.tela_catalogos_clinicos_admin()
