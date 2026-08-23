@@ -4135,6 +4135,7 @@ elif st.session_state.menu_atual in (
                 "👥 Usuários", "🔒 LGPD", "🏷️ Tags Saúde", "🤝 Voluntariado",
                 "🎊 Datas Comemorativas", "📡 Telemetria",
                 "🩺 Catálogos Clínicos e Segurança",
+                "🧑‍⚕️ Fila de Revisão Clínica",
             ])
             with _aba_cfg[0]:
                 from views.turmas_view import tela_gestao_turmas
@@ -4217,6 +4218,9 @@ elif st.session_state.menu_atual in (
             with _aba_cfg[14]:
                 from views.catalogos_clinicos_admin_view import tela_catalogos_clinicos_admin
                 tela_catalogos_clinicos_admin()
+            with _aba_cfg[15]:
+                from views.fila_revisao_clinica_view import tela_fila_revisao_clinica
+                tela_fila_revisao_clinica()
 
 # ── Rodapé Fixo ─────────────────────────────────────────────────────────────
 from utils.identidade import get_config as _gcfg_rodape
