@@ -881,10 +881,19 @@ def _inv_frequencia():
 
 
 def _inv_dores():
-    """Caches de anamnese de dores (histórico individual e agregado BI)."""
-    for fn in (buscar_historico_dores, bi_dores_studio):
+    """Invalida leituras derivadas do mapa de sintomas quando existirem em cache."""
+    for fn in (
+        buscar_historico_dores,
+        buscar_historico_dores_restrito,
+        buscar_ultima_anamnese_dores,
+        buscar_detalhe_anamnese_dores,
+        bi_dados_individuais,
+        bi_dores_studio,
+    ):
         try:
-            fn.clear()
+            limpar = getattr(fn, "clear", None)
+            if limpar:
+                limpar()
         except Exception:
             pass
 
@@ -3201,11 +3210,15 @@ def bi_distribuicao_risco():
 @st.cache_data(ttl=120, show_spinner=False)
 def bi_dores_studio():
     try:
-        r = supabase.from_("anamnese_dores").select("regiao").execute()
-        df = pd.DataFrame(r.data or [])
-        if df.empty or "regiao" not in df.columns:
+        registros = _consultar_regioes_mapa_para_bi()
+        regioes = [
+            regiao
+            for registro in registros
+            for regiao in normalizar_regioes_anamnese(registro)
+        ]
+        if not regioes:
             return pd.DataFrame()
-        contagem = df["regiao"].value_counts().head(10).reset_index()
+        contagem = pd.Series(regioes, dtype="object").value_counts().head(10).reset_index()
         contagem.columns = ["label", "count"]
         return contagem
     except Exception:
@@ -3283,7 +3296,6 @@ def bi_presencas_periodo(data_inicio: str, data_fim: str) -> pd.DataFrame:
         return pd.DataFrame()
 
 
-@st.cache_data(ttl=120, show_spinner=False)
 def bi_dados_individuais(aluno_id):
     """
     Retorna dict com DataFrames e listas para o relatório BI individual do aluno.
@@ -3310,9 +3322,18 @@ def bi_dados_individuais(aluno_id):
     except Exception:
         pass
     try:
-        r_do = (supabase.from_("anamnese_dores").select("*")
-                .eq("aluno_id", str(aluno_id)).execute())
-        resultado["dores"] = r_do.data or []
+        registros_dores = _consultar_anamnese_dores(
+            aluno_id,
+            ("data_avaliacao", "regioes", "intensidade"),
+        )
+        resultado["dores"] = [
+            {
+                "data_avaliacao": registro.get("data_avaliacao"),
+                "regioes": normalizar_regioes_anamnese(registro),
+                "intensidade": normalizar_intensidade_anamnese(registro.get("intensidade")),
+            }
+            for registro in registros_dores
+        ]
     except Exception:
         pass
     return resultado
@@ -3612,6 +3633,112 @@ def get_atestados_temporarios(aluno_id):
 # 🩻 ANAMNESE DE DORES (mapa corporal)
 # ==============================================================================
 
+def normalizar_regioes_anamnese(registro):
+    """
+    Normaliza somente em leitura os formatos `regioes` e o legado `regiao`.
+
+    A região corporal é um relato autorreferido. Esta função não faz qualquer
+    inferência clínica, diagnóstico ou associação com condições de saúde.
+    """
+    if not isinstance(registro, dict):
+        return []
+
+    def _como_lista(valor):
+        if valor is None:
+            return []
+        if isinstance(valor, str):
+            texto = valor.strip()
+            if not texto:
+                return []
+            try:
+                valor = json.loads(texto)
+            except (TypeError, ValueError, json.JSONDecodeError):
+                valor = texto
+        if isinstance(valor, (list, tuple, set)):
+            return [str(item).strip() for item in valor if str(item).strip()]
+        if isinstance(valor, dict):
+            return []
+        texto = str(valor).strip()
+        return [texto] if texto else []
+
+    regioes = _como_lista(registro.get("regioes"))
+    return regioes or _como_lista(registro.get("regiao"))
+
+
+def normalizar_intensidade_anamnese(valor):
+    """Converte a intensidade armazenada em formato legível pelo mapa."""
+    if isinstance(valor, str):
+        try:
+            valor = json.loads(valor)
+        except (TypeError, ValueError, json.JSONDecodeError):
+            valor = {}
+    if not isinstance(valor, dict):
+        return {}
+
+    intensidade = {}
+    for regiao, nivel in valor.items():
+        try:
+            nivel_int = int(nivel)
+        except (TypeError, ValueError):
+            continue
+        if nivel_int in (1, 2, 3):
+            intensidade[str(regiao)] = nivel_int
+    return intensidade
+
+
+def _consultar_anamnese_dores(aluno_id, campos, *, limite=None):
+    """
+    Consulta projeções mínimas e aceita o campo legado `regiao` apenas em leitura.
+    Nenhuma tentativa altera registros ou schema.
+    """
+    campos = list(campos)
+    projecoes = []
+    if "regioes" in campos:
+        campos_ambos = [campo for campo in campos if campo != "regioes"] + ["regioes", "regiao"]
+        campos_legado = ["regiao" if campo == "regioes" else campo for campo in campos]
+        projecoes.extend((campos_ambos, campos, campos_legado))
+    else:
+        projecoes.append(campos)
+
+    for projecao in projecoes:
+        try:
+            consulta = (
+                supabase.from_("anamnese_dores")
+                .select(", ".join(projecao))
+                .eq("aluno_id", str(aluno_id))
+                .order("data_avaliacao", desc=True)
+            )
+            if limite is not None:
+                consulta = consulta.limit(limite)
+            resposta = consulta.execute()
+            return resposta.data or []
+        except Exception:
+            continue
+    return []
+
+
+def _consultar_regioes_mapa_para_bi():
+    """Lê somente regiões para contagem agregada, com fallback legado em leitura."""
+    for projecao in ("regioes, regiao", "regioes", "regiao"):
+        try:
+            resposta = supabase.from_("anamnese_dores").select(projecao).execute()
+            return resposta.data or []
+        except Exception:
+            continue
+    return []
+
+
+def _projetar_registro_mapa(registro, *, incluir_id=False):
+    projetado = {
+        "data_avaliacao": registro.get("data_avaliacao"),
+        "regioes": normalizar_regioes_anamnese(registro),
+        "intensidade": normalizar_intensidade_anamnese(registro.get("intensidade")),
+    }
+    if incluir_id:
+        projetado = {"id": registro.get("id"), **projetado}
+    return projetado
+
+
 def salvar_anamnese_dores(aluno_id, data_avaliacao, regioes, intensidade, observacoes, criado_por):
     try:
         import json as _json
@@ -3630,19 +3757,74 @@ def salvar_anamnese_dores(aluno_id, data_avaliacao, regioes, intensidade, observ
         return False, str(e)
 
 
-@st.cache_data(ttl=120, show_spinner=False)
+def buscar_historico_dores_restrito(aluno_id):
+    """Histórico restrito: sem observações e sem identificação do registrante."""
+    registros = _consultar_anamnese_dores(
+        aluno_id,
+        ("id", "data_avaliacao", "regioes", "intensidade"),
+    )
+    return [_projetar_registro_mapa(registro, incluir_id=True) for registro in registros]
+
+
 def buscar_historico_dores(aluno_id):
+    """
+    Leitura explícita mantida para consumidores técnicos existentes, inclusive
+    o Dossiê atual. Não usa `select("*")` nem cache compartilhado.
+    """
+    registros = _consultar_anamnese_dores(
+        aluno_id,
+        (
+            "id",
+            "data_avaliacao",
+            "regioes",
+            "intensidade",
+            "observacoes",
+        ),
+    )
+    return [
+        {
+            **_projetar_registro_mapa(registro, incluir_id=True),
+            "observacoes": str(registro.get("observacoes") or "").strip(),
+        }
+        for registro in registros
+    ]
+
+
+def buscar_ultima_anamnese_dores(aluno_id):
+    """Resumo da última avaliação, com dados mínimos para uso futuro em cartão."""
+    registros = _consultar_anamnese_dores(
+        aluno_id,
+        ("data_avaliacao", "regioes", "intensidade"),
+        limite=1,
+    )
+    return _projetar_registro_mapa(registros[0]) if registros else None
+
+
+def buscar_detalhe_anamnese_dores(aluno_id, registro_id):
+    """
+    Detalhe confidencial individual, sem cache. Deve ser chamado apenas após
+    solicitação explícita da pessoa que já possui acesso ao prontuário.
+    """
     try:
-        res = (
-            supabase.table("anamnese_dores")
-            .select("*")
+        resposta = (
+            supabase.from_("anamnese_dores")
+            .select("id, observacoes, criado_por")
             .eq("aluno_id", str(aluno_id))
-            .order("data_avaliacao", desc=True)
+            .eq("id", str(registro_id))
+            .limit(1)
             .execute()
         )
-        return res.data or []
+        registros = resposta.data or []
+        if not registros:
+            return None
+        registro = registros[0]
+        return {
+            "id": registro.get("id"),
+            "observacoes": str(registro.get("observacoes") or "").strip(),
+            "criado_por": str(registro.get("criado_por") or "").strip(),
+        }
     except Exception:
-        return []
+        return None
 
 
 def excluir_anamnese_dores(registro_id):

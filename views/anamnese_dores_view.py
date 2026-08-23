@@ -1,21 +1,19 @@
 # ==============================================================================
-# 🩻 Módulo: Mapa Corporal de Dores — Anamnese Visual
+# 🩻 Módulo: Mapa de Sintomas e Bem-Estar
 # ==============================================================================
 import streamlit as st
 import datetime
-import json
 
 from database import (
     salvar_anamnese_dores,
-    buscar_historico_dores,
-    excluir_anamnese_dores,
-    ADMIN_MASTER,
+    buscar_historico_dores_restrito,
+    buscar_detalhe_anamnese_dores,
 )
 
 # ──────────────────────────────────────────────────────────────────────────────
 # DEFINIÇÃO DAS REGIÕES CORPORAIS
 # Cada região: label (nome exibido), view (frente/costas), shape (cx,cy,rx,ry)
-# Convenção: Esq/Dir = lado do PACIENTE (sua esquerda/direita)
+# Convenção: Esq/Dir = lado da pessoa (sua esquerda/direita)
 # ──────────────────────────────────────────────────────────────────────────────
 REGIOES = {
     # ── FRENTE ────────────────────────────────────────────────────────────────
@@ -78,9 +76,18 @@ GRUPOS = {
 }
 
 INTENSIDADE_COR = {
-    1: ("rgba(250,204,21,0.70)",  "#92400E", "🟡 Leve"),
-    2: ("rgba(249,115,22,0.75)",  "#7C2D12", "🟠 Moderada"),
-    3: ("rgba(220,38,38,0.80)",   "#7F1D1D", "🔴 Intensa"),
+    1: ("rgba(250,204,21,0.70)",  "#92400E", "🟡 Atenção leve"),
+    2: ("rgba(249,115,22,0.75)",  "#7C2D12", "🟠 Atenção moderada"),
+    3: ("rgba(220,38,38,0.80)",   "#7F1D1D", "🔴 Atenção elevada"),
+}
+
+LEGENDA_INTENSIDADE = {
+    1: "Amarelo: atenção leve / desconforto leve relatado.",
+    2: "Laranja: atenção moderada / requer conversa, cautela ou adaptação.",
+    3: (
+        "Vermelho: atenção elevada / relato intenso; requer prudência, "
+        "pausa ou adaptação da atividade."
+    ),
 }
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -131,7 +138,7 @@ _BODY_OUTLINE = """
 
 
 def _gerar_zonas_svg(view: str, regioes_sel: list, intensidades: dict) -> str:
-    """Retorna os elementos SVG das zonas de dor ativas para uma view."""
+    """Retorna os elementos SVG das regiões autorreferidas para uma vista."""
     partes = []
     for rid, reg in REGIOES.items():
         if reg["view"] != view or rid not in regioes_sel:
@@ -164,16 +171,16 @@ def _svg_view(titulo: str, view: str, regioes_sel: list, intensidades: dict) -> 
 
 
 def render_mapa_corporal(regioes_sel: list, intensidades: dict, height: int = 480):
-    """Renderiza o mapa corporal completo (frente + costas) via HTML."""
+    """Renderiza o mapa visual de sintomas (frente + costas) via HTML."""
     frente_svg = _svg_view("▶ FRENTE", "frente", regioes_sel, intensidades)
     costas_svg = _svg_view("◀ COSTAS", "costas", regioes_sel, intensidades)
 
     legenda_items = []
-    for nivel, (fill, _, rotulo) in INTENSIDADE_COR.items():
+    for nivel, (fill, _, _) in INTENSIDADE_COR.items():
         legenda_items.append(
             f'<span style="background:{fill};color:#1e293b;'
             f'padding:2px 10px;border-radius:12px;font-size:11px;font-weight:700;">'
-            f'{rotulo}</span>'
+            f'{LEGENDA_INTENSIDADE[nivel]}</span>'
         )
     legenda = " &nbsp; ".join(legenda_items)
 
@@ -188,7 +195,10 @@ def render_mapa_corporal(regioes_sel: list, intensidades: dict, height: int = 48
         {legenda}
       </div>
       <p style="text-align:center;font-size:11px;color:#94A3B8;margin-top:6px;">
-        Esq. / Dir. = lado do <b>paciente</b>
+        <b>Registro autorreferido — não constitui diagnóstico.</b><br>
+        As cores representam intensidade percebida no momento do registro e não indicam
+        causa, diagnóstico, gravidade clínica, aptidão ou inaptidão.<br>
+        Esq. / Dir. = lado da pessoa.
       </p>
     </div>
     """
@@ -215,8 +225,11 @@ def render_seletor_regioes(prefix: str = "dor_nova") -> tuple:
     regioes_sel = list(st.session_state[f"{prefix}_regioes"])
     intensidades = dict(st.session_state[f"{prefix}_intensidades"])
 
-    st.markdown("##### Selecione as regiões com dor")
-    st.caption("Marque todos os locais que o aluno reporta dor ou desconforto.")
+    st.markdown("##### Selecione as regiões relatadas")
+    st.caption(
+        "Marque os locais em que a pessoa relata dor, desconforto, rigidez, "
+        "cansaço localizado ou outra sensação corporal."
+    )
 
     cols = st.columns(2)
     grupos_lista = list(GRUPOS.items())
@@ -280,12 +293,12 @@ def render_seletor_regioes(prefix: str = "dor_nova") -> tuple:
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# RENDERIZA HISTÓRICO EM MODO LEITURA
+# RENDERIZA HISTÓRICO RESTRITO EM MODO LEITURA
 # ──────────────────────────────────────────────────────────────────────────────
-def _render_historico(aluno_id: str, email_usuario: str):
-    historico = buscar_historico_dores(aluno_id)
+def _render_historico(aluno_id: str):
+    historico = buscar_historico_dores_restrito(aluno_id)
     if not historico:
-        st.info("Nenhum mapa de dores registado para este aluno.")
+        st.info("Nenhum registro de sintomas e bem-estar foi encontrado.")
         return
 
     opcoes = {}
@@ -300,19 +313,13 @@ def _render_historico(aluno_id: str, email_usuario: str):
         opcoes[f"📅 {label}  —  {n} região(ões) marcada(s)"] = h
 
     escolha = st.selectbox(
-        "Selecione uma avaliação para visualizar:",
+        "Selecione um registro para visualizar:",
         options=list(opcoes.keys()),
         key="hist_dores_sel",
     )
     reg = opcoes[escolha]
     regioes = reg.get("regioes") or []
     intensidades = reg.get("intensidade") or {}
-    if isinstance(intensidades, str):
-        try:
-            intensidades = json.loads(intensidades)
-        except Exception:
-            intensidades = {}
-    intensidades = {k: int(v) for k, v in intensidades.items()}
 
     # Mapa visual (leitura)
     render_mapa_corporal(regioes, intensidades)
@@ -333,26 +340,24 @@ def _render_historico(aluno_id: str, email_usuario: str):
             )
         st.markdown(" ".join(badges), unsafe_allow_html=True)
 
-    obs = (reg.get("observacoes") or "").strip()
-    if obs:
-        st.markdown(f"**Observações:** {obs}")
+    chave_detalhe = f"detalhes_sintomas_{reg['id']}"
+    if st.button(
+        "Ver detalhes confidenciais do registro",
+        key=f"btn_{chave_detalhe}",
+    ):
+        st.session_state[chave_detalhe] = True
 
-    criado_por = (reg.get("criado_por") or "").strip()
-    if criado_por:
-        st.caption(f"Registado por: {criado_por}")
+    if st.session_state.get(chave_detalhe):
+        detalhe = buscar_detalhe_anamnese_dores(aluno_id, reg["id"])
+        if detalhe:
+            if detalhe["observacoes"]:
+                st.markdown(f"**Observações do relato:** {detalhe['observacoes']}")
+            if detalhe["criado_por"]:
+                st.caption(f"Registrado por: {detalhe['criado_por']}")
+        else:
+            st.info("Os detalhes deste registro não estão disponíveis.")
 
-    # Excluir (somente ADMIN_MASTER)
-    if email_usuario.lower() == ADMIN_MASTER.lower():
-        st.markdown("---")
-        with st.expander("🗑️ Excluir esta avaliação", expanded=False):
-            st.warning("Esta ação não pode ser desfeita.")
-            if st.button("✅ Confirmar exclusão", key=f"del_dor_{reg['id']}", type="primary"):
-                ok, msg = excluir_anamnese_dores(reg["id"])
-                if ok:
-                    st.toast("Avaliação excluída.", icon="🗑️")
-                    st.rerun()
-                else:
-                    st.error(msg)
+    st.caption("A exclusão física de registros está temporariamente indisponível.")
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -360,15 +365,11 @@ def _render_historico(aluno_id: str, email_usuario: str):
 # ──────────────────────────────────────────────────────────────────────────────
 def render_aba_mapa_dores(aluno: dict, email_usuario: str = ""):
     aluno_id = str(aluno.get("id", ""))
-    nome_aluno = aluno.get("nome", "Aluno")
 
-    st.markdown("#### 🩻 Mapa Corporal de Dores")
-    st.caption(
-        "Registe as regiões onde o aluno reporta dor ou desconforto. "
-        "As manchas coloridas aparecem automaticamente no corpo humano conforme a seleção."
-    )
+    st.markdown("#### 🩻 Mapa de Sintomas e Bem-Estar")
+    st.caption("Registro autorreferido — não constitui diagnóstico.")
 
-    aba_nova, aba_hist = st.tabs(["➕ Nova Avaliação", "📋 Histórico de Dores"])
+    aba_nova, aba_hist = st.tabs(["➕ Novo Registro", "📋 Histórico de Registros"])
 
     # ── NOVA AVALIAÇÃO ────────────────────────────────────────────────────────
     with aba_nova:
@@ -379,7 +380,7 @@ def render_aba_mapa_dores(aluno: dict, email_usuario: str = ""):
 
         with col_form:
             data_aval = st.date_input(
-                "📅 Data da avaliação",
+                "📅 Data do registro",
                 value=datetime.date.today(),
                 key=f"{prefix}_data",
                 format="DD/MM/YYYY",
@@ -389,16 +390,19 @@ def render_aba_mapa_dores(aluno: dict, email_usuario: str = ""):
 
             st.markdown("---")
             obs = st.text_area(
-                "💬 Observações clínicas",
-                placeholder="Descreva o contexto, início das dores, situações que agravam, etc.",
+                "💬 Observações do relato",
+                placeholder=(
+                    "Registre o contexto relatado, pausas ou adaptações conversadas, "
+                    "sem diagnóstico."
+                ),
                 key=f"{prefix}_obs",
                 height=110,
             )
 
             n_regioes = len(regioes_sel)
             btn_label = (
-                f"💾 Salvar mapa ({n_regioes} região{'ões' if n_regioes != 1 else ''})"
-                if n_regioes else "💾 Salvar mapa"
+                f"💾 Salvar registro ({n_regioes} região{'ões' if n_regioes != 1 else ''})"
+                if n_regioes else "💾 Salvar registro"
             )
             if st.button(btn_label, type="primary", key=f"{prefix}_salvar",
                          use_container_width=True, disabled=n_regioes == 0):
@@ -411,7 +415,7 @@ def render_aba_mapa_dores(aluno: dict, email_usuario: str = ""):
                     criado_por=email_usuario,
                 )
                 if ok:
-                    st.toast("Mapa de dores salvo! 🩻", icon="✅")
+                    st.toast("Registro salvo! 🩻", icon="✅")
                     # Limpa o estado para nova avaliação
                     st.session_state[f"{prefix}_regioes"] = []
                     st.session_state[f"{prefix}_intensidades"] = {}
@@ -427,4 +431,4 @@ def render_aba_mapa_dores(aluno: dict, email_usuario: str = ""):
 
     # ── HISTÓRICO ─────────────────────────────────────────────────────────────
     with aba_hist:
-        _render_historico(aluno_id, email_usuario)
+        _render_historico(aluno_id)
