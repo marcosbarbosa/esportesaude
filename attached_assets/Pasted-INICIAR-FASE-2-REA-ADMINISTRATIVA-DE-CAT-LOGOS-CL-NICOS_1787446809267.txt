@@ -1,0 +1,74 @@
+INICIAR FASE 2 — ÁREA ADMINISTRATIVA DE CATÁLOGOS CLÍNICOS
+Projeto: IMBRA — Esporte e Saúde 60+
+
+A Fase 1 foi concluída e aplicada no Supabase:
+- migration 006 e 007 executadas;
+- sete tabelas clínicas existem;
+- RLS está habilitado sem policies públicas;
+- seed v2 executado com:
+  23 condições clínicas, 8 restrições e 7 adaptações;
+- nenhuma tela atual foi alterada;
+- nenhum aluno foi migrado;
+- tags_saude, problemas_saude e restricoes_fisicas continuam intactos.
+
+OBJETIVO DA FASE 2
+
+Criar somente uma área administrativa segura para gerenciar os três catálogos:
+
+1. Condições clínicas.
+2. Restrições de movimento.
+3. Adaptações recomendadas.
+
+NÃO IMPLEMENTAR AINDA:
+- migração automática de alunos;
+- leitura/escrita em aluno_condicoes_clinicas;
+- leitura/escrita em aluno_restricoes_fisicas;
+- leitura/escrita em aluno_adaptacoes_recomendadas;
+- alterações no tablet, frequência, prontuário, inscrição, dossiê ou PDF;
+- bloqueio automático de presença;
+- termo individual de segurança;
+- policies públicas no Supabase.
+
+REQUISITOS DE SEGURANÇA
+
+- A tela deve existir somente para ADMIN_MASTER / SuperAdmin.
+- A validação de perfil deve ocorrer no backend Streamlit.
+- O acesso às tabelas clínicas deve usar cliente administrativo server-side,
+  nunca no navegador.
+- SUPABASE_SERVICE_ROLE_KEY deve continuar apenas em Secrets.
+- Não imprimir, logar ou expor a chave.
+- Manter RLS habilitado e sem policies permissivas.
+
+INTERFACE DESEJADA
+
+Criar menu:
+Administração → Catálogos Clínicos e Segurança
+
+Criar três abas:
+- Condições clínicas;
+- Restrições de movimento;
+- Adaptações recomendadas.
+
+Em cada aba:
+- tabela pesquisável;
+- filtro por ativo/inativo;
+- formulário para inserir novo item;
+- edição de item existente;
+- botão para ativar/inativar, com confirmação;
+- proibido apagar definitivamente;
+- mostrar código, nome, categoria/grupo, status ativo e última revisão;
+- campos completos definidos na migration 007;
+- mensagem de que mudanças em catálogos não criam automaticamente restrições
+  ou bloqueios para alunos.
+
+ENTREGAR PRIMEIRO
+
+Antes de modificar telas:
+1. Mapa dos arquivos que serão alterados.
+2. Plano técnico.
+3. Modelo da UI em texto.
+4. Estratégia para usar service_role de maneira exclusiva no backend.
+5. Lista de testes.
+6. Confirmação de que não haverá alteração nos módulos atuais.
+
+Aguardar aprovação humana antes de implementar.
