@@ -1,0 +1,74 @@
+Aprovo a Task #105 e o início da implementação da Fila de Revisão Clínica
+na branch feature/fila-revisao-clinica, com os ajustes abaixo.
+
+ESCOPO APROVADO
+
+1. Criar fila unificada apenas sobre:
+- aluno_condicoes_clinicas
+- aluno_restricoes_fisicas
+- aluno_adaptacoes_recomendadas
+
+2. Mostrar somente registros com status:
+- PENDENTE
+- SUGERIDO_POR_MIGRACAO
+
+3. Não usar IA para:
+- inferir condição, restrição ou adaptação;
+- selecionar item de catálogo;
+- classificar ou validar informação clínica;
+- preencher campos automaticamente.
+
+4. O revisor humano deve escolher explicitamente item ativo do catálogo,
+quando for criar ou corrigir uma sugestão.
+
+5. Ações permitidas:
+- validar: altera manualmente para VALIDADO;
+- corrigir: mantém PENDENTE até nova validação;
+- rejeitar/inativar: usar somente o status já suportado pelo schema,
+sem exclusão física e preservando o histórico.
+
+6. Toda mutação deve registrar auditoria com:
+- responsável;
+- data e hora;
+- ação;
+- valor anterior;
+- novo valor;
+- observação;
+- evento REVISAO.
+
+7. A reserva de auditoria deve ocorrer antes da mutação e falhar de modo
+seguro se a auditoria não puder ser registrada.
+
+8. O texto legado, caso exista, será somente leitura e contexto mínimo:
+- nunca gera sugestão automática;
+- nunca é enviado à IA;
+- nunca é listado/exportado em massa;
+- nunca é tratado como diagnóstico ou dado validado.
+
+9. Somente registros VALIDADO poderão ser considerados para integrações
+futuras. Nesta fase, não integrar com Termo de Ciência, Dossiê, prontuário,
+tablet, frequência ou orientações operacionais.
+
+SEGURANÇA
+
+- Exigir sessão autenticada, perfil SuperAdmin e e-mail canônico ADMIN_MASTER.
+- Criar cliente service role somente após as validações.
+- Não expor credenciais, dados clínicos em logs ou respostas brutas.
+- Usar paginação, sem cache compartilhado e sem exportação.
+- Usar compare-and-swap para concorrência.
+- Não criar SQL, migration, seed, policy, tabela ou campo novo.
+- Não alterar campos legados nem excluir registros.
+
+ARQUIVOS AUTORIZADOS
+
+Criar:
+- utils/fila_revisao_clinica.py
+- views/fila_revisao_clinica_view.py
+- tests/test_fila_revisao_clinica.py
+
+Alterar minimamente:
+- main.py, somente para integrar a aba SuperAdmin.
+
+Antes do commit, execute testes, py_compile e git diff --check.
+Ao final, apresente arquivos alterados, resultado dos testes, validação de
+segurança e um resumo do fluxo da tela.

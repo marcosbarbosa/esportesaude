@@ -11,3 +11,4 @@
 - [Anti-502 fixes](anti-502-fixes.md) — 6 causas de crash no Render identificadas e corrigidas; checklist para código novo.
 - [Calendário institucional na frequência](calendario-frequencia.md) — data marcada sem aula nunca entra em nenhuma contagem, mesmo com lançamentos.
 - [Catálogo clínico em produção](catalogo-clinico-schema.md) — a base inicial já existe no Supabase; evoluções devem ser aditivas, preservar legados e manter RLS.
+- [Minimização na revisão clínica](clinical-review-data-minimization.md) — listas clínicas só trazem metadados paginados; texto e observações exigem detalhe individual explícito.
